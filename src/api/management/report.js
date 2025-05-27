@@ -42,3 +42,13 @@ export function delReport(id) {
     method: 'delete'
   })
 }
+
+
+// 删除报告文件
+export function delReportFile(resource) {
+  return request({
+    url: '/common/delete',
+    params: resource,
+    method: 'delete'
+  })
+}

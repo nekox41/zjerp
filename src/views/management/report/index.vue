@@ -169,7 +169,7 @@
           <el-col :span="12">
             <el-form-item label="报告文件" prop="reportFile">
               <reportUpload v-model="form.reportFile" :fileSize="1024" :fileType="['pdf', 'doc', 'docx']"
-                :reportType="form.reportIsfinal" :limit="1"/>
+                :reportType="form.reportIsfinal" :isReportFile="true" />
             </el-form-item>
           </el-col>
           <el-col :span="12">

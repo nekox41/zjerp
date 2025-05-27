@@ -79,7 +79,8 @@ const props = defineProps({
     type: String
   },
   endTime: {
-    type: String
+    type: String,
+    default: ""
   },
   amount: {
     type: Number
@@ -127,7 +128,6 @@ function handleBeforeUpload(file) {
     { key: 'contractId', label: '合同编号' },
     { key: 'contractName', label: '合同名称' },
     { key: 'startTime', label: '开始时间' },
-    { key: 'endTime', label: '结束时间' },
     { key: 'amount', label: '合同金额' },
     { key: 'manager', label: '合同负责人' }
   ];
@@ -161,10 +161,16 @@ function handleBeforeUpload(file) {
       return false;
     }
   }
+  let fileNamePrefix = `${props.contractId}_${props.contractName}_${props.startTime}`;
+  if (props.endTime) {
+    fileNamePrefix += `到${props.endTime}`;
+  }
+  fileNamePrefix += `_${props.amount}元(${props.manager})`;
+
   Object.defineProperty(file, 'name', {
     writable: true,
-    value: `${props.contractId}_${props.contractName}_${props.startTime}到${props.endTime}_${props.amount}元(${props.manager}).pdf`
-  })
+    value: `${fileNamePrefix}.pdf`
+  });
   proxy.$modal.loading("正在上传文件，请稍候...");
   number.value++;
   return true;

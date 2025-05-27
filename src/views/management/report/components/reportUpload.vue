@@ -1,12 +1,12 @@
 <template>
   <div class="upload-file">
     <el-upload drag multiple :action="uploadFileUrl" :before-upload="handleBeforeUpload" :file-list="fileList"
-      :limit="limit" :on-error="handleUploadError" :on-exceed="handleExceed" :on-success="handleUploadSuccess"
-      :show-file-list="false" :headers="headers" :data="{ isFinal: computedIsFinal }" class="upload-file-uploader"
-      ref="fileUpload" v-if="!disabled && computedIsFinal !== null">
+      :on-error="handleUploadError" :on-exceed="handleExceed" :on-success="handleUploadSuccess" :show-file-list="false"
+      :headers="headers" :data="{ isFinal: computedIsFinal }" class="upload-file-uploader" ref="uploadRef"
+      v-if="!disabled && computedIsFinal !== null">
       <el-icon class="el-icon--upload"><upload-filled /></el-icon>
       <div class="el-upload__text">
-       拖动文件到此区域或者 <em>点击上传</em>
+        拖动文件到此区域或者 <em>点击上传</em>
       </div>
     </el-upload>
     <!-- 上传提示 -->
@@ -35,14 +35,10 @@
 
 <script setup>
 import { getToken } from "@/utils/auth";
+import { delReportFile } from "../../../../api/management/report";
 
 const props = defineProps({
   modelValue: [String, Object, Array],
-  // 数量限制
-  limit: {
-    type: Number,
-    default: 5
-  },
   // 大小限制(MB)
   fileSize: {
     type: Number,
@@ -66,15 +62,19 @@ const props = defineProps({
   reportType: {
     type: String,
     default: null
+  },
+  isReportFile: {
+    type: Boolean,
+    default: false
   }
 });
-const reportType = ref(false);
+const uploadRef = ref();
 const { proxy } = getCurrentInstance();
 const emit = defineEmits();
 const number = ref(0);
 const uploadList = ref([]);
 const baseUrl = import.meta.env.VITE_APP_BASE_API;
-const uploadFileUrl = ref(import.meta.env.VITE_APP_BASE_API + "/management/report/upload"); // 上传文件服务器地址
+const uploadFileUrl = ref(import.meta.env.VITE_APP_BASE_API + "/common/upload"); // 上传文件服务器地址
 const headers = ref({ Authorization: "Bearer " + getToken() });
 const fileList = ref([]);
 const showTip = computed(
@@ -149,6 +149,13 @@ function handleUploadError(err) {
 // 上传成功回调
 function handleUploadSuccess(res, file) {
   if (res.code === 200) {
+    if (props.isReportFile) {
+      // 先删除 fileList 中原本的 file
+      fileList.value.forEach(item => {
+        delReportFile({resource: item.url})
+      })
+      fileList.value = []
+    }
     uploadList.value.push({ name: res.fileName, url: res.fileName });
     uploadedSuccessfully();
   } else {
