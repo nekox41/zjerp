@@ -1,0 +1,13 @@
+{
+  "name": "zjerp",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers-extra/features/mysql-homebrew:1": {}
+  },
+  "postCreateCommand": "docker-compose up -d",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-azuretools.vscode-docker"]
+    }
+  }
+}
