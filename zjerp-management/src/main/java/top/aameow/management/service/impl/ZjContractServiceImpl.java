@@ -39,9 +39,9 @@ public class ZjContractServiceImpl implements IZjContractService
      * @return 合同管理
      */
     @Override
-    public List<ZjContract> selectZjContractList(ZjContract zjContract)
+    public List<ZjContract> selectZjContractList(String sortBy, String orderBy, ZjContract zjContract)
     {
-        return zjContractMapper.selectZjContractList(zjContract);
+        return zjContractMapper.selectZjContractList(sortBy, orderBy, zjContract);
     }
 
     /**

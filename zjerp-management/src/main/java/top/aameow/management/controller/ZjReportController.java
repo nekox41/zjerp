@@ -40,7 +40,7 @@ public class ZjReportController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('management:report:list')")
     @GetMapping("/list")
-    public TableDataInfo list(@RequestParam(defaultValue = "updateTime") String sortBy, @RequestParam(defaultValue = "desc") String orderBy, ZjReport zjReport)
+    public TableDataInfo list(@RequestParam(defaultValue = "updateTime") String sortBy, @RequestParam(defaultValue = "DESC") String orderBy, ZjReport zjReport)
     {
         startPage();
         List<ZjReport> list = zjReportService.selectZjReportList(sortBy, orderBy, zjReport);

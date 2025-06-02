@@ -1,6 +1,8 @@
 package top.aameow.management.domain;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import top.aameow.common.annotation.Excel;
@@ -12,7 +14,8 @@ import top.aameow.common.core.domain.BaseEntity;
  * @author aa
  * @date 2025-05-16
  */
-@Data
+@Setter
+@Getter
 public class ZjReport extends BaseEntity
 {
     private static final long serialVersionUID = 1L;

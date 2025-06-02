@@ -47,7 +47,7 @@
             <otherwise>id</otherwise>
         </choose>
         <choose>
-            <when test="orderBy == 'desc'">DESC</when>
+            <when test="orderBy == 'DESC'">DESC</when>
             <otherwise>ASC</otherwise>
         </choose>
     </select>

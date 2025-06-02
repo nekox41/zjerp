@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import top.aameow.common.annotation.Anonymous;
 import top.aameow.common.annotation.Log;
@@ -40,10 +41,10 @@ public class ZjContractController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('management:contract:list')")
     @GetMapping("/list")
-    public TableDataInfo list(ZjContract zjContract)
+    public TableDataInfo list(@RequestParam(defaultValue = "updateTime") String sortBy, @RequestParam(defaultValue = "DESC") String orderBy ,ZjContract zjContract)
     {
         startPage();
-        List<ZjContract> list = zjContractService.selectZjContractList(zjContract);
+        List<ZjContract> list = zjContractService.selectZjContractList(sortBy, orderBy, zjContract);
         return getDataTable(list);
     }
 
@@ -55,7 +56,7 @@ public class ZjContractController extends BaseController
     @PostMapping("/export")
     public void export(HttpServletResponse response, ZjContract zjContract)
     {
-        List<ZjContract> list = zjContractService.selectZjContractList(zjContract);
+        List<ZjContract> list = zjContractService.selectZjContractList("id", "ASC", zjContract);
         ExcelUtil<ZjContract> util = new ExcelUtil<ZjContract>(ZjContract.class);
         util.exportExcel(response, list, "合同管理数据");
     }

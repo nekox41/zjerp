@@ -25,7 +25,7 @@ public interface IZjContractService
      * @param zjContract 合同管理
      * @return 合同管理集合
      */
-    public List<ZjContract> selectZjContractList(ZjContract zjContract);
+    public List<ZjContract> selectZjContractList(String sortBy, String orderBy, ZjContract zjContract);
 
     /**
      * 新增合同管理
