@@ -46,7 +46,7 @@
 
     <el-table v-loading="loading" :data="contractList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
-      <el-table-column label="序号" align="center" prop="id" />
+      <el-table-column label="序号" align="center" prop="id"/>
       <el-table-column label="合同编号" align="center" prop="contractId" />
       <el-table-column label="合同类型" align="center" prop="contractType">
         <template #default="scope">
@@ -72,6 +72,7 @@
           <el-link :href="baseURL + '/' + scope.row.contractFile" target="_blank">查看</el-link>
         </template>
       </el-table-column>
+      <el-table-column label="备注" align="center" prop="remark" />
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)"
@@ -127,6 +128,9 @@
               :startTime="form.startTime" :endTime="form.endTime" :amount="form.amount" :manager="form.manager"
               :fileSize="100" />
           </el-form-item>
+          <el-form-item label="备注" prop="remark">
+              <el-input v-model="form.remark" type="textarea" placeholder="请输入内容" />
+          </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -167,9 +171,6 @@ const data = reactive({
     manager: null,
   },
   rules: {
-    contractId: [
-      { required: true, message: "合同编号不能为空", trigger: "blur" }
-    ],
     contractType: [
       { required: true, message: "合同类型不能为空", trigger: "change" }
     ],
