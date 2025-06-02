@@ -40,10 +40,10 @@ public class ZjReportController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('management:report:list')")
     @GetMapping("/list")
-    public TableDataInfo list(ZjReport zjReport)
+    public TableDataInfo list(@RequestParam(defaultValue = "updateTime") String sortBy, @RequestParam(defaultValue = "desc") String orderBy, ZjReport zjReport)
     {
         startPage();
-        List<ZjReport> list = zjReportService.selectZjReportList(zjReport);
+        List<ZjReport> list = zjReportService.selectZjReportList(sortBy, orderBy, zjReport);
         return getDataTable(list);
     }
 
@@ -55,7 +55,7 @@ public class ZjReportController extends BaseController
     @PostMapping("/export")
     public void export(HttpServletResponse response, ZjReport zjReport)
     {
-        List<ZjReport> list = zjReportService.selectZjReportList(zjReport);
+        List<ZjReport> list = zjReportService.selectZjReportList("id", "ASC", zjReport);
         ExcelUtil<ZjReport> util = new ExcelUtil<ZjReport>(ZjReport.class);
         util.exportExcel(response, list, "报告管理数据");
     }

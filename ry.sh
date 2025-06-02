@@ -3,7 +3,7 @@
 AppName=zjerp-admin.jar
 
 # JVM参数
-JVM_OPTS="-Dname=$AppName  -Duser.timezone=Asia/Shanghai -Xms512m -Xmx1024m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError -XX:+PrintGCDateStamps  -XX:+PrintGCDetails -XX:NewRatio=1 -XX:SurvivorRatio=30 -XX:+UseParallelGC -XX:+UseParallelOldGC"
+JVM_OPTS="-Dname=$AppName  -Duser.timezone=Asia/Shanghai -Xms512m -Xmx1024m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=512m"
 APP_HOME=`pwd`
 LOG_PATH=$APP_HOME/logs/$AppName.log
 
@@ -19,19 +19,62 @@ then
     exit 1
 fi
 
-function start()
+# 检查服务是否运行
+check_service() {
+    service_name=$1
+    PID=$(ps -ef | grep $service_name | grep -v "grep" | awk '{print $2}')
+    if [ -z "$PID" ]; then
+        return 1  # 未运行
+    else
+        echo "$service_name 正在运行 (PID: $PID)"
+        return 0
+    fi
+}
+
+# 尝试启动服务
+start_service() {
+    service_name=$1
+    case "$service_name" in
+        mysqld)
+            echo "尝试启动 mysqld..."
+            mysqld --daemonize
+            ;;
+        redis-server)
+            echo "尝试启动 redis-server..."
+            redis-server /home/linuxbrew/.linuxbrew/etc/redis.conf
+            ;;
+        *)
+            echo "不支持的服务: $service_name"
+            exit 1
+            ;;
+    esac
+
+    sleep 2  # 给点时间让服务启动
+    check_service "$service_name"
+    if [ $? -ne 0 ]; then
+        echo -e "\033[0;31m 错误：无法启动 $service_name，请手动检查配置或权限！\033[0m"
+        exit 1
+    fi
+}
+
+start()
 {
+    # 检查并尝试启动依赖服务
+    check_service "mysqld" || start_service "mysqld"
+    check_service "redis-server" || start_service "redis-server"
+
     PID=`ps -ef |grep java|grep $AppName|grep -v grep|awk '{print $2}'`
 
 	if [ x"$PID" != x"" ]; then
 	    echo "$AppName is running..."
 	else
 		nohup java $JVM_OPTS -jar $AppName > /dev/null 2>&1 &
+        # java $JVM_OPTS -jar $AppName
 		echo "Start $AppName success..."
 	fi
 }
 
-function stop()
+stop()
 {
     echo "Stop $AppName"
 
@@ -55,14 +98,14 @@ function stop()
 	fi
 }
 
-function restart()
+restart()
 {
     stop
     sleep 2
     start
 }
 
-function status()
+status()
 {
     PID=`ps -ef |grep java|grep $AppName|grep -v grep|wc -l`
     if [ $PID != 0 ];then
@@ -82,5 +125,4 @@ case $1 in
     status)
     status;;
     *)
-
 esac

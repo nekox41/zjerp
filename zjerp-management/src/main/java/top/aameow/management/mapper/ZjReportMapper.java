@@ -1,6 +1,9 @@
 package top.aameow.management.mapper;
 
 import java.util.List;
+
+import org.apache.ibatis.annotations.Param;
+
 import top.aameow.management.domain.ZjReport;
 
 /**
@@ -25,7 +28,7 @@ public interface ZjReportMapper
      * @param zjReport 报告管理
      * @return 报告管理集合
      */
-    public List<ZjReport> selectZjReportList(ZjReport zjReport);
+    public List<ZjReport> selectZjReportList(@Param("sortBy") String sortBy, @Param("orderBy") String orderBy, @Param("zjReport") ZjReport zjReport);
 
     /**
      * 新增报告管理

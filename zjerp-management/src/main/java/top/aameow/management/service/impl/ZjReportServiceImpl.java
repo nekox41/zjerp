@@ -39,9 +39,9 @@ public class ZjReportServiceImpl implements IZjReportService
      * @return 报告管理
      */
     @Override
-    public List<ZjReport> selectZjReportList(ZjReport zjReport)
+    public List<ZjReport> selectZjReportList(String sortBy, String orderBy, ZjReport zjReport)
     {
-        return zjReportMapper.selectZjReportList(zjReport);
+        return zjReportMapper.selectZjReportList(sortBy, orderBy, zjReport);
     }
 
     /**
