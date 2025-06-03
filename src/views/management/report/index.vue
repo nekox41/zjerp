@@ -174,7 +174,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="附件" prop="reportAttach">
-              <reportUpload v-model="form.reportAttach" :fileSize="1024" :fileType="['zip', 'rar']"
+              <reportUpload v-model="form.reportAttach" :fileSize="1024"
                 :reportType="form.reportIsfinal" />
             </el-form-item>
           </el-col>

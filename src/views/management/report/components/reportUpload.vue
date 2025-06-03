@@ -13,7 +13,7 @@
     <div class="el-upload__tip" v-if="showTip && !disabled && computedIsFinal !== null">
       请上传
       <template v-if="fileSize"> 大小不超过 <b style="color: #f56c6c">{{ fileSize }}MB</b> </template>
-      <template v-if="fileType"> 格式为 <b style="color: #f56c6c">{{ fileType.join("/") }}</b> </template>
+      <template v-if="fileType.length"> 格式为 <b style="color: #f56c6c">{{ fileType.join("/") }}</b> </template>
       的文件
     </div>
     <div class="el-upload__tip2" v-if="computedIsFinal === null">
@@ -47,7 +47,7 @@ const props = defineProps({
   // 文件类型, 例如['png', 'jpg', 'jpeg']
   fileType: {
     type: Array,
-    default: () => ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "pdf"]
+    default: []
   },
   // 是否显示提示
   isShowTip: {
@@ -61,7 +61,7 @@ const props = defineProps({
   },
   reportType: {
     type: String,
-    default: null
+    default: null 
   },
   isReportFile: {
     type: Boolean,
