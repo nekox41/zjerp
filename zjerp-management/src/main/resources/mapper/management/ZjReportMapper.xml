@@ -24,32 +24,18 @@
         select id, report_id, report_name, report_file, report_attach, report_type, report_isfinal, report_manager, report_area, create_by, create_time, update_by, update_time from zj_report
     </sql>
 
-    <select id="selectZjReportList" resultMap="ZjReportResult">
+    <select id="selectZjReportList" parameterType="ZjReport" resultMap="ZjReportResult">
         <include refid="selectZjReportVo"/>
         <where>
-            <if test="zjReport.reportId != null  and zjReport.reportId != ''"> and report_id like concat('%', #{zjReport.reportId}, '%')</if>
-            <if test="zjReport.reportName != null  and zjReport.reportName != ''"> and report_name like concat('%', #{zjReport.reportName}, '%')</if>
-            <if test="zjReport.reportType != null  and zjReport.reportType != ''"> and report_type = #{zjReport.reportType}</if>
-            <if test="zjReport.reportIsfinal != null  and zjReport.reportIsfinal != ''"> and report_isfinal = #{zjReport.reportIsfinal}</if>
-            <if test="zjReport.reportManager != null  and zjReport.reportManager != ''"> and report_manager = #{zjReport.reportManager}</if>
-            <if test="zjReport.reportArea != null  and zjReport.reportArea != ''"> and report_area = #{zjReport.reportArea}</if>
-            <if test="zjReport.createBy != null  and zjReport.createBy != ''"> and create_by = #{zjReport.createBy}</if>
-            <if test="zjReport.updateBy != null  and zjReport.updateBy != ''"> and update_by = #{zjReport.updateBy}</if>
+            <if test="reportId != null  and reportId != ''"> and report_id like concat('%', #{reportId}, '%')</if>
+            <if test="reportName != null  and reportName != ''"> and report_name like concat('%', #{reportName}, '%')</if>
+            <if test="reportType != null  and reportType != ''"> and report_type = #{reportType}</if>
+            <if test="reportIsfinal != null  and reportIsfinal != ''"> and report_isfinal = #{reportIsfinal}</if>
+            <if test="reportManager != null  and reportManager != ''"> and report_manager = #{reportManager}</if>
+            <if test="reportArea != null  and reportArea != ''"> and report_area = #{reportArea}</if>
+            <if test="createBy != null  and createBy != ''"> and create_by = #{createBy}</if>
+            <if test="updateBy != null  and updateBy != ''"> and update_by = #{updateBy}</if>
         </where>
-        ORDER BY
-        <choose>
-            <when test="sortBy == 'updateTime'">
-                <choose>
-                    <when test="zjReport.updateTime != null">update_time</when>
-                    <otherwise>create_time</otherwise>
-                </choose>
-            </when>
-            <otherwise>id</otherwise>
-        </choose>
-        <choose>
-            <when test="orderBy == 'DESC'">DESC</when>
-            <otherwise>ASC</otherwise>
-        </choose>
     </select>
 
     <select id="selectZjReportById" parameterType="Long" resultMap="ZjReportResult">

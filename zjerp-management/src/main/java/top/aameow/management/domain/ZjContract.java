@@ -2,6 +2,8 @@ package top.aameow.management.domain;
 
 import java.util.Date;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import lombok.Getter;
+import lombok.Setter;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import top.aameow.common.annotation.Excel;
@@ -13,6 +15,8 @@ import top.aameow.common.core.domain.BaseEntity;
  * @author ruoyi
  * @date 2025-05-13
  */
+@Getter
+@Setter
 public class ZjContract extends BaseEntity
 {
     private static final long serialVersionUID = 1L;
@@ -53,96 +57,6 @@ public class ZjContract extends BaseEntity
     /** 合同附件 */
     @Excel(name = "合同附件")
     private String contractFile;
-
-    public void setId(Long id)
-    {
-        this.id = id;
-    }
-
-    public Long getId()
-    {
-        return id;
-    }
-
-    public void setContractId(String contractId)
-    {
-        this.contractId = contractId;
-    }
-
-    public String getContractId()
-    {
-        return contractId;
-    }
-
-    public void setContractType(Integer contractType)
-    {
-        this.contractType = contractType;
-    }
-
-    public Integer getContractType()
-    {
-        return contractType;
-    }
-
-    public void setContractName(String contractName)
-    {
-        this.contractName = contractName;
-    }
-
-    public String getContractName()
-    {
-        return contractName;
-    }
-
-    public void setStartTime(Date startTime)
-    {
-        this.startTime = startTime;
-    }
-
-    public Date getStartTime()
-    {
-        return startTime;
-    }
-
-    public void setEndTime(Date endTime)
-    {
-        this.endTime = endTime;
-    }
-
-    public Date getEndTime()
-    {
-        return endTime;
-    }
-
-    public void setManager(String manager)
-    {
-        this.manager = manager;
-    }
-
-    public String getManager()
-    {
-        return manager;
-    }
-
-    public void setAmount(Long amount)
-    {
-        this.amount = amount;
-    }
-
-    public Long getAmount()
-    {
-        return amount;
-    }
-
-    public void setContractFile(String contractFile)
-    {
-        this.contractFile = contractFile;
-    }
-
-    public String getContractFile()
-    {
-        return contractFile;
-    }
 
     @Override
     public String toString() {

@@ -25,7 +25,7 @@ public interface IZjReportService
      * @param zjReport 报告管理
      * @return 报告管理集合
      */
-    public List<ZjReport> selectZjReportList(String sortBy, String orderBy, ZjReport zjReport);
+    public List<ZjReport> selectZjReportList(ZjReport zjReport);
 
     /**
      * 新增报告管理

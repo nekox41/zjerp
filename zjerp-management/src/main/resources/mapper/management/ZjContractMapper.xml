@@ -25,28 +25,14 @@
         select id, contract_id, contract_type, contract_name, start_time, end_time, manager, amount, create_by, create_time, update_by, update_time, remark, contract_file from zj_contract
     </sql>
 
-    <select id="selectZjContractList" resultMap="ZjContractResult">
+    <select id="selectZjContractList" parameterType="ZjContract" resultMap="ZjContractResult">
         <include refid="selectZjContractVo"/>
         <where>
-            <if test="zjContract.contractId != null  and zjContract.contractId != ''"> and contract_id = #{zjContract.contractId}</if>
-            <if test="zjContract.contractType != null "> and contract_type = #{zjContract.contractType}</if>
-            <if test="zjContract.contractName != null  and zjContract.contractName != ''"> and contract_name like concat('%', #{zjContract.contractName}, '%')</if>
-            <if test="zjContract.manager != null  and zjContract.manager != ''"> and manager = #{zjContract.manager}</if>
+            <if test="contractId != null  and contractId != ''"> and contract_id = #{contractId}</if>
+            <if test="contractType != null "> and contract_type = #{contractType}</if>
+            <if test="contractName != null  and contractName != ''"> and contract_name like concat('%', #{contractName}, '%')</if>
+            <if test="manager != null  and manager != ''"> and manager = #{manager}</if>
         </where>
-        ORDER BY
-        <choose>
-            <when test="sortBy == 'updateTime'">
-                <choose>
-                    <when test="zjContract.updateTime != null">update_time</when>
-                    <otherwise>create_time</otherwise>
-                </choose>
-            </when>
-            <otherwise>id</otherwise>
-        </choose>
-        <choose>
-            <when test="orderBy == 'DESC'">DESC</when>
-            <otherwise>ASC</otherwise>
-        </choose>
     </select>
 
     <select id="selectZjContractById" parameterType="Long" resultMap="ZjContractResult">

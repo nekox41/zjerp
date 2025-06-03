@@ -39,9 +39,9 @@ public class ZjReportServiceImpl implements IZjReportService
      * @return 报告管理
      */
     @Override
-    public List<ZjReport> selectZjReportList(String sortBy, String orderBy, ZjReport zjReport)
+    public List<ZjReport> selectZjReportList(ZjReport zjReport)
     {
-        return zjReportMapper.selectZjReportList(sortBy, orderBy, zjReport);
+        return zjReportMapper.selectZjReportList(zjReport);
     }
 
     /**
@@ -53,7 +53,6 @@ public class ZjReportServiceImpl implements IZjReportService
     @Override
     public int insertZjReport(ZjReport zjReport)
     {
-        zjReport.setCreateTime(DateUtils.getNowDate());
         return zjReportMapper.insertZjReport(zjReport);
     }
 
@@ -66,7 +65,6 @@ public class ZjReportServiceImpl implements IZjReportService
     @Override
     public int updateZjReport(ZjReport zjReport)
     {
-        zjReport.setUpdateTime(DateUtils.getNowDate());
         return zjReportMapper.updateZjReport(zjReport);
     }
 

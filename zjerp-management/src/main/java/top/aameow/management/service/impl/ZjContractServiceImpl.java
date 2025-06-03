@@ -39,9 +39,9 @@ public class ZjContractServiceImpl implements IZjContractService
      * @return 合同管理
      */
     @Override
-    public List<ZjContract> selectZjContractList(String sortBy, String orderBy, ZjContract zjContract)
+    public List<ZjContract> selectZjContractList(ZjContract zjContract)
     {
-        return zjContractMapper.selectZjContractList(sortBy, orderBy, zjContract);
+        return zjContractMapper.selectZjContractList(zjContract);
     }
 
     /**
@@ -53,7 +53,6 @@ public class ZjContractServiceImpl implements IZjContractService
     @Override
     public int insertZjContract(ZjContract zjContract)
     {
-        zjContract.setCreateTime(DateUtils.getNowDate());
         return zjContractMapper.insertZjContract(zjContract);
     }
 
@@ -66,7 +65,6 @@ public class ZjContractServiceImpl implements IZjContractService
     @Override
     public int updateZjContract(ZjContract zjContract)
     {
-        zjContract.setUpdateTime(DateUtils.getNowDate());
         return zjContractMapper.updateZjContract(zjContract);
     }
 

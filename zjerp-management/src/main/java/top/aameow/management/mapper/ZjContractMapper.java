@@ -2,8 +2,6 @@ package top.aameow.management.mapper;
 
 import java.util.List;
 
-import org.apache.ibatis.annotations.Param;
-
 import top.aameow.management.domain.ZjContract;
 
 /**
@@ -28,7 +26,7 @@ public interface ZjContractMapper
      * @param zjContract 合同管理
      * @return 合同管理集合
      */
-    public List<ZjContract> selectZjContractList(@Param("sortBy")String sortBy, @Param("orderBy")String orderBy, @Param("zjContract")ZjContract zjContract);
+    public List<ZjContract> selectZjContractList(ZjContract zjContract);
 
     /**
      * 新增合同管理

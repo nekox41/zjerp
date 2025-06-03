@@ -18,6 +18,7 @@ import top.aameow.common.annotation.Log;
 import top.aameow.common.core.controller.BaseController;
 import top.aameow.common.core.domain.AjaxResult;
 import top.aameow.common.enums.BusinessType;
+import top.aameow.common.utils.DateUtils;
 import top.aameow.management.domain.ZjContract;
 import top.aameow.management.service.IZjContractService;
 import top.aameow.common.utils.poi.ExcelUtil;
@@ -39,12 +40,13 @@ public class ZjContractController extends BaseController
     /**
      * 查询合同管理列表
      */
-    @PreAuthorize("@ss.hasPermi('management:contract:list')")
+//    @PreAuthorize("@ss.hasPermi('management:contract:list')")
+    @Anonymous
     @GetMapping("/list")
-    public TableDataInfo list(@RequestParam(defaultValue = "updateTime") String sortBy, @RequestParam(defaultValue = "DESC") String orderBy ,ZjContract zjContract)
+    public TableDataInfo list(ZjContract zjContract)
     {
         startPage();
-        List<ZjContract> list = zjContractService.selectZjContractList(sortBy, orderBy, zjContract);
+        List<ZjContract> list = zjContractService.selectZjContractList(zjContract);
         return getDataTable(list);
     }
 
@@ -56,7 +58,7 @@ public class ZjContractController extends BaseController
     @PostMapping("/export")
     public void export(HttpServletResponse response, ZjContract zjContract)
     {
-        List<ZjContract> list = zjContractService.selectZjContractList("id", "ASC", zjContract);
+        List<ZjContract> list = zjContractService.selectZjContractList(zjContract);
         ExcelUtil<ZjContract> util = new ExcelUtil<ZjContract>(ZjContract.class);
         util.exportExcel(response, list, "合同管理数据");
     }
@@ -80,6 +82,9 @@ public class ZjContractController extends BaseController
     public AjaxResult add(@RequestBody ZjContract zjContract)
     {
         zjContract.setCreateBy(getNickname());
+        zjContract.setUpdateBy(getNickname());
+        zjContract.setCreateTime(DateUtils.getNowDate());
+        zjContract.setUpdateTime(DateUtils.getNowDate());
         return toAjax(zjContractService.insertZjContract(zjContract));
     }
 
@@ -92,6 +97,7 @@ public class ZjContractController extends BaseController
     public AjaxResult edit(@RequestBody ZjContract zjContract)
     {
         zjContract.setUpdateBy(getNickname());
+        zjContract.setUpdateTime(DateUtils.getNowDate());
         return toAjax(zjContractService.updateZjContract(zjContract));
     }
 

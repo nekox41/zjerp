@@ -11,6 +11,7 @@ import top.aameow.common.config.RuoYiConfig;
 import top.aameow.common.core.controller.BaseController;
 import top.aameow.common.core.domain.AjaxResult;
 import top.aameow.common.enums.BusinessType;
+import top.aameow.common.utils.DateUtils;
 import top.aameow.common.utils.file.FileUploadUtils;
 import top.aameow.common.utils.file.FileUtils;
 import top.aameow.common.utils.uuid.Seq;
@@ -40,10 +41,10 @@ public class ZjReportController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('management:report:list')")
     @GetMapping("/list")
-    public TableDataInfo list(@RequestParam(defaultValue = "updateTime") String sortBy, @RequestParam(defaultValue = "DESC") String orderBy, ZjReport zjReport)
+    public TableDataInfo list(ZjReport zjReport)
     {
         startPage();
-        List<ZjReport> list = zjReportService.selectZjReportList(sortBy, orderBy, zjReport);
+        List<ZjReport> list = zjReportService.selectZjReportList(zjReport);
         return getDataTable(list);
     }
 
@@ -55,7 +56,7 @@ public class ZjReportController extends BaseController
     @PostMapping("/export")
     public void export(HttpServletResponse response, ZjReport zjReport)
     {
-        List<ZjReport> list = zjReportService.selectZjReportList("id", "ASC", zjReport);
+        List<ZjReport> list = zjReportService.selectZjReportList(zjReport);
         ExcelUtil<ZjReport> util = new ExcelUtil<ZjReport>(ZjReport.class);
         util.exportExcel(response, list, "报告管理数据");
     }
@@ -79,6 +80,9 @@ public class ZjReportController extends BaseController
     public AjaxResult add(@RequestBody ZjReport zjReport)
     {
         zjReport.setCreateBy(getNickname());
+        zjReport.setUpdateBy(getNickname());
+        zjReport.setCreateTime(DateUtils.getNowDate());
+        zjReport.setUpdateTime(DateUtils.getNowDate());
         return toAjax(zjReportService.insertZjReport(zjReport));
     }
 
@@ -91,6 +95,7 @@ public class ZjReportController extends BaseController
     public AjaxResult edit(@RequestBody ZjReport zjReport)
     {
         zjReport.setUpdateBy(getNickname());
+        zjReport.setUpdateTime(DateUtils.getNowDate());
         return toAjax(zjReportService.updateZjReport(zjReport));
     }
 
