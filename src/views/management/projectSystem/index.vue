@@ -287,7 +287,7 @@ function handlePreview(row) {
 }
 
 function handleCopyURL(row) {
-  const url = `${window.location.origin}/SystemCheck?id=${row.id}`
+  const url = `${window.location.origin}/systemcheck/${row.id}`
   // url to clipboard
   navigator.clipboard.writeText(url).then(() => {
     proxy.$message.success("复制成功");
