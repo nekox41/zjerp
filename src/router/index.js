@@ -83,6 +83,14 @@ export const constantRoutes = [
         meta: { title: '个人中心', icon: 'user' }
       }
     ]
+  },
+  {
+    path: '/systemcheck/:id',
+    component: () => import('@/views/management/projectSystem/tree'),
+    name: 'SystemCheck',
+    meta: { title: '选择系统', icon: 'dashboard' },
+    hidden: true,
+    props: true
   }
 ]
 

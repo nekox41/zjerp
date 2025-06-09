@@ -197,6 +197,7 @@ import { listReport, getReport, delReport, addReport, updateReport } from "@/api
 import reportUpload from "./components/reportUpload.vue";
 import download from "@/plugins/download"
 import batchAdd from "./components/batchAdd.vue";
+import { orderBy } from "element-plus/es/components/table/src/util.mjs";
 
 const { proxy } = getCurrentInstance();
 const { report_isfinal, report_type } = proxy.useDict('report_isfinal', 'report_type');
@@ -228,6 +229,8 @@ const data = reactive({
     reportArea: null,
     createBy: null,
     updateBy: null,
+    orderByColumn: "updateTime",
+    isAsc: "desc"
   },
   rules: {
     reportName: [

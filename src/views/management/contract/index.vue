@@ -169,6 +169,8 @@ const data = reactive({
     contractType: null,
     contractName: null,
     manager: null,
+    orderByColumn: "updateTime",
+    isAsc: "desc"
   },
   rules: {
     contractType: [
