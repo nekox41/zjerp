@@ -1,0 +1,23 @@
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+
+  mysql:
+    image: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  redis:
+    image: redis
+    volumes:
+      - redis-data:/var/lib/redis
+
+
+volumes:
+  mysql-data:
+  redis-data:
