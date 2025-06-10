@@ -52,7 +52,7 @@ public class ZjContract extends BaseEntity
 
     /** 合同金额 */
     @Excel(name = "合同金额")
-    private Long amount;
+    private Float amount;
 
     /** 合同附件 */
     @Excel(name = "合同附件")

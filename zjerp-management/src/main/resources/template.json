@@ -1,0 +1,1574 @@
+[
+    {
+        "label": "消防供电配电",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "消防配电柜（箱）",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防用电设备最末一级配电箱",
+                        "checked": false
+                    },
+                    {
+                        "label": "自备发电机组",
+                        "checked": false
+                    },
+                    {
+                        "label": "EPS应急电源",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "火灾报警系统",
+        "children": [
+            {
+                "label": "控制中心报警系统",
+                "children": [
+                    {
+                        "label": "报警控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "火灾探测器",
+                        "checked": false
+                    },
+                    {
+                        "label": "手动报警按钮",
+                        "checked": false
+                    },
+                    {
+                        "label": "火灾声光警报装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "控制器类产品",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防联动控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "吸气式感烟火灾探测器",
+                        "checked": false
+                    },
+                    {
+                        "label": "可燃气体探测器",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "区域报警系统",
+                "children": [
+                    {
+                        "label": "报警控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "火灾探测器",
+                        "checked": false
+                    },
+                    {
+                        "label": "手动报警按钮",
+                        "checked": false
+                    },
+                    {
+                        "label": "火灾声光警报装置  ",
+                        "checked": false
+                    },
+                    {
+                        "label": "控制器类产品",
+                        "checked": false
+                    },
+                    {
+                        "label": "吸气式感烟火灾探测器",
+                        "checked": false
+                    },
+                    {
+                        "label": "可燃气体探测器",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "集中报警系统",
+                "children": [
+                    {
+                        "label": "报警控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "火灾探测器",
+                        "checked": false
+                    },
+                    {
+                        "label": "手动报警按钮",
+                        "checked": false
+                    },
+                    {
+                        "label": "火灾声光警报装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "控制器类产品",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防联动控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "吸气式感烟火灾探测器",
+                        "checked": false
+                    },
+                    {
+                        "label": "可燃气体探测器",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "电气火灾监控系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "电气火灾监测系统",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "消防供水设施",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "消防水池",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水箱",
+                        "checked": false
+                    },
+                    {
+                        "label": "稳(增)压泵及气压水罐 ",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水泵（消防泵，喷淋泵，等所有消防专门用途的泵）及控制柜",
+                        "checked": false
+                    },
+                    {
+                        "label": "阀门",
+                        "checked": false
+                    },
+                    {
+                        "label": "水泵接合器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "消火栓（自动寻的灭火装置）灭火系统",
+        "children": [
+            {
+                "label": "高压系统",
+                "children": [
+                    {
+                        "label": "室内消火栓",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水喉",
+                        "checked": false
+                    },
+                    {
+                        "label": "室外消火栓",
+                        "checked": false
+                    },
+                    {
+                        "label": "自动寻的灭火装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能（新规范）",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "消火栓按钮直接启泵功能（旧规范）",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "临时高压系统",
+                "children": [
+                    {
+                        "label": "室内消火栓",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水喉",
+                        "checked": false
+                    },
+                    {
+                        "label": "室外消火栓",
+                        "checked": false
+                    },
+                    {
+                        "label": "自动寻的灭火装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能（新规范）",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "消火栓按钮直接启泵功能（旧规范）",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "低压系统",
+                "children": [
+                    {
+                        "label": "室内消火栓",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水喉",
+                        "checked": false
+                    },
+                    {
+                        "label": "室外消火栓",
+                        "checked": false
+                    },
+                    {
+                        "label": "自动寻的灭火装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能（新规范）",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "消火栓按钮直接启泵功能（旧规范）",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "自动喷水灭火系统",
+        "children": [
+            {
+                "label": "湿式系统",
+                "children": [
+                    {
+                        "label": "报警阀组 ",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "信号阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统过滤器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "水流指示器",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "干式系统",
+                "children": [
+                    {
+                        "label": "报警阀组 ",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "信号阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统过滤器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "水流指示器",
+                        "checked": false
+                    },
+                    {
+                        "label": "充、排气装置",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "雨淋系统   ",
+                "children": [
+                    {
+                        "label": "报警阀组",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "信号阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统过滤器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "电磁阀",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "自动喷水—泡沫联用系统",
+                "children": [
+                    {
+                        "label": "报警阀组",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "信号阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统过滤器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "电磁阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "泡沫液储罐",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "水幕系统",
+                "children": [
+                    {
+                        "label": "报警阀组",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "信号阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统过滤器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "电磁阀",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "预作用系统",
+                "children": [
+                    {
+                        "label": "报警阀组",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "信号阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统过滤器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "充、排气装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "电磁阀",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "泡沫灭火系统",
+        "children": [
+            {
+                "label": "中倍数灭火系统",
+                "children": [
+                    {
+                        "label": "泡沫液储罐",
+                        "checked": false
+                    },
+                    {
+                        "label": "泡沫产生装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "泡沫比例混合器（装置）",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及附件",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "自吸液泡沫消火栓、移动泡沫产生装置、喷淋冷却系统",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "低倍数灭火系统",
+                "children": [
+                    {
+                        "label": "泡沫液储罐",
+                        "checked": false
+                    },
+                    {
+                        "label": "泡沫产生装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "泡沫比例混合器（装置）",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及附件",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "自吸液泡沫消火栓、移动泡沫产生装置、喷淋冷却系统",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "高倍数灭火系统",
+                "children": [
+                    {
+                        "label": "泡沫液储罐",
+                        "checked": false
+                    },
+                    {
+                        "label": "泡沫产生装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "泡沫比例混合器（装置）",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及附件",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "自吸液泡沫消火栓、移动泡沫产生装置、喷淋冷却系统",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "气体灭火系统",
+        "children": [
+            {
+                "label": "七氟丙烷灭火系统    ",
+                "children": [
+                    {
+                        "label": "防护区",
+                        "checked": false
+                    },
+                    {
+                        "label": "瓶组与储罐",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道和喷嘴",
+                        "checked": false
+                    },
+                    {
+                        "label": "紧急启/停功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "启动装置、选择阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "气体灭火控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "通风换气设备",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "灭火剂和驱动气体储罐压力",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "热气溶胶灭火系统",
+                "children": [
+                    {
+                        "label": "防护区",
+                        "checked": false
+                    },
+                    {
+                        "label": "气溶胶灭火装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "紧急启/停功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "启动装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "气体灭火控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "通风换气设备",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "惰性气体灭火系统 ",
+                "children": [
+                    {
+                        "label": "防护区",
+                        "checked": false
+                    },
+                    {
+                        "label": "瓶组与储罐",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道和喷嘴",
+                        "checked": false
+                    },
+                    {
+                        "label": "紧急启/停功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "启动装置、选择阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "气体灭火控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "通风换气设备",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "灭火剂和驱动气体储罐压力",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "二氧化碳灭火系统 ",
+                "children": [
+                    {
+                        "label": "防护区",
+                        "checked": false
+                    },
+                    {
+                        "label": "瓶组与储罐",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道和喷嘴",
+                        "checked": false
+                    },
+                    {
+                        "label": "紧急启/停功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "启动装置、选择阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "气体灭火控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "通风换气设备",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    },
+                    {
+                        "label": "检漏装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "低压二氧化碳储存装置",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "防烟系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "常闭式送风口",
+                        "checked": false
+                    },
+                    {
+                        "label": "常开式送风口",
+                        "checked": false
+                    },
+                    {
+                        "label": "风管（道）",
+                        "checked": false
+                    },
+                    {
+                        "label": "室外进风口",
+                        "checked": false
+                    },
+                    {
+                        "label": "供电线路",
+                        "checked": false
+                    },
+                    {
+                        "label": "加压送风机",
+                        "checked": false
+                    },
+                    {
+                        "label": "风机控制箱(柜)",
+                        "checked": false
+                    },
+                    {
+                        "label": "机械加压送风系统联动试验和性能检测",
+                        "checked": false
+                    },
+                    {
+                        "label": "自然通风设施",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "排烟系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "排烟阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "排烟口",
+                        "checked": false
+                    },
+                    {
+                        "label": "自动排烟窗",
+                        "checked": false
+                    },
+                    {
+                        "label": "固定式挡烟垂壁",
+                        "checked": false
+                    },
+                    {
+                        "label": "活动式挡烟垂壁",
+                        "checked": false
+                    },
+                    {
+                        "label": "排烟防火阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "补风口",
+                        "checked": false
+                    },
+                    {
+                        "label": "风管（道）",
+                        "checked": false
+                    },
+                    {
+                        "label": "室外进风口",
+                        "checked": false
+                    },
+                    {
+                        "label": "室外排烟口",
+                        "checked": false
+                    },
+                    {
+                        "label": "供电线路",
+                        "checked": false
+                    },
+                    {
+                        "label": "排烟风机",
+                        "checked": false
+                    },
+                    {
+                        "label": "风机控制箱(柜)",
+                        "checked": false
+                    },
+                    {
+                        "label": "补风机",
+                        "checked": false
+                    },
+                    {
+                        "label": "机械排烟系统联动试验和性能检测",
+                        "checked": false
+                    },
+                    {
+                        "label": "自然排烟设施",
+                        "checked": false
+                    },
+                    {
+                        "label": "备用件核查",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "应急照明和疏散指示系统",
+        "children": [
+            {
+                "label": "自带电源非集中控制型系统",
+                "children": [
+                    {
+                        "label": "系统布线",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防应急疏散照明灯",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防应急标志灯",
+                        "checked": false
+                    },
+                    {
+                        "label": "应急照明配电箱",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统功能测试",
+                        "checked": false
+                    },
+                    {
+                        "label": "备用照明",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "集中电源非集中控制型系统",
+                "children": [
+                    {
+                        "label": "系统布线",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防应急疏散照明灯",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防应急标志灯",
+                        "checked": false
+                    },
+                    {
+                        "label": "应急照明集中电源",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统功能测试",
+                        "checked": false
+                    },
+                    {
+                        "label": "备用照明",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "集中电源集中控制型系统",
+                "children": [
+                    {
+                        "label": "系统布线",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防应急疏散照明灯",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防应急标志灯",
+                        "checked": false
+                    },
+                    {
+                        "label": "应急照明集中电源",
+                        "checked": false
+                    },
+                    {
+                        "label": "应急照明控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统功能测试",
+                        "checked": false
+                    },
+                    {
+                        "label": "备用照明",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "自带电源集中控制型系统",
+                "children": [
+                    {
+                        "label": "系统布线",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防应急疏散照明灯",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防应急标志灯",
+                        "checked": false
+                    },
+                    {
+                        "label": "应急照明配电箱",
+                        "checked": false
+                    },
+                    {
+                        "label": "应急照明控制器",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统功能测试",
+                        "checked": false
+                    },
+                    {
+                        "label": "备用照明",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "应急广播系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "扬声器",
+                        "checked": false
+                    },
+                    {
+                        "label": "广播分配盘",
+                        "checked": false
+                    },
+                    {
+                        "label": "联动控制功能",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "消防专用电话",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "消防专用电话",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "防火分隔",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "防火门",
+                        "checked": false
+                    },
+                    {
+                        "label": "防火卷帘",
+                        "checked": false
+                    },
+                    {
+                        "label": "电动防火阀",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "消防电梯",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "消防电梯",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "细水雾灭火系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "基本功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "过滤器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "干粉灭火系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "基本功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "灭火器",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "灭火器",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "水喷雾灭火系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水泵和备用动力",
+                        "checked": false
+                    },
+                    {
+                        "label": "电磁阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "放水试验",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "探火管灭火装置",
+        "children": [
+            {
+                "label": "间接气体类（二氧化碳）",
+                "children": [
+                    {
+                        "label": "灭火剂储存容器",
+                        "checked": false
+                    },
+                    {
+                        "label": "探火管",
+                        "checked": false
+                    },
+                    {
+                        "label": "释放管",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "二氧化碳储存容器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "直接干粉类",
+                "children": [
+                    {
+                        "label": "灭火剂储存容器",
+                        "checked": false
+                    },
+                    {
+                        "label": "探火管",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "间接气体类（七氟丙烷）",
+                "children": [
+                    {
+                        "label": "灭火剂储存容器",
+                        "checked": false
+                    },
+                    {
+                        "label": "探火管",
+                        "checked": false
+                    },
+                    {
+                        "label": "释放管",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "直接气体类（二氧化碳）",
+                "children": [
+                    {
+                        "label": "灭火剂储存容器",
+                        "checked": false
+                    },
+                    {
+                        "label": "探火管",
+                        "checked": false
+                    },
+                    {
+                        "label": "二氧化碳储存容器",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "间接干粉类",
+                "children": [
+                    {
+                        "label": "灭火剂储存容器",
+                        "checked": false
+                    },
+                    {
+                        "label": "探火管",
+                        "checked": false
+                    },
+                    {
+                        "label": "释放管",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷头",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            },
+            {
+                "label": "直接气体类（七氟丙烷）",
+                "children": [
+                    {
+                        "label": "灭火剂储存容器",
+                        "checked": false
+                    },
+                    {
+                        "label": "探火管",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及阀门标识",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "自动跟踪定位射流灭火系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "自动消防炮",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷射型自动射流灭火装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷洒型自动射流灭火装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "探测装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "自动控制阀（电磁阀或电动阀）",
+                        "checked": false
+                    },
+                    {
+                        "label": "水流指示器",
+                        "checked": false
+                    },
+                    {
+                        "label": "信号阀",
+                        "checked": false
+                    },
+                    {
+                        "label": "模拟末端试水装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "现场控制箱",
+                        "checked": false
+                    },
+                    {
+                        "label": "控制主机",
+                        "checked": false
+                    },
+                    {
+                        "label": "声、光警报器",
+                        "checked": false
+                    },
+                    {
+                        "label": "阀门",
+                        "checked": false
+                    },
+                    {
+                        "label": "管道及支吊架",
+                        "checked": false
+                    },
+                    {
+                        "label": "系统布线",
+                        "checked": false
+                    },
+                    {
+                        "label": "供电电源",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水泵及控制柜",
+                        "checked": false
+                    },
+                    {
+                        "label": "气压稳压装置",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水泵接合器",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水池",
+                        "checked": false
+                    },
+                    {
+                        "label": "消防水箱",
+                        "checked": false
+                    },
+                    {
+                        "label": "过滤器",
+                        "checked": false
+                    },
+                    {
+                        "label": "自动消防炮灭火系统联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷射型自动射流灭火系统联动控制功能",
+                        "checked": false
+                    },
+                    {
+                        "label": "喷洒型自动射流灭火系统联动控制功能",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "安全评估系统",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "安全评估项目",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "现场记录系统（现场不能带手机）",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "现场记录项目",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "其他消防设施",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "现场记录项",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "消防检测现场记录",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "现场记录",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    },
+    {
+        "label": "消防评估现场记录",
+        "children": [
+            {
+                "label": "无分类",
+                "children": [
+                    {
+                        "label": "现场记录",
+                        "checked": false
+                    }
+                ],
+                "checked": false
+            }
+        ],
+        "checked": false
+    }
+]

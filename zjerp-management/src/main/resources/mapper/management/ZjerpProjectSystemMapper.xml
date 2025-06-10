@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="top.aameow.management.mapper.ZjerpProjectSystemMapper">
+    
+    <resultMap type="ZjerpProjectSystem" id="ZjerpProjectSystemResult">
+        <result property="id"    column="id"    />
+        <result property="projectName"    column="project_name"    />
+        <result property="qrcode"    column="qrcode"    />
+        <result property="projectSystem"    column="project_system"    />
+    </resultMap>
+
+    <sql id="selectZjerpProjectSystemVo">
+        select id, project_name, qrcode, project_system from zjerp_project_system
+    </sql>
+
+    <select id="selectZjerpProjectSystemList" parameterType="ZjerpProjectSystem" resultMap="ZjerpProjectSystemResult">
+        <include refid="selectZjerpProjectSystemVo"/>
+        <where>  
+            <if test="projectName != null  and projectName != ''"> and project_name like concat('%', #{projectName}, '%')</if>
+        </where>
+    </select>
+    
+    <select id="selectZjerpProjectSystemById" parameterType="Long" resultMap="ZjerpProjectSystemResult">
+        <include refid="selectZjerpProjectSystemVo"/>
+        where id = #{id}
+    </select>
+
+    <insert id="insertZjerpProjectSystem" parameterType="ZjerpProjectSystem">
+        insert into zjerp_project_system
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="id != null">id,</if>
+            <if test="projectName != null">project_name,</if>
+            <if test="qrcode != null">qrcode,</if>
+            <if test="projectSystem != null">project_system,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="id != null">#{id},</if>
+            <if test="projectName != null">#{projectName},</if>
+            <if test="qrcode != null">#{qrcode},</if>
+            <if test="projectSystem != null">#{projectSystem},</if>
+         </trim>
+    </insert>
+
+    <update id="updateZjerpProjectSystem" parameterType="ZjerpProjectSystem">
+        update zjerp_project_system
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="projectName != null">project_name = #{projectName},</if>
+            <if test="qrcode != null">qrcode = #{qrcode},</if>
+            <if test="projectSystem != null">project_system = #{projectSystem},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteZjerpProjectSystemById" parameterType="Long">
+        delete from zjerp_project_system where id = #{id}
+    </delete>
+
+    <delete id="deleteZjerpProjectSystemByIds" parameterType="String">
+        delete from zjerp_project_system where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>
