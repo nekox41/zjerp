@@ -1,7 +1,6 @@
 {
   "dockerComposeFile": "docker-compose.yml",
   "service": "devcontainer",
-  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
   "features": {
     "ghcr.io/devcontainers/features/java:1": {
     },
