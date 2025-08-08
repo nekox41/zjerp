@@ -91,7 +91,21 @@ export const constantRoutes = [
     meta: { title: '选择系统', icon: 'dashboard' },
     hidden: true,
     props: true
-  }
+  },
+  {
+    path: '/index2',
+    component: () => import('@/views/index2'),
+    name: 'Home',
+    meta: { title: '控制中心', icon: 'dashboard' },
+    hidden: true
+  },
+  {
+    path: '/financial/userInput',
+    component: () => import('@/views/financial/outside/userInput'),
+    name: 'UserInput',
+    meta: { title: '用户录入', icon: 'dashboard' },
+    hidden: true
+  },
 ]
 
 // 动态路由，基于用户权限动态去加载

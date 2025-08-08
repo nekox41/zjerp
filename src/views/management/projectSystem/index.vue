@@ -92,7 +92,7 @@
     />
 
     <!-- 添加或修改项目系统对话框 -->
-    <el-dialog :title="title" v-model="open" width="500px" append-to-body>
+    <el-dialog :title="title" v-model="open" width="500px" append-to-body :close-on-click-modal="false">
       <el-form ref="projectSystemRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="项目名称" prop="projectName">
           <el-input v-model="form.projectName" placeholder="请输入项目名称" />

@@ -46,32 +46,30 @@
 
     <el-table v-loading="loading" :data="contractList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
-      <el-table-column label="序号" align="center" prop="id"/>
-      <el-table-column label="合同编号" align="center" prop="contractId" />
+      <!-- <el-table-column label="序号" align="center" prop="id" /> -->
+      <!-- <el-table-column label="合同编号" align="center" prop="contractId" /> -->
       <el-table-column label="合同类型" align="center" prop="contractType">
         <template #default="scope">
           <dict-tag :options="contract_type" :value="scope.row.contractType" />
         </template>
       </el-table-column>
       <el-table-column label="合同名称" align="center" prop="contractName" />
-      <el-table-column label="开始时间" align="center" prop="startTime" width="180">
+      <el-table-column label="签订时间" align="center" prop="startTime" width="180">
         <template #default="scope">
           <span>{{ parseTime(scope.row.startTime, '{y}-{m}-{d}') }}</span>
+          <br>
+          <span v-if="scope.row.endTime != null">
+            {{ parseTime(scope.row.endTime, '{y}-{m}-{d}') }}
+          </span>
         </template>
       </el-table-column>
-      <el-table-column label="结束时间" align="center" prop="endTime" width="180">
+      <!-- <el-table-column label="结束时间" align="center" prop="endTime" width="180">
         <template #default="scope">
           <span>{{ parseTime(scope.row.endTime, '{y}-{m}-{d}') }}</span>
         </template>
-      </el-table-column>
+      </el-table-column> -->
       <el-table-column label="合同负责人" align="center" prop="manager" />
       <el-table-column label="合同金额" align="center" prop="amount" />
-      <el-table-column label="合同附件" align="center" prop="contractFile">
-        <!-- ElButton + a 标签，打开窗口跳转到附件地址 -->
-        <template #default="scope">
-          <el-link :href="baseURL + '/' + scope.row.contractFile" target="_blank">查看</el-link>
-        </template>
-      </el-table-column>
       <el-table-column label="备注" align="center" prop="remark" />
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
@@ -79,23 +77,24 @@
             v-hasPermi="['management:contract:edit']">修改</el-button>
           <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)"
             v-hasPermi="['management:contract:remove']">删除</el-button>
+          <el-button link type="primary" icon="View" @click="handleView(scope.row)">查看</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize"
-      @pagination="getList" />
+    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum"
+      v-model:limit="queryParams.pageSize" @pagination="getList" />
 
     <!-- 添加或修改合同管理对话框 -->
-    <el-dialog :title="title" v-model="open" width="600px" append-to-body>
-      <el-form ref="contractRef" :model="form" :rules="rules" label-width="120px">
+    <el-dialog :title="title" v-model="open" width="600px" append-to-body :close-on-click-modal="false">
+      <el-form ref="contractRef" :model="form" label-width="120px">
         <el-form-item label="合同编号" prop="contractId">
           <el-input v-model="form.contractId" />
         </el-form-item>
         <el-form-item label="合同类型" prop="contractType">
           <el-select v-model="form.contractType">
             <el-option v-for="dict in contract_type" :key="dict.value" :label="dict.label"
-              :value="parseInt(dict.value)"></el-option>
+              :value="dict.value"></el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="合同名称" prop="contractName">
@@ -117,20 +116,18 @@
             </el-form-item>
           </el-col>
         </el-row>
-          <el-form-item label="合同负责人" prop="manager">
-            <el-input v-model="form.manager" placeholder="请输入合同负责人" />
-          </el-form-item>
-          <el-form-item label="合同金额" prop="amount">
-            <el-input v-model="form.amount" placeholder="请输入合同金额" />
-          </el-form-item>
-          <el-form-item label="合同附件" prop="contractFile">
-            <ContractUpload v-model="form.contractFile" :contractId="form.contractId" :contractName="form.contractName"
-              :startTime="form.startTime" :endTime="form.endTime" :amount="form.amount" :manager="form.manager"
-              :fileSize="100" />
-          </el-form-item>
-          <el-form-item label="备注" prop="remark">
-              <el-input v-model="form.remark" type="textarea" placeholder="请输入内容" />
-          </el-form-item>
+        <el-form-item label="合同负责人" prop="manager">
+          <el-input v-model="form.manager" placeholder="请输入合同负责人" />
+        </el-form-item>
+        <el-form-item label="合同金额" prop="amount">
+          <el-input v-model="form.amount" placeholder="请输入合同金额" />
+        </el-form-item>
+        <el-form-item label="合同附件" prop="contractFile">
+          <file-upload v-model="form.contractFile" :fileType="[]" :fileSize="50" />
+        </el-form-item>
+        <el-form-item label="备注" prop="remark">
+          <el-input v-model="form.remark" type="textarea" placeholder="请输入内容" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -144,7 +141,6 @@
 
 <script setup name="Contract">
 import { listContract, getContract, delContract, addContract, updateContract } from "@/api/management/contract";
-import ContractUpload from "./components/contractUpload.vue";
 const baseURL = import.meta.env.VITE_APP_BASE_API;
 
 const { proxy } = getCurrentInstance();
@@ -172,23 +168,6 @@ const data = reactive({
     orderByColumn: "updateTime",
     isAsc: "desc"
   },
-  rules: {
-    contractType: [
-      { required: true, message: "合同类型不能为空", trigger: "change" }
-    ],
-    contractName: [
-      { required: true, message: "合同名称不能为空", trigger: "blur" }
-    ],
-    startTime: [
-      { required: true, message: "开始时间不能为空", trigger: "blur" }
-    ],
-    manager: [
-      { required: true, message: "合同负责人不能为空", trigger: "blur" }
-    ],
-    amount: [
-      { required: true, message: "合同金额不能为空", trigger: "blur" }
-    ],
-  }
 });
 
 const { queryParams, form, rules } = toRefs(data);
@@ -297,6 +276,12 @@ function handleDelete(row) {
     getList();
     proxy.$modal.msgSuccess("删除成功");
   }).catch(() => { });
+}
+
+function handleView(row) {
+  const url = baseURL + '/' + row.contractFile;
+  window.open(url);
+  return;
 }
 
 /** 导出按钮操作 */

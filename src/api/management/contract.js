@@ -50,3 +50,11 @@ export function getContractCount(type) {
     method: 'get'
   })
 }
+
+export function getWbSummary(query) {
+  return request({
+    url: '/management/contract/wbsummary',
+    method: 'get',
+    params: query
+  })
+}

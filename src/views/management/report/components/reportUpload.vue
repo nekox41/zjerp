@@ -12,8 +12,8 @@
     <!-- 上传提示 -->
     <div class="el-upload__tip" v-if="showTip && !disabled && computedIsFinal !== null">
       请上传
-      <template v-if="fileSize"> 大小不超过 <b style="color: #f56c6c">{{ fileSize }}MB</b> </template>
-      <template v-if="fileType.length"> 格式为 <b style="color: #f56c6c">{{ fileType.join("/") }}</b> </template>
+      <!-- <template v-if="fileSize"> 大小不超过 <b style="color: #f56c6c">{{ fileSize }}MB</b> </template> -->
+      <template v-if="fileType != null"> 格式为 <b style="color: #f56c6c">{{ fileType.join("/") }}</b> </template>
       的文件
     </div>
     <div class="el-upload__tip2" v-if="computedIsFinal === null">
@@ -41,13 +41,11 @@ const props = defineProps({
   modelValue: [String, Object, Array],
   // 大小限制(MB)
   fileSize: {
-    type: Number,
-    default: 5
+    type: Number
   },
   // 文件类型, 例如['png', 'jpg', 'jpeg']
   fileType: {
-    type: Array,
-    default: []
+    type: Array
   },
   // 是否显示提示
   isShowTip: {

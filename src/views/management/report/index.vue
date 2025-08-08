@@ -54,18 +54,24 @@
       <el-table-column type="selection" width="55" align="center" />
       <!-- <el-table-column label="序号" align="center" prop="id" type="index" width="55px"/> -->
       <el-table-column label="报告编号" align="center" prop="reportId" />
-      <el-table-column label="名称" align="center" prop="reportName" />
+      <el-table-column label="名称" align="center" prop="reportName">
+        <template #default="scope">
+            <div :style="scope.row.reportIsfinal === 'Y' ? 'border-top: 2px solid #5ce92f' : 'border-top: 2px solid #e92f2f'">
+              {{ scope.row.reportName }}
+            </div>
+        </template>
+      </el-table-column>
       <el-table-column label="项目面积" align="center" prop="reportArea" />
       <el-table-column label="报告类型" align="center" prop="reportType">
         <template #default="scope">
           <dict-tag :options="report_type" :value="scope.row.reportType" />
         </template>
       </el-table-column>
-      <el-table-column label="最终版本" align="center" prop="reportIsfinal">
+      <!-- <el-table-column label="最终版本" align="center" prop="reportIsfinal">
         <template #default="scope">
           <dict-tag :options="report_isfinal" :value="scope.row.reportIsfinal" />
         </template>
-      </el-table-column>
+      </el-table-column> -->
       <el-table-column label="报告归属" align="center" prop="reportManager" />
       <el-table-column label="创建信息" align="center">
         <template #default="scope">
@@ -83,23 +89,25 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="报告文件" align="center" prop="reportFile">
+      <!-- <el-table-column label="报告文件" align="center" prop="reportFile">
         <template #default="scope">
           <el-button type="primary" @click="handleDownload(scope.row)">下载</el-button>
         </template>
-      </el-table-column>
+      </el-table-column> -->
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)"
             v-hasPermi="['management:report:edit']">修改</el-button>
           <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)"
             v-hasPermi="['management:report:remove']">删除</el-button>
+          <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)">下载</el-button>
         </template>
       </el-table-column>
     </el-table>
 
     <!-- 下载展示 -->
-    <el-dialog :title="currentRow.title" :append-to-body="true" v-model="downloadActivate">
+    <el-dialog :title="currentRow.title" :append-to-body="true" v-model="downloadActivate"
+      :close-on-click-modal="false">
       <el-table ref="myTable" :data="formatData(currentRow)" @selection-change="handleFileSelectionChange">
         <el-table-column type="selection" width="55" align="center" />
         <el-table-column label="文件名" align="center" prop="filename" />
@@ -121,7 +129,7 @@
       v-model:limit="queryParams.pageSize" @pagination="getList" />
 
     <!-- 添加或修改报告管理对话框 -->
-    <el-dialog :title="title" v-model="open" width="60%" append-to-body>
+    <el-dialog :title="title" v-model="open" width="60%" append-to-body :close-on-click-modal="false">
       <el-form ref="reportRef" :model="form" :rules="rules" label-width="80px">
         <el-row :gutter="20">
           <el-col :span="12">
@@ -168,14 +176,12 @@
         <el-row>
           <el-col :span="12">
             <el-form-item label="报告文件" prop="reportFile">
-              <reportUpload v-model="form.reportFile" :fileSize="1024" :fileType="['pdf', 'doc', 'docx']"
-                :reportType="form.reportIsfinal" :isReportFile="true" />
+              <file-upload v-model="form.reportFile" :fileType="[]" :fileSize="0" :isShowTip="false" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="附件" prop="reportAttach">
-              <reportUpload v-model="form.reportAttach" :fileSize="1024"
-                :reportType="form.reportIsfinal" />
+              <file-upload v-model="form.reportAttach" :fileType="[]" :fileSize="0" :isShowTip="false" />
             </el-form-item>
           </el-col>
         </el-row>
