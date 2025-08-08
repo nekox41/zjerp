@@ -2,6 +2,7 @@ package top.aameow.management.mapper;
 
 import java.util.List;
 
+import top.aameow.management.domain.WbSummary;
 import top.aameow.management.domain.ZjContract;
 
 /**
@@ -60,5 +61,7 @@ public interface ZjContractMapper
      */
     public int deleteZjContractByIds(Long[] ids);
 
-    int countByContractType(int contractType);
+    int countByContractType(String contractType);
+
+    WbSummary getWbSummary();
 }

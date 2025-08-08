@@ -1,9 +1,10 @@
 package top.aameow.management.service.impl;
 
 import java.util.List;
-import top.aameow.common.utils.DateUtils;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import top.aameow.management.domain.WbSummary;
 import top.aameow.management.mapper.ZjContractMapper;
 import top.aameow.management.domain.ZjContract;
 import top.aameow.management.service.IZjContractService;
@@ -93,7 +94,12 @@ public class ZjContractServiceImpl implements IZjContractService
     }
 
     @Override
-    public int countByContractType(int contractType) {
+    public int countByContractType(String contractType) {
         return zjContractMapper.countByContractType(contractType);
+    }
+
+    @Override
+    public WbSummary getWbSummary() {
+        return zjContractMapper.getWbSummary();
     }
 }

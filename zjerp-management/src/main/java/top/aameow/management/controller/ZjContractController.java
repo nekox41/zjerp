@@ -117,8 +117,14 @@ public class ZjContractController extends BaseController
      */
     @Anonymous
     @GetMapping("/count/{contractType}")
-    public AjaxResult countByContractType(@PathVariable int contractType)
+    public AjaxResult countByContractType(@PathVariable String contractType)
     {
         return success(zjContractService.countByContractType(contractType));
+    }
+
+    @PreAuthorize("@ss.hasPermi('management:contract:list')")
+    @GetMapping("/wbsummary")
+    public AjaxResult wbSummary() {
+        return success(zjContractService.getWbSummary());
     }
 }

@@ -110,26 +110,5 @@ public class ZjReportController extends BaseController
         return toAjax(zjReportService.deleteZjReportByIds(ids));
     }
 
-    @Log(title = "上传报告", businessType = BusinessType.OTHER)
-    @PostMapping("/upload")
-    public AjaxResult uploadFile(@RequestParam("file") MultipartFile file, @RequestParam("isFinal") boolean isFinal) throws Exception {
-        try {
-            // 上传文件路径
-            String filePath = RuoYiConfig.getUploadPath();
-            // 根据 isFinal 参数选择序列类型
-            String seqType = isFinal ? Seq.finalReportSeqType : Seq.reportSeqType;
-            // 上传并返回新文件名称
-            String fileName = FileUploadUtils.upload(filePath, file, seqType);
-            String url = serverConfig.getUrl() + fileName;
-            AjaxResult ajax = AjaxResult.success();
-            ajax.put("url", url);
-            ajax.put("fileName", fileName);
-            ajax.put("newFileName", FileUtils.getName(fileName));
-            ajax.put("originalFilename", file.getOriginalFilename());
-            return ajax;
-        } catch (Exception e) {
-            return AjaxResult.error(e.getMessage());
-        }
-    }
 
 }

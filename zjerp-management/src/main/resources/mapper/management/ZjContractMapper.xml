@@ -4,10 +4,10 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="top.aameow.management.mapper.ZjContractMapper">
 
-    <resultMap type="ZjContract" id="ZjContractResult">
+    <resultMap type="top.aameow.management.domain.ZjContract" id="ZjContractResult">
         <result property="id"    column="id"    />
         <result property="contractId"    column="contract_id"    />
-        <result property="contractType"    column="contract_type"    />
+        <result property="contractType"    column="contract_type"    javaType="java.lang.String"/>
         <result property="contractName"    column="contract_name"    />
         <result property="startTime"    column="start_time"    />
         <result property="endTime"    column="end_time"    />
@@ -25,7 +25,7 @@
         select id, contract_id, contract_type, contract_name, start_time, end_time, manager, amount, create_by, create_time, update_by, update_time, remark, contract_file from zj_contract
     </sql>
 
-    <select id="selectZjContractList" parameterType="ZjContract" resultMap="ZjContractResult">
+    <select id="selectZjContractList" parameterType="top.aameow.management.domain.ZjContract" resultMap="ZjContractResult">
         <include refid="selectZjContractVo"/>
         <where>
             <if test="contractId != null  and contractId != ''"> and contract_id = #{contractId}</if>
@@ -40,7 +40,7 @@
         where id = #{id}
     </select>
 
-    <insert id="insertZjContract" parameterType="ZjContract" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertZjContract" parameterType="top.aameow.management.domain.ZjContract" useGeneratedKeys="true" keyProperty="id">
         insert into zj_contract
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="contractId != null and contractId != ''">contract_id,</if>
@@ -74,7 +74,7 @@
         </trim>
     </insert>
 
-    <update id="updateZjContract" parameterType="ZjContract">
+    <update id="updateZjContract" parameterType="top.aameow.management.domain.ZjContract">
         update zj_contract
         <trim prefix="SET" suffixOverrides=",">
             <if test="contractId != null and contractId != ''">contract_id = #{contractId},</if>
@@ -107,5 +107,13 @@
 
     <select id="countByContractType" resultType="int">
         SELECT COUNT(*) FROM zj_contract WHERE contract_type = #{contractType}
+    </select>
+
+    <select id="getWbSummary" resultType="top.aameow.management.domain.WbSummary">
+        SELECT
+            COUNT(*) AS contractCount,
+            ROUND(SUM(amount), 2) AS amountSum
+        FROM zj_contract
+        WHERE contract_type = 'WB'
     </select>
 </mapper>

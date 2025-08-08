@@ -60,6 +60,12 @@
             <artifactId>zjerp-management</artifactId>
         </dependency>
 
+        <!--   财务模块     -->
+        <dependency>
+            <groupId>top.aameow</groupId>
+            <artifactId>zjerp-financial</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

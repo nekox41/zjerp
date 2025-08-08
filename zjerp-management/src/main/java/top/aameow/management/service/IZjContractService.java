@@ -2,6 +2,7 @@ package top.aameow.management.service;
 
 import java.util.List;
 import top.aameow.management.domain.ZjContract;
+import top.aameow.management.domain.WbSummary;
 
 /**
  * 合同管理Service接口
@@ -59,5 +60,7 @@ public interface IZjContractService
      */
     public int deleteZjContractById(Long id);
 
-    int countByContractType(int contractType);
+    int countByContractType(String contractType);
+
+    WbSummary getWbSummary();
 }

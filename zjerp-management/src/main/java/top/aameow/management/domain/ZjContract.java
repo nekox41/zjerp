@@ -30,7 +30,7 @@ public class ZjContract extends BaseEntity
 
     /** 合同类型 */
     @Excel(name = "合同类型")
-    private Integer contractType;
+    private String contractType;
 
     /** 合同名称 */
     @Excel(name = "合同名称")
