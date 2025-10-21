@@ -52,7 +52,7 @@ spring:
     # 国际化资源文件路径
     basename: i18n/messages
   profiles:
-    active: druid
+    active: druiddev
   # 文件上传
   servlet:
     multipart:
@@ -69,7 +69,7 @@ spring:
     # redis 配置
     redis:
       # 地址
-      host: localhost
+      host: redisdev
       # 端口，默认为6379
       port: 6379
       # 数据库索引
@@ -135,3 +135,13 @@ xss:
   excludes: /system/notice
   # 匹配链接
   urlPatterns: /system/*,/monitor/*,/tool/*
+
+# 文件备份相关配置
+alist:
+  api-url: "http://host.docker.internal:5244"
+  username: "admin"
+  password: "AFzFXBFL"
+  backup-path: "/ecloud"
+upload:
+  directory: "/upload"
+  cron: "0 0 2 * * ?"
