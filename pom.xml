@@ -209,6 +209,7 @@
         <module>zjerp-common</module>
         <module>zjerp-management</module>
         <module>zjerp-financial</module>
+        <module>autobakcup</module>
     </modules>
     <packaging>pom</packaging>
 
