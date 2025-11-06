@@ -129,8 +129,8 @@
           <el-input v-model="genForm.leader" placeholder="请输入项目负责人"></el-input>
         </el-form-item>
         <el-form-item label="联系电话" prop="leader" label-width="100px">
-          <el-input v-model="genForm.phone" placeholder="请输入联系电话"></el-input>
-          <el-select v-model="genForm.phone" placeholder="选择预设手机号">
+          <el-input v-model="genForm.phone" placeholder="请输入联系电话" style="width: 400px;"></el-input>
+          <el-select v-model="genForm.phone" placeholder="选择预设手机号" style="width: 200px;" clearable>
             <el-option label="唐贺军" value="13027719998"></el-option>
             <el-option label="郭沙沙" value="18567060212"></el-option>
             <el-option label="李世军" value="17518671513"></el-option>
