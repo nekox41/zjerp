@@ -35,6 +35,17 @@
             <artifactId>druid-spring-boot-3-starter</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>itext-core</artifactId>
+            <version>9.3.0</version>
+            <type>pom</type>
+        </dependency>
+        <dependency>
+            <groupId>top.aameow</groupId>
+            <artifactId>zjerp-management</artifactId>
+        </dependency>
+
     </dependencies>
 
 </project>

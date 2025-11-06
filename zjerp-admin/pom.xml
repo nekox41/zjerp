@@ -66,11 +66,11 @@
             <artifactId>zjerp-financial</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>top.aameow</groupId>
-            <artifactId>autobakcup</artifactId>
-            <version>3.8.9</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>top.aameow</groupId>-->
+<!--            <artifactId>autobakcup</artifactId>-->
+<!--            <version>3.8.9</version>-->
+<!--        </dependency>-->
 
     </dependencies>
 

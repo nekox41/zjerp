@@ -5,6 +5,7 @@ WORKDIR /app
 COPY ./zjerp-admin/target/zjerp-admin.jar app.jar
 
 VOLUME /app/upload
+VOLUME /app/wbcard
 
 EXPOSE 8080
 
