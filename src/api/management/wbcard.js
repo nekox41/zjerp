@@ -42,3 +42,12 @@ export function delWbcard(id) {
     method: 'delete'
   })
 }
+
+// 生成维保卡
+export function generateWbcard(data) {
+  return request({
+    url: '/wbcard/gen/create',
+    method: 'post',
+    data: data
+  })
+}
