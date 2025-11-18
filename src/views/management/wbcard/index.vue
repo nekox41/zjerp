@@ -156,7 +156,7 @@
       <template #footer>
         <div class="dialog-footer">
           <el-button type="primary" @click="submitGen">生 成</el-button>
-          <el-button @click="">取 消</el-button>
+          <el-button @click="closeGen">取 消</el-button>
         </div>
       </template>
     </el-dialog>
@@ -451,6 +451,11 @@ function simplifySystems(systems) {
   }
 
   return result;
+}
+
+function closeGen() {
+  resetGen();
+  openGen.value = false;
 }
 
 getList();

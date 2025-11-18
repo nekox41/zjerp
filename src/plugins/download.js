@@ -45,6 +45,25 @@ export default {
       downloadLoadingInstance.close();
     })
   },
+    resourceWithName(resource, name) {
+    var url = baseURL + "/common/download/resource?resource=" + encodeURIComponent(resource);
+    downloadLoadingInstance = ElLoading.service({ text: "正在下载数据，请稍候", background: "rgba(0, 0, 0, 0.7)", })
+    axios({
+      method: 'get',
+      url: url,
+      responseType: 'blob',
+      headers: { 'Authorization': 'Bearer ' + getToken() }
+    }).then((res) => {
+      const isBlob = blobValidate(res.data);
+      if (isBlob) {
+        const blob = new Blob([res.data])
+        this.saveAs(blob, name)
+      } else {
+        this.printErrMsg(res.data);
+      }
+      downloadLoadingInstance.close();
+    })
+  },
   zip(url, name) {
     var url = baseURL + url
     downloadLoadingInstance = ElLoading.service({ text: "正在下载数据，请稍候", background: "rgba(0, 0, 0, 0.7)", })
