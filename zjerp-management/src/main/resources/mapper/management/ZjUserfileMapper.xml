@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="top.aameow.management.mapper.ZjUserfileMapper">
+    
+    <resultMap type="ZjUserfile" id="ZjUserfileResult">
+        <result property="id"    column="id"    />
+        <result property="userId"    column="user_id"    />
+        <result property="name"    column="name"    />
+        <result property="file"    column="file"    />
+        <result property="remark"    column="remark"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+    </resultMap>
+
+    <resultMap id="UserFileAndUser" type="top.aameow.management.domain.UserFileAndUser">
+        <result property="userId" column="user_id" />
+        <result property="userName" column="user_name" />
+        <result property="name"    column="name"    />
+        <result property="file"    column="file"    />
+        <result property="remark"    column="remark"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+    </resultMap>
+
+    <sql id="selectZjUserfileVo">
+        select id, user_id, name, file, remark, create_by, create_time, update_by, update_time from zj_userfile
+    </sql>
+
+    <select id="selectZjUserfileList" parameterType="ZjUserfile" resultMap="ZjUserfileResult">
+        <include refid="selectZjUserfileVo"/>
+        <where>  
+            <if test="userId != null "> and user_id = #{userId}</if>
+            <if test="name != null  and name != ''"> and name = #{name}</if>
+            <if test="remark != null  and remark != ''"> and remark like concat('%', #{remark}, '%')</if>
+        </where>
+    </select>
+    
+    <select id="selectZjUserfileById" parameterType="Long" resultMap="ZjUserfileResult">
+        <include refid="selectZjUserfileVo"/>
+        where id = #{id}
+    </select>
+    <select id="selectUserFileAndUserList" resultMap="UserFileAndUser">
+        select
+            uf.id, uf.user_id, uf.name, uf.file, uf.remark, uf.create_by, uf.create_time, uf.update_by, uf.update_time,
+            u.user_name
+        from zj_userfile uf
+        left join zj_user u on uf.user_id = u.id
+        <where>
+            <if test="userId != null "> and user_id = #{userId}</if>
+            <if test="name != null  and name != ''"> and name = #{name}</if>
+            <if test="remark != null  and remark != ''"> and remark like concat('%', #{remark}, '%')</if>
+        </where>
+    </select>
+
+    <insert id="insertZjUserfile" parameterType="ZjUserfile">
+        insert into zj_userfile
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="id != null">id,</if>
+            <if test="userId != null">user_id,</if>
+            <if test="name != null">name,</if>
+            <if test="file != null">file,</if>
+            <if test="remark != null">remark,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="id != null">#{id},</if>
+            <if test="userId != null">#{userId},</if>
+            <if test="name != null">#{name},</if>
+            <if test="file != null">#{file},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+         </trim>
+    </insert>
+
+    <update id="updateZjUserfile" parameterType="ZjUserfile">
+        update zj_userfile
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="name != null">name = #{name},</if>
+            <if test="file != null">file = #{file},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteZjUserfileById" parameterType="Long">
+        delete from zj_userfile where id = #{id}
+    </delete>
+
+    <delete id="deleteZjUserfileByIds" parameterType="String">
+        delete from zj_userfile where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>
