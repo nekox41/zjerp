@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="top.aameow.project.mapper.ProjectCodeMapper">
+    
+    <resultMap type="ProjectCode" id="ProjectCodeResult">
+        <result property="id"    column="id"    />
+        <result property="code"    column="code"    />
+        <result property="name"    column="name"    />
+        <result property="type"    column="type"    />
+        <result property="index"    column="index"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectProjectCodeVo">
+        select id, code, name, type, `index`, create_time, create_by, remark from zj_project_code
+    </sql>
+
+    <select id="selectProjectCodeList" parameterType="ProjectCode" resultMap="ProjectCodeResult">
+        <include refid="selectProjectCodeVo"/>
+        <where>  
+            <if test="code != null  and code != ''"> and code like concat('%', #{code}, '%')</if>
+            <if test="name != null  and name != ''"> and name like concat('%', #{name}, '%')</if>
+            <if test="type != null  and type != ''"> and type = #{type}</if>
+            <if test="params.beginCreateTime != null and params.beginCreateTime != '' and params.endCreateTime != null and params.endCreateTime != ''"> and create_time between #{params.beginCreateTime} and #{params.endCreateTime}</if>
+        </where>
+    </select>
+    
+    <select id="selectProjectCodeById" parameterType="Long" resultMap="ProjectCodeResult">
+        <include refid="selectProjectCodeVo"/>
+        where id = #{id}
+    </select>
+    <select id="getIndexByType" resultType="java.lang.Integer">
+        SELECT COUNT(*) + 1
+        FROM zj_project_code
+        WHERE type = #{type}
+    </select>
+
+    <insert id="insertProjectCode" parameterType="ProjectCode">
+        insert into zj_project_code
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="id != null">id,</if>
+            <if test="code != null">code,</if>
+            <if test="name != null">name,</if>
+            <if test="type != null">type,</if>
+            <if test="index != null">index,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="id != null">#{id},</if>
+            <if test="code != null">#{code},</if>
+            <if test="name != null">#{name},</if>
+            <if test="type != null">#{type},</if>
+            <if test="index != null">#{index},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateProjectCode" parameterType="ProjectCode">
+        update zj_project_code
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="code != null">code = #{code},</if>
+            <if test="name != null">name = #{name},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="index != null">index = #{index},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteProjectCodeById" parameterType="Long">
+        delete from zj_project_code where id = #{id}
+    </delete>
+
+    <delete id="deleteProjectCodeByIds" parameterType="String">
+        delete from zj_project_code where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>
