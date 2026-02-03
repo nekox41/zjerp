@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="top.aameow.project.mapper.MaintainProjectMapper">
+    
+    <resultMap type="MaintainProject" id="MaintainProjectResult">
+        <result property="id"    column="id"    />
+        <result property="name"    column="name"    />
+        <result property="agentId"    column="agent_id"    />
+        <result property="startDate"    column="start_date"    />
+        <result property="endDate"    column="end_date"    />
+        <result property="location"    column="location"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectMaintainProjectVo">
+        select id, name, agent_id, start_date, end_date, location, remark from zj_project_maintain
+    </sql>
+
+    <select id="selectMaintainProjectList" parameterType="MaintainProject" resultMap="MaintainProjectResult">
+        <include refid="selectMaintainProjectVo"/>
+        <where>  
+            <if test="name != null  and name != ''"> and name like concat('%', #{name}, '%')</if>
+            <if test="agentId != null "> and agent_id = #{agentId}</if>
+            <if test="startDate != null "> and start_date = #{startDate}</if>
+            <if test="endDate != null "> and end_date = #{endDate}</if>
+            <if test="location != null  and location != ''"> and location = #{location}</if>
+        </where>
+    </select>
+    
+    <select id="selectMaintainProjectById" parameterType="Long" resultMap="MaintainProjectResult">
+        <include refid="selectMaintainProjectVo"/>
+        where id = #{id}
+    </select>
+
+    <insert id="insertMaintainProject" parameterType="MaintainProject">
+        insert into zj_project_maintain
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="id != null">id,</if>
+            <if test="name != null and name != ''">name,</if>
+            <if test="agentId != null">agent_id,</if>
+            <if test="startDate != null">start_date,</if>
+            <if test="endDate != null">end_date,</if>
+            <if test="location != null">location,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="id != null">#{id},</if>
+            <if test="name != null and name != ''">#{name},</if>
+            <if test="agentId != null">#{agentId},</if>
+            <if test="startDate != null">#{startDate},</if>
+            <if test="endDate != null">#{endDate},</if>
+            <if test="location != null">#{location},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateMaintainProject" parameterType="MaintainProject">
+        update zj_project_maintain
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="agentId != null">agent_id = #{agentId},</if>
+            <if test="startDate != null">start_date = #{startDate},</if>
+            <if test="endDate != null">end_date = #{endDate},</if>
+            <if test="location != null">location = #{location},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteMaintainProjectById" parameterType="Long">
+        delete from zj_project_maintain where id = #{id}
+    </delete>
+
+    <delete id="deleteMaintainProjectByIds" parameterType="String">
+        delete from zj_project_maintain where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

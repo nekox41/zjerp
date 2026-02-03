@@ -191,10 +191,10 @@
                 <version>${aameow.version}</version>
             </dependency>
 
-            <!-- 财务管理-->
+<!--            项目系统-->
             <dependency>
                 <groupId>top.aameow</groupId>
-                <artifactId>zjerp-financial</artifactId>
+                <artifactId>Project</artifactId>
                 <version>${aameow.version}</version>
             </dependency>
         </dependencies>
@@ -208,8 +208,7 @@
         <module>zjerp-generator</module>
         <module>zjerp-common</module>
         <module>zjerp-management</module>
-        <module>zjerp-financial</module>
-        <module>autobakcup</module>
+        <module>Project</module>
     </modules>
     <packaging>pom</packaging>
 

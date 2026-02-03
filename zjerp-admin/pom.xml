@@ -60,18 +60,11 @@
             <artifactId>zjerp-management</artifactId>
         </dependency>
 
-        <!--   财务模块     -->
         <dependency>
             <groupId>top.aameow</groupId>
-            <artifactId>zjerp-financial</artifactId>
+            <artifactId>Project</artifactId>
+            <version>${aameow.version}</version>
         </dependency>
-
-<!--        <dependency>-->
-<!--            <groupId>top.aameow</groupId>-->
-<!--            <artifactId>autobakcup</artifactId>-->
-<!--            <version>3.8.9</version>-->
-<!--        </dependency>-->
-
     </dependencies>
 
     <build>
