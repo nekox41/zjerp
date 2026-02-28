@@ -26,7 +26,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <include refid="selectzjWBCardVo"/>
         <where>  
             <if test="code != null  and code != ''"> and code = #{code}</if>
-            <if test="title != null  and title != ''"> and title = #{title}</if>
+            <if test="title != null  and title != ''"> and title like concat('%', #{title}, '%')</if>
             <if test="file != null  and file != ''"> and file = #{file}</if>
             <if test="printCheck != null  and printCheck != ''"> and print_check = #{printCheck}</if>
             <if test="sendCheck != null  and sendCheck != ''"> and send_check = #{sendCheck}</if>
