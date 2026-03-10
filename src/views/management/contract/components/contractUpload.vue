@@ -1,41 +1,18 @@
 <template>
   <div class="upload-file">
-    <el-upload
-      multiple
-      :action="uploadFileUrl"
-      :before-upload="handleBeforeUpload"
-      :file-list="fileList"
-      :limit="limit"
-      :on-error="handleUploadError"
-      :on-exceed="handleExceed"
-      :on-success="handleUploadSuccess"
-      :show-file-list="false"
-      :headers="headers"
-      class="upload-file-uploader"
-      ref="fileUpload"
-      v-if="!disabled"
-    >
-      <!-- 上传按钮 -->
-      <el-button type="primary">选取文件</el-button>
-    </el-upload>
-    <!-- 上传提示 -->
-    <div class="el-upload__tip" v-if="showTip && !disabled">
-      请上传
-      <template v-if="fileSize"> 大小不超过 <b style="color: #f56c6c">{{ fileSize }}MB</b> </template>
-      <template v-if="fileType"> 格式为 <b style="color: #f56c6c">{{ fileType.join("/") }}</b> </template>
-      的文件
-    </div>
-    <!-- 文件列表 -->
-    <transition-group class="upload-file-list el-upload-list el-upload-list--text" name="el-fade-in-linear" tag="ul">
-      <li :key="file.uid" class="el-upload-list__item ele-upload-list__item-content" v-for="(file, index) in fileList">
-        <el-link :href="`${baseUrl}${file.url}`" :underline="false" target="_blank">
-          <span class="el-icon-document"> {{ getFileName(file.name) }} </span>
-        </el-link>
-        <div class="ele-upload-list__item-content-action">
-          <el-link :underline="false" @click="handleDelete(index)" type="danger" v-if="!disabled">删除</el-link>
+    <el-upload multiple :action="uploadFileUrl" :before-upload="handleBeforeUpload" :file-list="fileList" :limit="limit"
+      :on-error="handleUploadError" :on-exceed="handleExceed" :on-success="handleUploadSuccess" drag
+      :on-remove="handleDelete" :headers="headers" class="upload-file-uploader" ref="fileUpload" v-if="!disabled">
+      <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+      <div class="el-upload__text">
+        拖拽文件到这里或者 <em>点击以上传</em>
+      </div>
+      <template #tip>
+        <div class="el-upload__tip">
+          不大于 {{ fileSize }}MB 的 {{ fileType.join("/") }} 类型的文件
         </div>
-      </li>
-    </transition-group>
+      </template>
+    </el-upload>
   </div>
 </template>
 
@@ -57,7 +34,7 @@ const props = defineProps({
   // 文件类型, 例如['png', 'jpg', 'jpeg']
   fileType: {
     type: Array,
-    default: () => ["pdf"]
+    default: () => ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "pdf"]
   },
   // 是否显示提示
   isShowTip: {
@@ -68,25 +45,6 @@ const props = defineProps({
   disabled: {
     type: Boolean,
     default: false
-  },
-  contractId: {
-    type: String
-  },
-  contractName: {
-    type: String
-  },
-  startTime: {
-    type: String
-  },
-  endTime: {
-    type: String,
-    default: ""
-  },
-  amount: {
-    type: Number
-  },
-  manager: {
-    type: String
   }
 });
 
@@ -110,7 +68,7 @@ watch(() => props.modelValue, val => {
     // 然后将数组转为对象数组
     fileList.value = list.map(item => {
       if (typeof item === "string") {
-        item = { name: item, url: item };
+        item = { name: item.split('/').at(-1), url: item };
       }
       item.uid = item.uid || new Date().getTime() + temp++;
       return item;
@@ -119,25 +77,10 @@ watch(() => props.modelValue, val => {
     fileList.value = [];
     return [];
   }
-},{ deep: true, immediate: true });
+}, { deep: true, immediate: true });
 
 // 上传前校检格式和大小
 function handleBeforeUpload(file) {
-  // 检查合同相关参数
-  const requiredParams = [
-    { key: 'contractId', label: '合同编号' },
-    { key: 'contractName', label: '合同名称' },
-    { key: 'startTime', label: '开始时间' },
-    { key: 'amount', label: '合同金额' },
-    { key: 'manager', label: '合同负责人' }
-  ];
-
-  for (const param of requiredParams) {
-    if (!props[param.key]) {
-      proxy.$modal.msgError(`请填写${param.label}`);
-      return false; // 阻止上传
-    }
-  }
   // 校检文件类型
   if (props.fileType.length) {
     const fileName = file.name.split('.');
@@ -161,16 +104,6 @@ function handleBeforeUpload(file) {
       return false;
     }
   }
-  let fileNamePrefix = `${props.contractId}_${props.contractName}_${props.startTime}`;
-  if (props.endTime) {
-    fileNamePrefix += `到${props.endTime}`;
-  }
-  fileNamePrefix += `_${props.amount}元(${props.manager})`;
-
-  Object.defineProperty(file, 'name', {
-    writable: true,
-    value: `${fileNamePrefix}.pdf`
-  });
   proxy.$modal.loading("正在上传文件，请稍候...");
   number.value++;
   return true;
@@ -200,9 +133,12 @@ function handleUploadSuccess(res, file) {
   }
 }
 
-// 删除文件
-function handleDelete(index) {
-  fileList.value.splice(index, 1);
+function handleDelete(uploadFile, uploadFiles) {
+  // 根据 uid 找到要删除的文件索引
+  const index = fileList.value.findIndex(file => file.uid === uploadFile.uid);
+  if (index !== -1) {
+    fileList.value.splice(index, 1);
+  }
   emit("update:modelValue", listToString(fileList.value));
 }
 
@@ -240,23 +176,9 @@ function listToString(list, separator) {
 }
 </script>
 
-<style scoped lang="scss">
-.upload-file-uploader {
-  margin-bottom: 5px;
-}
-.upload-file-list .el-upload-list__item {
-  border: 1px solid #e4e7ed;
-  line-height: 2;
-  margin-bottom: 10px;
-  position: relative;
-}
-.upload-file-list .ele-upload-list__item-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: inherit;
-}
-.ele-upload-list__item-content-action .el-link {
-  margin-right: 10px;
+<style>
+/* 针对上传列表中的文件名 */
+.el-upload-list__item-file-name {
+  width: 300px;
 }
 </style>

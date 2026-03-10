@@ -123,7 +123,7 @@
           <el-input v-model="form.amount" placeholder="请输入合同金额" />
         </el-form-item>
         <el-form-item label="合同附件" prop="contractFile">
-          <file-upload v-model="form.contractFile" :fileType="[]" :fileSize="50" />
+          <contract-upload v-model="form.contractFile" :fileType="['pdf', 'docx']" :fileSize="50" />
         </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" placeholder="请输入内容" />
@@ -136,11 +136,14 @@
         </div>
       </template>
     </el-dialog>
+    <file-list-dialog v-model:visible="showDialog" :contractFile="form.contractFile"/>
   </div>
 </template>
 
 <script setup name="Contract">
 import { listContract, getContract, delContract, addContract, updateContract } from "@/api/management/contract";
+import ContractUpload from "./components/contractUpload.vue";
+import FileListDialog from "./components/fileListDialog.vue";
 const baseURL = import.meta.env.VITE_APP_BASE_API;
 
 const { proxy } = getCurrentInstance();
@@ -155,6 +158,7 @@ const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 const title = ref("");
+const showDialog = ref(false);
 
 const data = reactive({
   form: {},
@@ -279,9 +283,12 @@ function handleDelete(row) {
 }
 
 function handleView(row) {
-  const url = baseURL + '/' + row.contractFile;
-  window.open(url);
-  return;
+  reset();
+  const _id = row.id || ids.value
+  getContract(_id).then(response => {
+    form.value = response.data;
+    showDialog.value = true;
+  });
 }
 
 /** 导出按钮操作 */
