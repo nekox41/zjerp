@@ -2,7 +2,11 @@
     <el-dialog v-model="dialogVisible" title="文件列表" @close="handleClose">
         <div v-if="fileList.length">
             <ul>
-                <li v-for="(file, index) in fileList" :key="index"><a :href="file.url">{{ file.name }}</a></li>
+                <li v-for="(file, index) in fileList" :key="index">
+                    <el-link :href="`${baseUrl}${file.url}`" :underline="true" target="_blank">
+                        <span class="el-icon-document"> {{ file.name }} </span>
+                    </el-link>
+                </li>
             </ul>
         </div>
         <template #footer>
@@ -13,6 +17,8 @@
 
 <script setup>
 import { computed } from 'vue';
+
+const baseUrl = import.meta.env.VITE_APP_BASE_API;
 
 // 定义 props
 const props = defineProps({
