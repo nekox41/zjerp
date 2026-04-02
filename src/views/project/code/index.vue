@@ -160,6 +160,8 @@ const data = reactive({
     type: null,
     createTime: null,
     createBy: null,
+    orderByColumn: "createTime",
+    isAsc: "desc"
   },
   rules: {
   }
