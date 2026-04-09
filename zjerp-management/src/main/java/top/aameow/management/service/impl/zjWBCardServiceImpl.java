@@ -4,6 +4,7 @@ import java.util.List;
 import top.aameow.common.utils.DateUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import top.aameow.management.domain.WBCardPhone;
 import top.aameow.management.mapper.zjWBCardMapper;
 import top.aameow.management.domain.zjWBCard;
 import top.aameow.management.service.IzjWBCardService;
@@ -92,5 +93,34 @@ public class zjWBCardServiceImpl implements IzjWBCardService
     public int deletezjWBCardById(Long id)
     {
         return zjWBCardMapper.deletezjWBCardById(id);
+    }
+
+    /**
+     * 查询生成维保卡时可用的手机号列表
+     * @return 手机号列表
+     */
+    @Override
+    public List<WBCardPhone> getPhoneList(WBCardPhone phone) {
+        return zjWBCardMapper.getPhoneList(phone);
+    }
+
+    /**
+     * 添加新的手机号
+     * @param phone 手机号
+     * @return
+     */
+    @Override
+    public int insertWBCardPhone(WBCardPhone phone) {
+        return zjWBCardMapper.insertWBCardPhone(phone);
+    }
+
+    /**
+     * 删除手机号
+     * @param id 要删除的主键列表
+     * @return
+     */
+    @Override
+    public int deleteWBCardPhoneById(Long id) {
+        return zjWBCardMapper.deleteWBCardPhoneById(id);
     }
 }

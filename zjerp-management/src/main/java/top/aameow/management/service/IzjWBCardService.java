@@ -1,6 +1,8 @@
 package top.aameow.management.service;
 
 import java.util.List;
+
+import top.aameow.management.domain.WBCardPhone;
 import top.aameow.management.domain.zjWBCard;
 
 /**
@@ -58,4 +60,24 @@ public interface IzjWBCardService
      * @return 结果
      */
     public int deletezjWBCardById(Long id);
+
+    /**
+     * 查询生成维保卡时可用的手机号
+     * @return 手机号列表
+     */
+    public List<WBCardPhone> getPhoneList(WBCardPhone phone);
+
+    /**
+     * 插入新的手机号
+     * @param phone 手机号
+     * @return
+     */
+    public int insertWBCardPhone(WBCardPhone phone);
+
+    /**
+     * 删除手机号
+     * @param id 要删除的主键列表
+     * @return 删除结果
+     */
+    public int deleteWBCardPhoneById(Long id);
 }

@@ -18,8 +18,18 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="remark"    column="remark"    />
     </resultMap>
 
+    <resultMap id="WBCardPhoneResult" type="WBCardPhone">
+        <result property="id" column="id" />
+        <result property="name" column="name" />
+        <result property="phone" column="phone" />
+    </resultMap>
+
     <sql id="selectzjWBCardVo">
         select id, code, title, file, print_check, send_check, create_by, create_time, update_by, update_time, remark from zj_wbcard
+    </sql>
+
+    <sql id="selectWBCardPhoneVo">
+        select id, name, phone from zjerp_wbcard_phone
     </sql>
 
     <select id="selectzjWBCardList" parameterType="zjWBCard" resultMap="zjWBCardResult">
@@ -30,6 +40,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="file != null  and file != ''"> and file = #{file}</if>
             <if test="printCheck != null  and printCheck != ''"> and print_check = #{printCheck}</if>
             <if test="sendCheck != null  and sendCheck != ''"> and send_check = #{sendCheck}</if>
+        </where>
+    </select>
+
+    <select id="getPhoneList" resultMap="WBCardPhoneResult" parameterType="WBCardPhone">
+        <include refid="selectWBCardPhoneVo"/>
+        <where>
+            <if test="name != null  and name != ''"> and name like concat('%', #{name}, '%')</if>
         </where>
     </select>
     
@@ -66,6 +83,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          </trim>
     </insert>
 
+    <insert id="insertWBCardPhone" parameterType="WBCardPhone" useGeneratedKeys="true" keyProperty="id">
+        insert into zjerp_wbcard_phone (name, phone) values(#{name}, #{phone})
+    </insert>
+
     <update id="updatezjWBCard" parameterType="zjWBCard">
         update zj_wbcard
         <trim prefix="SET" suffixOverrides=",">
@@ -92,5 +113,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <foreach item="id" collection="array" open="(" separator="," close=")">
             #{id}
         </foreach>
+    </delete>
+
+    <delete id="deleteWBCardPhoneById" parameterType="Long">
+        delete from zjerp_wbcard_phone where id = #{id}
     </delete>
 </mapper>

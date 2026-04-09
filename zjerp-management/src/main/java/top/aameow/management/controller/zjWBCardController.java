@@ -17,6 +17,7 @@ import top.aameow.common.core.controller.BaseController;
 import top.aameow.common.core.domain.AjaxResult;
 import top.aameow.common.enums.BusinessType;
 import top.aameow.common.utils.DateUtils;
+import top.aameow.management.domain.WBCardPhone;
 import top.aameow.management.domain.zjWBCard;
 import top.aameow.management.service.IzjWBCardService;
 import top.aameow.common.utils.poi.ExcelUtil;
@@ -107,5 +108,34 @@ public class zjWBCardController extends BaseController
     public AjaxResult remove(@PathVariable Long[] ids)
     {
         return toAjax(zjWBCardService.deletezjWBCardByIds(ids));
+    }
+
+    /**
+     * 获取生成维保卡时可用的手机号列表
+     */
+    @PreAuthorize("@ss.hasPermi('management:wbcard:list')")
+    @GetMapping("/listphone")
+    public TableDataInfo getPhoneList(WBCardPhone phone) {
+        startPage();
+        List<WBCardPhone> list = zjWBCardService.getPhoneList(phone);
+        return getDataTable(list);
+    }
+
+    /**
+     * 添加新手机号
+     */
+    @PreAuthorize("@ss.hasPermi('management:wbcard:add')")
+    @PostMapping("/addphone")
+    public AjaxResult addPhone(@RequestBody WBCardPhone phone) {
+        return toAjax(zjWBCardService.insertWBCardPhone(phone));
+    }
+
+    /**
+     * 删除手机号
+     */
+    @PreAuthorize("@ss.hasPermi('management:wbcard:remove')")
+    @DeleteMapping("/phone/{id}")
+    public AjaxResult removePhone(@PathVariable Long id) {
+        return toAjax(zjWBCardService.deleteWBCardPhoneById(id));
     }
 }
