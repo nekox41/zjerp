@@ -123,22 +123,17 @@
           <el-input v-model="genForm.name" placeholder="请输入项目名称"></el-input>
         </el-form-item>
         <el-form-item label="公司名称" prop="company" label-width="100px">
-          <el-input v-model="genForm.company" placeholder="请输入公司名"></el-input>
+          <el-input v-model="genForm.company" disabled placeholder="请输入公司名"></el-input>
         </el-form-item>
         <el-form-item label="项目负责人" prop="leader" label-width="100px">
           <el-input v-model="genForm.leader" placeholder="请输入项目负责人"></el-input>
         </el-form-item>
         <el-form-item label="联系电话" prop="leader" label-width="100px">
           <el-input v-model="genForm.phone" placeholder="请输入联系电话" style="width: 400px;"></el-input>
-          <el-select v-model="genForm.phone" placeholder="选择预设手机号" style="width: 200px;" clearable>
-            <el-option label="唐贺军" value="13027719998"></el-option>
-            <el-option label="郭沙沙" value="18567060212"></el-option>
-            <el-option label="李世军" value="17518671513"></el-option>
-            <el-option label="杜长海" value="13526517045"></el-option>
-            <el-option label="安阳" value="13213288618"></el-option>
-            <el-option label="鹤壁" value="18567899119"></el-option>
-            <el-option label="信阳" value="17839755119"></el-option>
-            <el-option label="左鹏" value="13383769994"></el-option>
+          <el-select v-model="genForm.phone" filterable remote :remote-method="remotePhoneMethod" remote-show-suffix
+            placeholder="选择预设手机号" style="width: 200px;" clearable>
+            <el-option v-for="item in selectPhoneList" :key="item.id" :label="item.name" :value="item.phone">
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="开始时间" prop="startTime" label-width="100px">
@@ -155,16 +150,49 @@
       </el-form>
       <template #footer>
         <div class="dialog-footer">
+          <el-button type="primary" @click="handleAddPhone">添加手机号</el-button>
+          <el-button type="danger" @click="handleOpenDelPhone">删除手机号</el-button>
           <el-button type="primary" @click="submitGen">生 成</el-button>
           <el-button @click="closeGen">取 消</el-button>
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog title="添加手机号" v-model="openPhone" width="800px" append-to-body>
+      <el-form :model="phoneForm" :rules="rules" label-width="80px">
+        <el-form-item label="姓名" prop="name">
+          <el-input v-model="phoneForm.name" placeholder="请输入姓名"></el-input>
+        </el-form-item>
+        <el-form-item label="手机号" prop="phone">
+          <el-input v-model="phoneForm.phone" placeholder="请输入手机号"></el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="submitPhone">添加</el-button>
+          <el-button @click="openPhone = false">取消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog title="删除手机号" v-model="openDelPhone" width="800px" append-to-body>
+      <el-table v-loading="loading" :data="wbcardPhoneList" style="width: 100%">
+        <el-table-column label="姓名" align="center" prop="name" />
+        <el-table-column label="手机号" align="center" prop="phone" />
+        <el-table-column label="操作" align="center" width="80">
+          <template #default="scope">
+            <el-button link type="danger" icon="Delete" @click="handleDeletePhone(scope.row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <pagination v-show="phoneTotal > 0" :total="phoneTotal" v-model:page="phoneQueryParams.pageNum"
+        v-model:limit="phoneQueryParams.pageSize" @pagination="getPhoneList" />
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="Wbcard">
-import { listWbcard, getWbcard, delWbcard, addWbcard, updateWbcard } from "@/api/management/wbcard";
+import { listWbcard, listWbcardPhone, getWbcard, delWbcard, addWbcard, addWBCardPhone, updateWbcard, delWBCardPhone } from "@/api/management/wbcard";
 import { ref } from "vue";
 import { generateWbcard } from "../../../api/management/wbcard";
 
@@ -172,6 +200,8 @@ const { proxy } = getCurrentInstance();
 const { wbcard_send_status, wbcard_print_status } = proxy.useDict('wbcard_send_status', 'wbcard_print_status');
 
 const wbcardList = ref([]);
+const wbcardPhoneList = ref([]);
+const selectPhoneList = ref([]);
 const open = ref(false);
 const loading = ref(true);
 const showSearch = ref(true);
@@ -179,8 +209,11 @@ const ids = ref([]);
 const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
+const phoneTotal = ref(0);
 const title = ref("");
 const openGen = ref(false)
+const openPhone = ref(false)
+const openDelPhone = ref(false)
 const systemList = ref([
   "火灾自动报警系统",
   "火灾应急照明及疏散指示",
@@ -206,6 +239,7 @@ const systemList = ref([
 const data = reactive({
   form: {},
   genForm: {},
+  phoneForm: {},
   queryParams: {
     pageNum: 1,
     pageSize: 10,
@@ -216,11 +250,21 @@ const data = reactive({
     orderByColumn: null,
     isAsc: null
   },
+  phoneQueryParams: {
+    pageNum: 1,
+    pageSize: 10
+  },
   rules: {
+    name: [
+      { required: true, message: "名称不能为空", trigger: "blur" }
+    ],
+    phone: [
+      { required: true, message: "手机号不能为空", trigger: "blur" }
+    ]
   }
 });
 
-const { queryParams, form, genForm, rules } = toRefs(data);
+const { queryParams, phoneQueryParams, form, genForm, phoneForm, rules } = toRefs(data);
 
 /** 查询维保卡管理列表 */
 function getList() {
@@ -228,6 +272,33 @@ function getList() {
   listWbcard(queryParams.value).then(response => {
     wbcardList.value = response.rows;
     total.value = response.total;
+    loading.value = false;
+  });
+}
+
+/** 查询手机号列表 */
+function getPhoneList() {
+  loading.value = true;
+  listWbcardPhone(phoneQueryParams.value).then(response => {
+    wbcardPhoneList.value = response.rows;
+    phoneTotal.value = response.total;
+    loading.value = false;
+  });
+}
+
+// ... existing code ...
+function remotePhoneMethod(query) {
+  loading.value = true;
+  const params = {
+    pageNum: 1,
+    pageSize: 10
+  };
+  // 只有当有查询条件时才添加name参数
+  if (query && query.trim() !== '') {
+    params.name = query;
+  }
+  listWbcardPhone(params).then(response => {
+    selectPhoneList.value = response.rows;
     loading.value = false;
   });
 }
@@ -270,6 +341,14 @@ function resetGen() {
   }
 }
 
+/** 重置添加手机号的表单 */
+function resetPhone() {
+  phoneForm.value = {
+    name: null,
+    phone: null
+  }
+}
+
 /** 搜索按钮操作 */
 function handleQuery() {
   queryParams.value.pageNum = 1;
@@ -294,6 +373,25 @@ function handleAdd() {
   reset();
   open.value = true;
   title.value = "添加维保卡管理";
+}
+
+/** 打开手机号添加 */
+function handleAddPhone() {
+  resetPhone();
+  openPhone.value = true;
+}
+
+function handleOpenDelPhone() {
+  getPhoneList();
+  openDelPhone.value = true;
+}
+
+/** 生成维保卡 */
+function handleGen() {
+  resetGen();
+  // 如果手机号列表为空，初始化
+  remotePhoneMethod('');
+  openGen.value = true;
 }
 
 /** 修改按钮操作 */
@@ -328,36 +426,7 @@ function submitForm() {
   });
 }
 
-/** 删除按钮操作 */
-function handleDelete(row) {
-  const _ids = row.id || ids.value;
-  proxy.$modal.confirm('是否确认删除维保卡管理编号为"' + _ids + '"的数据项？').then(function () {
-    return delWbcard(_ids);
-  }).then(() => {
-    getList();
-    proxy.$modal.msgSuccess("删除成功");
-  }).catch(() => { });
-}
-
-/** 导出按钮操作 */
-function handleExport() {
-  proxy.download('management/wbcard/export', {
-    ...queryParams.value
-  }, `wbcard_${new Date().getTime()}.xlsx`)
-}
-
-/** 自定义的排序功能 */
-function handleSortChange(data) {
-  queryParams.value.orderByColumn = data.prop;
-  queryParams.value.isAsc = data.order === "ascending" ? "asc" : "desc";
-  getList();
-}
-
-function handleGen() {
-  resetGen();
-  openGen.value = true;
-}
-
+/** 提交生成维保卡 */
 function submitGen() {
   console.log(genForm.value)
   let simplifySystem = simplifySystems(genForm.value.system);
@@ -381,6 +450,51 @@ function submitGen() {
       getList();
     }
   })
+}
+
+/** 添加手机号 */
+function submitPhone() {
+  addWBCardPhone(phoneForm.value).then(response => {
+    proxy.$modal.msgSuccess("添加成功");
+    openPhone.value = false;
+    getPhoneList();
+    resetPhone();
+  })
+}
+
+/** 删除按钮操作 */
+function handleDelete(row) {
+  const _ids = row.id || ids.value;
+  proxy.$modal.confirm('是否确认删除维保卡管理编号为"' + _ids + '"的数据项？').then(function () {
+    return delWbcard(_ids);
+  }).then(() => {
+    getList();
+    proxy.$modal.msgSuccess("删除成功");
+  }).catch(() => { });
+}
+
+/** 删除手机号 */
+function handleDeletePhone(row) {
+  proxy.$modal.confirm('是否确认删除手机号"' + row.phone + '"？').then(function () {
+    return delWBCardPhone(row.id);
+  }).then(() => {
+    getPhoneList();
+    proxy.$modal.msgSuccess("删除成功");
+  }).catch(() => { });
+}
+
+/** 导出按钮操作 */
+function handleExport() {
+  proxy.download('management/wbcard/export', {
+    ...queryParams.value
+  }, `wbcard_${new Date().getTime()}.xlsx`)
+}
+
+/** 自定义的排序功能 */
+function handleSortChange(data) {
+  queryParams.value.orderByColumn = data.prop;
+  queryParams.value.isAsc = data.order === "ascending" ? "asc" : "desc";
+  getList();
 }
 
 /**
@@ -452,7 +566,6 @@ function simplifySystems(systems) {
 
   return result;
 }
-
 function closeGen() {
   resetGen();
   openGen.value = false;

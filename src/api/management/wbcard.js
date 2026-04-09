@@ -9,6 +9,15 @@ export function listWbcard(query) {
   })
 }
 
+// 查询维保卡生成可用手机号列表
+export function listWbcardPhone(query) {
+  return request({
+    url: '/management/wbcard/listphone',
+    method: 'get',
+    params: query
+  })
+}
+
 // 查询维保卡管理详细
 export function getWbcard(id) {
   return request({
@@ -21,6 +30,15 @@ export function getWbcard(id) {
 export function addWbcard(data) {
   return request({
     url: '/management/wbcard',
+    method: 'post',
+    data: data
+  })
+}
+
+// 添加新的手机号
+export function addWBCardPhone(data) {
+  return request({
+    url: '/management/wbcard/addphone',
     method: 'post',
     data: data
   })
@@ -39,6 +57,14 @@ export function updateWbcard(data) {
 export function delWbcard(id) {
   return request({
     url: '/management/wbcard/' + id,
+    method: 'delete'
+  })
+}
+
+// 删除手机号
+export function delWBCardPhone(id) {
+  return request({
+    url: '/management/wbcard/phone/' + id,
     method: 'delete'
   })
 }
