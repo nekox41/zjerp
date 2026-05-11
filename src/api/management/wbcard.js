@@ -9,6 +9,15 @@ export function listWbcard(query) {
   })
 }
 
+// 查询维保卡项目负责人列表
+export function listTemplate(query) {
+  return request({
+    url: '/wbcard/gen/listtemplate',
+    method: 'get',
+    params: query
+  })
+}
+
 // 查询维保卡生成可用手机号列表
 export function listWbcardPhone(query) {
   return request({

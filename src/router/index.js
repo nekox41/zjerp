@@ -98,14 +98,7 @@ export const constantRoutes = [
     name: 'Home',
     meta: { title: '控制中心', icon: 'dashboard' },
     hidden: true
-  },
-  {
-    path: '/financial/userInput',
-    component: () => import('@/views/financial/outside/userInput'),
-    name: 'UserInput',
-    meta: { title: '用户录入', icon: 'dashboard' },
-    hidden: true
-  },
+  }
 ]
 
 // 动态路由，基于用户权限动态去加载

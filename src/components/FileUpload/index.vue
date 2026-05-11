@@ -41,6 +41,7 @@
 
 <script setup>
 import { getToken } from "@/utils/auth";
+import fileDelete from "@/plugins/delete";
 
 const props = defineProps({
   modelValue: [String, Object, Array],
@@ -156,10 +157,23 @@ function handleUploadSuccess(res, file) {
   }
 }
 
-// 删除文件
 function handleDelete(index) {
-  fileList.value.splice(index, 1);
-  emit("update:modelValue", listToString(fileList.value));
+  const file = fileList.value[index];
+  
+  // 弹出确认框
+  proxy.$modal.confirm(`确认要删除文件 "${getFileName(file.name)}" 吗？`).then(() => {
+    
+    // 调用封装好的删除方法
+    return fileDelete.file(file.url);
+    
+  }).then(() => {
+    // 只有在 fileDelete 成功 resolve 后（即 code === 200），才会执行到这里
+    // 清理前端的列表数据
+    fileList.value.splice(index, 1);
+    emit("update:modelValue", listToString(fileList.value));
+  }).catch(() => {
+    // 捕获取消操作或网络异常，封装内部已经处理了报错提示，这里无需额外处理
+  });
 }
 
 // 上传结束处理

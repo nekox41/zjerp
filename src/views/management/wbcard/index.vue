@@ -126,7 +126,11 @@
           <el-input v-model="genForm.company" disabled placeholder="请输入公司名"></el-input>
         </el-form-item>
         <el-form-item label="项目负责人" prop="leader" label-width="100px">
-          <el-input v-model="genForm.leader" placeholder="请输入项目负责人"></el-input>
+          <el-select v-model="genForm.leader" filterable remote :remote-method="remoteLeaderMethod" remote-show-suffix
+            placeholder="选择项目负责人" style="width: 200px;" clearable>
+            <el-option v-for="item in leaderList" :key="item.id" :label="item.name" :value="item.name">
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="联系电话" prop="leader" label-width="100px">
           <el-input v-model="genForm.phone" placeholder="请输入联系电话" style="width: 400px;"></el-input>
@@ -192,7 +196,7 @@
 </template>
 
 <script setup name="Wbcard">
-import { listWbcard, listWbcardPhone, getWbcard, delWbcard, addWbcard, addWBCardPhone, updateWbcard, delWBCardPhone } from "@/api/management/wbcard";
+import { listWbcard, listWbcardPhone, getWbcard, delWbcard, addWbcard, addWBCardPhone, updateWbcard, delWBCardPhone, listTemplate } from "@/api/management/wbcard";
 import { ref } from "vue";
 import { generateWbcard } from "../../../api/management/wbcard";
 
@@ -202,6 +206,7 @@ const { wbcard_send_status, wbcard_print_status } = proxy.useDict('wbcard_send_s
 const wbcardList = ref([]);
 const wbcardPhoneList = ref([]);
 const selectPhoneList = ref([]);
+const leaderList = ref([]);
 const open = ref(false);
 const loading = ref(true);
 const showSearch = ref(true);
@@ -301,6 +306,21 @@ function remotePhoneMethod(query) {
     selectPhoneList.value = response.rows;
     loading.value = false;
   });
+}
+
+function remoteLeaderMethod(query) {
+  loading.value = true;
+  const params = {
+    pageNum: 1,
+    pageSize: 10
+  };
+  if (query && query.trim() !== '') {
+    params.name = query;
+  }
+  listTemplate(params).then(response => {
+    leaderList.value = response.rows;
+    loading.value = false;
+  })
 }
 
 // 取消按钮
