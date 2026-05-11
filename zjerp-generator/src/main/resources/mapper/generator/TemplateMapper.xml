@@ -12,4 +12,13 @@
     <select id="getTemplateByName" resultType="top.aameow.generator.domain.Template">
         SELECT name, file FROM templates WHERE name = #{name}
     </select>
+
+    <select id="getTemplateList" resultType="top.aameow.generator.domain.Template">
+        SELECT name, file FROM templates
+        <where>
+            <if test="name != null and name != ''">
+                AND name LIKE concat('%', #{name}, '%')
+            </if>
+        </where>
+    </select>
 </mapper>
