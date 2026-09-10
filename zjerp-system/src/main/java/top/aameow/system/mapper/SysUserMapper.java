@@ -1,6 +1,7 @@
 package top.aameow.system.mapper;
 
 import java.util.List;
+import java.util.Map;
 import org.apache.ibatis.annotations.Param;
 import top.aameow.common.core.domain.entity.SysUser;
 
@@ -124,4 +125,16 @@ public interface SysUserMapper
      * @return 结果
      */
     public SysUser checkEmailUnique(String email);
+
+    /**
+     * 查询员工总数
+     * @return 结果
+     */
+    public Long countActiveUsers();
+
+    /**
+     * 查询各个岗位人数
+     * @return 结果
+     */
+    public List<Map<String, Object>> countUsersByPost();
 }
