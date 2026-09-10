@@ -70,25 +70,23 @@
       </el-col>
     </el-row>
 
-    <!-- 项目进度 + 系统公告 -->
+    <!-- 员工统计 + 系统公告 -->
     <el-row :gutter="16">
       <el-col :xs="24" :md="14">
         <el-card shadow="never" class="panel">
           <template #header>
             <div class="panel-header">
-              <span>项目进度</span>
-              <el-tag size="small" effect="plain">共 4 个进行中</el-tag>
+              <span>员工统计</span>
+              <el-tag size="small" effect="plain">共 {{ userStat.total }} 人</el-tag>
             </div>
           </template>
-          <div class="project-list">
-            <div v-for="p in projects" :key="p.name" class="project-row">
-              <div class="project-head">
-                <span class="project-name">{{ p.name }}</span>
-                <span class="project-pct">{{ p.percent }}%</span>
-              </div>
-              <el-progress :percentage="p.percent" :color="p.color" :show-text="false" :stroke-width="8" />
+          <div v-if="userStat.posts.length" class="post-grid">
+            <div v-for="p in userStat.posts" :key="p.postId" class="post-item">
+              <div class="post-count">{{ p.userCount }}</div>
+              <div class="post-name">{{ p.postName }}</div>
             </div>
           </div>
+          <el-empty v-else description="暂无岗位数据" :image-size="60" />
         </el-card>
       </el-col>
 
@@ -120,6 +118,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { List, Clock, CircleCheck, Flag } from '@element-plus/icons-vue'
 import { listNotice } from '@/api/system/notice'
+import { getUserStat } from '@/api/system/dashboard'
 
 /* ---------------- 顶部信息 ---------------- */
 const userName = ref('Admin')
@@ -158,13 +157,6 @@ const weekTrend = [
 ]
 const maxTrend = Math.max(...weekTrend.map(i => i.value), 1)
 
-const projects = [
-  { name: '用户中心重构', percent: 82, color: '#409eff' },
-  { name: '权限模块优化', percent: 64, color: '#67c23a' },
-  { name: '数据报表开发', percent: 45, color: '#e6a23c' },
-  { name: '移动端适配', percent: 28, color: '#f56c6c' }
-]
-
 /* ---------------- 系统公告（接入若依接口） ---------------- */
 const notices = ref([])
 
@@ -178,8 +170,22 @@ const loadNotices = async () => {
   }
 }
 
+/* ---------------- 员工统计（接入自定义接口） ---------------- */
+const userStat = ref({ total: 0, posts: [] })
+
+const loadUserStat = async () => {
+  try {
+    const res = await getUserStat()
+    userStat.value = res.data || { total: 0, posts: [] }
+  } catch (e) {
+    // 静默失败，不干扰首页展示
+    userStat.value = { total: 0, posts: [] }
+  }
+}
+
 onMounted(() => {
   loadNotices()
+  loadUserStat()
 })
 </script>
 
@@ -344,29 +350,37 @@ onMounted(() => {
   color: #909399;
 }
 
-/* 项目进度 */
-.project-list {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+/* 员工统计 */
+.post-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 12px;
   padding: 4px 0;
 }
 
-.project-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
+.post-item {
+  padding: 16px 8px;
+  text-align: center;
+  border-radius: 8px;
+  background-color: #f5f7fa;
+  transition: background-color 0.2s;
 }
 
-.project-name {
-  font-size: 14px;
-  color: #303133;
+.post-item:hover {
+  background-color: #ecf5ff;
 }
 
-.project-pct {
+.post-count {
+  font-size: 22px;
+  font-weight: 600;
+  color: #409eff;
+  line-height: 1.2;
+}
+
+.post-name {
+  margin-top: 6px;
   font-size: 13px;
-  color: #909399;
+  color: #606266;
 }
 
 /* 系统公告 */
