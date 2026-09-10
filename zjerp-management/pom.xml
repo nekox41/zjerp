@@ -22,8 +22,8 @@
             <artifactId>zjerp-framework</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
+            <groupId>top.aameow</groupId>
+            <artifactId>zjerp-common</artifactId>
         </dependency>
     </dependencies>
 

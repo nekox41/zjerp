@@ -208,7 +208,6 @@
         <module>zjerp-generator</module>
         <module>zjerp-common</module>
         <module>zjerp-management</module>
-        <module>Project</module>
     </modules>
     <packaging>pom</packaging>
 

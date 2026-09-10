@@ -60,11 +60,6 @@
             <artifactId>zjerp-management</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>top.aameow</groupId>
-            <artifactId>Project</artifactId>
-            <version>${aameow.version}</version>
-        </dependency>
     </dependencies>
 
     <build>
