@@ -1,128 +1,112 @@
-#!/bin/sh
-# ./ry.sh start 启动 stop 停止 restart 重启 status 状态
-AppName=zjerp-admin.jar
+#!/bin/bash
 
-# JVM参数
-JVM_OPTS="-Dname=$AppName  -Duser.timezone=Asia/Shanghai -Xms512m -Xmx1024m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=512m"
-APP_HOME=`pwd`
-LOG_PATH=$APP_HOME/logs/$AppName.log
+# ==============================================================================
+# RuoYi 后端项目启动脚本
+# 放置在项目根目录 (zjerp_backend)
+# ==============================================================================
 
-if [ "$1" = "" ];
-then
-    echo -e "\033[0;31m 未输入操作名 \033[0m  \033[0;34m {start|stop|restart|status} \033[0m"
-    exit 1
-fi
+# 设置终端颜色输出
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-if [ "$AppName" = "" ];
-then
-    echo -e "\033[0;31m 未输入应用名 \033[0m"
-    exit 1
-fi
+echo -e "${GREEN}=========================================${NC}"
+echo -e "${GREEN}   ZJERP 后端服务启动脚本              ${NC}"
+echo -e "${GREEN}=========================================${NC}"
 
-# 检查服务是否运行
-check_service() {
-    service_name=$1
-    PID=$(ps -ef | grep $service_name | grep -v "grep" | awk '{print $2}')
-    if [ -z "$PID" ]; then
-        return 1  # 未运行
+# 1. 切换到脚本所在目录，确保相对路径正确
+cd "$(dirname "$0")"
+
+# 2. 检查 MySQL 服务状态
+echo -n "检查 MySQL 服务状态... "
+if pgrep -x "mysqld" > /dev/null; then
+    echo -e "${GREEN}[运行中]${NC}"
+else
+    echo -e "${RED}[未运行]${NC}"
+    echo -e "${YELLOW}尝试启动 MySQL...${NC}"
+    sudo service mysql start
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}MySQL 启动成功！${NC}"
     else
-        echo "$service_name 正在运行 (PID: $PID)"
-        return 0
-    fi
-}
-
-# 尝试启动服务
-start_service() {
-    service_name=$1
-    case "$service_name" in
-        mysqld)
-            echo "尝试启动 mysqld..."
-            mysqld --daemonize
-            ;;
-        redis-server)
-            echo "尝试启动 redis-server..."
-            redis-server /home/linuxbrew/.linuxbrew/etc/redis.conf
-            ;;
-        *)
-            echo "不支持的服务: $service_name"
-            exit 1
-            ;;
-    esac
-
-    sleep 2  # 给点时间让服务启动
-    check_service "$service_name"
-    if [ $? -ne 0 ]; then
-        echo -e "\033[0;31m 错误：无法启动 $service_name，请手动检查配置或权限！\033[0m"
+        echo -e "${RED}MySQL 启动失败，请手动检查！${NC}"
         exit 1
     fi
-}
+fi
 
-start()
-{
-    # 检查并尝试启动依赖服务
-    check_service "mysqld" || start_service "mysqld"
-    check_service "redis-server" || start_service "redis-server"
-
-    PID=`ps -ef |grep java|grep $AppName|grep -v grep|awk '{print $2}'`
-
-	if [ x"$PID" != x"" ]; then
-	    echo "$AppName is running..."
-	else
-		nohup java $JVM_OPTS -jar $AppName > /dev/null 2>&1 &
-        # java $JVM_OPTS -jar $AppName
-		echo "Start $AppName success..."
-	fi
-}
-
-stop()
-{
-    echo "Stop $AppName"
-
-	PID=""
-	query(){
-		PID=`ps -ef |grep java|grep $AppName|grep -v grep|awk '{print $2}'`
-	}
-
-	query
-	if [ x"$PID" != x"" ]; then
-		kill -TERM $PID
-		echo "$AppName (pid:$PID) exiting..."
-		while [ x"$PID" != x"" ]
-		do
-			sleep 1
-			query
-		done
-		echo "$AppName exited."
-	else
-		echo "$AppName already stopped."
-	fi
-}
-
-restart()
-{
-    stop
-    sleep 2
-    start
-}
-
-status()
-{
-    PID=`ps -ef |grep java|grep $AppName|grep -v grep|wc -l`
-    if [ $PID != 0 ];then
-        echo "$AppName is running..."
+# 3. 检查 Redis 服务状态
+echo -n "检查 Redis 服务状态... "
+if pgrep -x "redis-server" > /dev/null; then
+    echo -e "${GREEN}[运行中]${NC}"
+else
+    echo -e "${RED}[未运行]${NC}"
+    echo -e "${YELLOW}尝试启动 Redis...${NC}"
+    sudo service redis-server start
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Redis 启动成功！${NC}"
     else
-        echo "$AppName is not running..."
+        echo -e "${RED}Redis 启动失败，请手动检查！${NC}"
+        exit 1
     fi
-}
+fi
 
-case $1 in
-    start)
-    start;;
-    stop)
-    stop;;
-    restart)
-    restart;;
-    status)
-    status;;
-    *)
-esac
+# 4. 检查 Jar 包是否存在
+JAR_FILE="./zjerp-admin/target/zjerp-admin.jar"
+echo -n "检查 Jar 包是否存在... "
+if [ ! -f "$JAR_FILE" ]; then
+    echo -e "${RED}[缺失]${NC}"
+    echo -e "${YELLOW}未找到 $JAR_FILE，请先在终端执行 'mvn clean package -DskipTests' 打包！${NC}"
+    exit 1
+else
+    echo -e "${GREEN}[存在]${NC}"
+fi
+
+# 5. 检查是否已有相同服务在运行，避免端口冲突
+PID=$(ps -ef | grep zjerp-admin.jar | grep -v grep | awk '{print $2}')
+if [ -n "$PID" ]; then
+    echo -e "${YELLOW}检测到 zjerp-admin.jar 已在运行 (PID: $PID)，正在停止旧进程...${NC}"
+    kill -15 $PID
+    sleep 3
+    # 如果还没有杀掉，强杀
+    if ps -p $PID > /dev/null; then
+        kill -9 $PID
+    fi
+    echo -e "${GREEN}旧进程已停止。${NC}"
+fi
+
+# 6. JVM 优化参数配置
+# -Xms512m: 初始堆内存
+# -Xmx1024m: 最大堆内存 (Codespaces 中 1G-2G 比较合适，避免 OOM)
+# -XX:MetaspaceSize=128m: 元空间初始大小
+# -XX:MaxMetaspaceSize=256m: 元空间最大大小
+# -XX:+UseG1GC: 使用 G1 垃圾回收器 (适合多核大内存，现代 Java 首选)
+# -XX:+HeapDumpOnOutOfMemoryError: 内存溢出时自动导出 Dump 文件
+# -Dfile.encoding=UTF-8: 强制 UTF-8 编码，防止中文乱码
+JVM_OPTS="-Xms512m -Xmx1024m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=256m -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./logs/heapdump.hprof -Dfile.encoding=UTF-8"
+
+# 7. 启动应用
+mkdir -p logs
+LOG_FILE="./logs/zjerp-admin.log"
+
+echo -e "${GREEN}正在启动 ZJERP 后端服务...${NC}"
+echo -e "配置文件: prod (如需修改请编辑此脚本的 --spring.profiles.active)"
+echo -e "日志文件: $LOG_FILE"
+
+# 使用 nohup 后台启动，并将日志输出到指定文件
+nohup java $JVM_OPTS -jar $JAR_FILE --spring.profiles.active=prod > $LOG_FILE 2>&1 &
+
+# 8. 验证启动结果
+NEW_PID=$!
+sleep 5
+if ps -p $NEW_PID > /dev/null; then
+    echo -e "${GREEN}=========================================${NC}"
+    echo -e "${GREEN}🎉 启动成功！${NC}"
+    echo -e "进程 PID: ${YELLOW}$NEW_PID${NC}"
+    echo -e "查看实时日志: ${YELLOW}tail -f logs/zjerp-admin.log${NC}"
+    echo -e "${GREEN}=========================================${NC}"
+else
+    echo -e "${RED}=========================================${NC}"
+    echo -e "${RED}❌ 启动失败，请查看日志排查错误：${NC}"
+    echo -e "${YELLOW}tail -n 50 logs/zjerp-admin.log${NC}"
+    echo -e "${RED}=========================================${NC}"
+fi
