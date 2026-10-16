@@ -35,16 +35,6 @@
       </el-col>
       <el-col :span="1.5">
         <el-button
-          type="success"
-          plain
-          icon="Edit"
-          :disabled="single"
-          @click="handleUpdate"
-          v-hasPermi="['management:agent:edit']"
-        >修改</el-button>
-      </el-col>
-      <el-col :span="1.5">
-        <el-button
           type="danger"
           plain
           icon="Delete"
@@ -53,24 +43,14 @@
           v-hasPermi="['management:agent:remove']"
         >删除</el-button>
       </el-col>
-      <el-col :span="1.5">
-        <el-button
-          type="warning"
-          plain
-          icon="Download"
-          @click="handleExport"
-          v-hasPermi="['management:agent:export']"
-        >导出</el-button>
-      </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
     <el-table v-loading="loading" :data="agentList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
-      <el-table-column label="主键ID" align="center" prop="id" />
       <el-table-column label="名称" align="center" prop="name" />
       <el-table-column label="联系方式" align="center" prop="phone" />
-      <el-table-column label="${comment}" align="center" prop="remark" />
+      <el-table-column label="备注" align="center" prop="remark" />
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['management:agent:edit']">修改</el-button>
@@ -96,8 +76,8 @@
         <el-form-item label="联系方式" prop="phone">
           <el-input v-model="form.phone" placeholder="请输入联系方式" />
         </el-form-item>
-        <el-form-item label="${comment}" prop="remark">
-          <el-input v-model="form.remark" placeholder="请输入${comment}" />
+        <el-form-item label="备注" prop="remark">
+          <el-input v-model="form.remark" placeholder="请输入备注" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -120,7 +100,6 @@ const open = ref(false);
 const loading = ref(true);
 const showSearch = ref(true);
 const ids = ref([]);
-const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 const title = ref("");
@@ -191,7 +170,6 @@ function resetQuery() {
 // 多选框选中数据
 function handleSelectionChange(selection) {
   ids.value = selection.map(item => item.id);
-  single.value = selection.length != 1;
   multiple.value = !selection.length;
 }
 
@@ -243,13 +221,6 @@ function handleDelete(row) {
     getList();
     proxy.$modal.msgSuccess("删除成功");
   }).catch(() => {});
-}
-
-/** 导出按钮操作 */
-function handleExport() {
-  proxy.download('management/agent/export', {
-    ...queryParams.value
-  }, `agent_${new Date().getTime()}.xlsx`)
 }
 
 getList();
