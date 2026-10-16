@@ -30,6 +30,8 @@ public class RuoYiConfig
     /** 验证码类型 */
     private static String captchaType;
 
+    private static String url;
+
     public String getName()
     {
         return name;
@@ -118,5 +120,13 @@ public class RuoYiConfig
     public static String getUploadPath()
     {
         return getProfile() + "/upload";
+    }
+
+    public static String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        RuoYiConfig.url = url;
     }
 }

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="top.aameow.system.mapper.SysFilePlusMapper">
+
+    <resultMap type="top.aameow.system.domain.SysFilePlus" id="SysFilePlusResult">
+        <id     property="fileId"     column="file_id"/>
+        <result property="fileName"   column="file_name"/>
+        <result property="filePath"   column="file_path"/>
+        <result property="fileUrl"    column="file_url"/>
+        <result property="fileHash"   column="file_hash"/>
+        <result property="fileSize"   column="file_size"/>
+        <result property="fileType"   column="file_type"/>
+        <result property="fileExt"    column="file_ext"/>
+        <result property="bizType"    column="biz_type"/>
+        <result property="bizId"      column="biz_id"/>
+        <result property="delFlag"    column="del_flag"/>
+        <result property="createBy"   column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy"   column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark"     column="remark"/>
+    </resultMap>
+
+    <sql id="selectSysFilePlusVo">
+        select file_id, file_name, file_path, file_url, file_hash, file_size,
+               file_type, file_ext, biz_type, biz_id, del_flag,
+               create_by, create_time, update_by, update_time, remark
+        from sys_file
+    </sql>
+
+    <select id="selectById" parameterType="Long" resultMap="SysFilePlusResult">
+        <include refid="selectSysFilePlusVo"/>
+        where file_id = #{fileId} and del_flag = '0'
+    </select>
+
+    <select id="selectByHash" parameterType="String" resultMap="SysFilePlusResult">
+        <include refid="selectSysFilePlusVo"/>
+        where file_hash = #{fileHash} and del_flag = '0'
+        order by file_id asc limit 1
+    </select>
+
+    <select id="countByHash" parameterType="String" resultType="int">
+        select count(*) from sys_file
+        where file_hash = #{fileHash} and del_flag = '0'
+    </select>
+
+    <select id="selectByBiz" resultMap="SysFilePlusResult">
+        <include refid="selectSysFilePlusVo"/>
+        where biz_type = #{bizType} and biz_id = #{bizId} and del_flag = '0'
+        order by create_time desc
+    </select>
+
+    <select id="selectByIds" resultMap="SysFilePlusResult">
+        <include refid="selectSysFilePlusVo"/>
+        where del_flag = '0' and file_id in
+        <foreach collection="fileIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <insert id="insert" parameterType="SysFilePlus" useGeneratedKeys="true" keyProperty="fileId">
+        insert into sys_file
+        (file_name, file_path, file_url, file_hash, file_size, file_type, file_ext,
+         biz_type, biz_id, del_flag, create_by, create_time, remark)
+        values
+        (#{fileName}, #{filePath}, #{fileUrl}, #{fileHash}, #{fileSize}, #{fileType}, #{fileExt},
+         #{bizType}, #{bizId}, '0', #{createBy}, sysdate(), #{remark})
+    </insert>
+
+    <update id="deleteById" parameterType="Long">
+        update sys_file set del_flag = '2', update_time = sysdate()
+        where file_id = #{fileId}
+    </update>
+
+    <update id="updateBizId">
+        update sys_file
+        set biz_type = #{bizType}, biz_id = #{bizId}, update_time = sysdate()
+        where del_flag = '0' and file_id in
+        <foreach collection="fileIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+</mapper>
