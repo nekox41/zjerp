@@ -37,7 +37,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <where>  
             <if test="code != null  and code != ''"> and code = #{code}</if>
             <if test="title != null  and title != ''"> and title like concat('%', #{title}, '%')</if>
-            <if test="file != null  and file != ''"> and file = #{file}</if>
             <if test="printCheck != null  and printCheck != ''"> and print_check = #{printCheck}</if>
             <if test="sendCheck != null  and sendCheck != ''"> and send_check = #{sendCheck}</if>
         </where>
@@ -60,7 +59,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="code != null">code,</if>
             <if test="title != null">title,</if>
-            <if test="file != null">file,</if>
             <if test="printCheck != null">print_check,</if>
             <if test="sendCheck != null">send_check,</if>
             <if test="createBy != null">create_by,</if>
@@ -72,7 +70,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="code != null">#{code},</if>
             <if test="title != null">#{title},</if>
-            <if test="file != null">#{file},</if>
             <if test="printCheck != null">#{printCheck},</if>
             <if test="sendCheck != null">#{sendCheck},</if>
             <if test="createBy != null">#{createBy},</if>
@@ -92,7 +89,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="SET" suffixOverrides=",">
             <if test="code != null">code = #{code},</if>
             <if test="title != null">title = #{title},</if>
-            <if test="file != null">file = #{file},</if>
+            <if test="file != null">file = null,</if>
             <if test="printCheck != null">print_check = #{printCheck},</if>
             <if test="sendCheck != null">send_check = #{sendCheck},</if>
             <if test="createBy != null">create_by = #{createBy},</if>

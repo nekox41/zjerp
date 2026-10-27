@@ -1,0 +1,89 @@
+name: zjerp
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-server}
+      MYSQL_USER: ${MYSQL_USER:-zjerp}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请在 .env 中设置 MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+      BOOTSTRAP_DATABASE: ${BOOTSTRAP_DATABASE:-true}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./sql:/opt/zjerp/sql:ro
+      - ./deploy/mysql/10-init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1
+          -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -Nse 'SELECT 1' > /dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}
+    command: ["sh", "-c", 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ${BACKEND_IMAGE:-zjerp-backend:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_DRUID_MASTER_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-server}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia%2FShanghai
+      SPRING_DATASOURCE_DRUID_MASTER_USERNAME: ${MYSQL_USER:-zjerp}
+      SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_PASSWORD:?请在 .env 中设置 MYSQL_PASSWORD}
+      SPRING_DATASOURCE_DRUID_STATVIEWSERVLET_ENABLED: "false"
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}
+      RUOYI_PROFILE: /app/upload
+      RUOYI_URL: ${PUBLIC_API_URL:-http://localhost:8088/prod-api}
+      TOKEN_SECRET: ${TOKEN_SECRET:?请在 .env 中设置 TOKEN_SECRET}
+      LOGGING_LEVEL_TOP_AAMEOW: info
+    volumes:
+      - upload-data:/app/upload
+      - backend-logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-zjerp-frontend:local}
+    build:
+      context: ${FRONTEND_CONTEXT:-../zjerp_frontend}
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8088}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  redis-data:
+  upload-data:
+  backend-logs:

@@ -48,8 +48,6 @@
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="reportId != null">report_id,</if>
             <if test="reportName != null and reportName != ''">report_name,</if>
-            <if test="reportFile != null and reportFile != ''">report_file,</if>
-            <if test="reportAttach != null and reportAttach != ''">report_attach,</if>
             <if test="reportType != null">report_type,</if>
             <if test="reportIsfinal != null">report_isfinal,</if>
             <if test="reportManager != null">report_manager,</if>
@@ -62,8 +60,6 @@
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="reportId != null">#{reportId},</if>
             <if test="reportName != null and reportName != ''">#{reportName},</if>
-            <if test="reportFile != null and reportFile != ''">#{reportFile},</if>
-            <if test="reportAttach != null and reportAttach != ''">#{reportAttach},</if>
             <if test="reportType != null">#{reportType},</if>
             <if test="reportIsfinal != null">#{reportIsfinal},</if>
             <if test="reportManager != null">#{reportManager},</if>
@@ -80,8 +76,8 @@
         <trim prefix="SET" suffixOverrides=",">
             <if test="reportId != null">report_id = #{reportId},</if>
             <if test="reportName != null and reportName != ''">report_name = #{reportName},</if>
-            <if test="reportFile != null and reportFile != ''">report_file = #{reportFile},</if>
-            <if test="reportAttach != null and reportAttach != ''">report_attach = #{reportAttach},</if>
+            <if test="reportFile != null">report_file = null,</if>
+            <if test="reportAttach != null">report_attach = null,</if>
             <if test="reportType != null">report_type = #{reportType},</if>
             <if test="reportIsfinal != null">report_isfinal = #{reportIsfinal},</if>
             <if test="reportManager != null">report_manager = #{reportManager},</if>

@@ -19,6 +19,9 @@ import top.aameow.management.service.IZjContractService;
 public class ZjContractServiceImpl implements IZjContractService 
 {
     @Autowired
+    private top.aameow.management.service.BusinessFiles businessFiles;
+
+    @Autowired
     private ZjContractMapper zjContractMapper;
 
     /**
@@ -30,7 +33,9 @@ public class ZjContractServiceImpl implements IZjContractService
     @Override
     public ZjContract selectZjContractById(Long id)
     {
-        return zjContractMapper.selectZjContractById(id);
+        ZjContract record = zjContractMapper.selectZjContractById(id);
+        hydrateFiles(record);
+        return record;
     }
 
     /**
@@ -42,7 +47,9 @@ public class ZjContractServiceImpl implements IZjContractService
     @Override
     public List<ZjContract> selectZjContractList(ZjContract zjContract)
     {
-        return zjContractMapper.selectZjContractList(zjContract);
+        List<ZjContract> records = zjContractMapper.selectZjContractList(zjContract);
+        records.forEach(this::hydrateFiles);
+        return records;
     }
 
     /**
@@ -52,9 +59,15 @@ public class ZjContractServiceImpl implements IZjContractService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int insertZjContract(ZjContract zjContract)
     {
-        return zjContractMapper.insertZjContract(zjContract);
+        int rows = zjContractMapper.insertZjContract(zjContract);
+        if (rows > 0)
+        {
+            businessFiles.save("contract", zjContract.getId(), zjContract.getContractFile());
+        }
+        return rows;
     }
 
     /**
@@ -64,9 +77,15 @@ public class ZjContractServiceImpl implements IZjContractService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int updateZjContract(ZjContract zjContract)
     {
-        return zjContractMapper.updateZjContract(zjContract);
+        int rows = zjContractMapper.updateZjContract(zjContract);
+        if (rows > 0)
+        {
+            businessFiles.save("contract", zjContract.getId(), zjContract.getContractFile());
+        }
+        return rows;
     }
 
     /**
@@ -76,9 +95,15 @@ public class ZjContractServiceImpl implements IZjContractService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int deleteZjContractByIds(Long[] ids)
     {
-        return zjContractMapper.deleteZjContractByIds(ids);
+        int rows = zjContractMapper.deleteZjContractByIds(ids);
+        for (Long fileBizId : ids)
+        {
+            businessFiles.save("contract", fileBizId, "");
+        }
+        return rows;
     }
 
     /**
@@ -88,9 +113,15 @@ public class ZjContractServiceImpl implements IZjContractService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int deleteZjContractById(Long id)
     {
-        return zjContractMapper.deleteZjContractById(id);
+        int rows = zjContractMapper.deleteZjContractById(id);
+        for (Long fileBizId : new Long[] { id })
+        {
+            businessFiles.save("contract", fileBizId, "");
+        }
+        return rows;
     }
 
     @Override
@@ -101,5 +132,10 @@ public class ZjContractServiceImpl implements IZjContractService
     @Override
     public WbSummary getWbSummary() {
         return zjContractMapper.getWbSummary();
+    }
+    private void hydrateFiles(ZjContract record)
+    {
+        if (record == null) return;
+        record.setContractFile(businessFiles.read("contract", record.getId(), record.getContractFile()));
     }
 }

@@ -14,7 +14,8 @@ import top.aameow.common.config.RuoYiConfig;
 import top.aameow.common.constant.Constants;
 import top.aameow.common.core.domain.AjaxResult;
 import top.aameow.common.utils.StringUtils;
-import top.aameow.common.utils.file.FileUploadUtils;
+import top.aameow.system.domain.SysFilePlus;
+import top.aameow.system.service.ISysFilePlusService;
 import top.aameow.common.utils.file.FileUtils;
 import top.aameow.framework.config.ServerConfig;
 
@@ -31,6 +32,9 @@ public class CommonController
 
     @Autowired
     private ServerConfig serverConfig;
+
+    @Autowired
+    private ISysFilePlusService fileService;
 
     private static final String FILE_DELIMETER = ",";
 
@@ -74,13 +78,14 @@ public class CommonController
     {
         try
         {
-            // 上传文件路径
-            String filePath = RuoYiConfig.getUploadPath();
             // 上传并返回新文件名称
-            String fileName = FileUploadUtils.upload(filePath, file);
+            SysFilePlus stored = fileService.upload(file, null, null);
+            String fileName = stored.getFileUrl();
             String url = serverConfig.getUrl() + fileName;
             AjaxResult ajax = AjaxResult.success();
             ajax.put("url", url);
+            ajax.put("fileId", stored.getFileId());
+            ajax.put("data", stored);
             ajax.put("fileName", fileName);
             ajax.put("newFileName", FileUtils.getName(fileName));
             ajax.put("originalFilename", file.getOriginalFilename());
@@ -100,8 +105,6 @@ public class CommonController
     {
         try
         {
-            // 上传文件路径
-            String filePath = RuoYiConfig.getUploadPath();
             List<String> urls = new ArrayList<String>();
             List<String> fileNames = new ArrayList<String>();
             List<String> newFileNames = new ArrayList<String>();
@@ -109,7 +112,8 @@ public class CommonController
             for (MultipartFile file : files)
             {
                 // 上传并返回新文件名称
-                String fileName = FileUploadUtils.upload(filePath, file);
+                SysFilePlus stored = fileService.upload(file, null, null);
+                String fileName = stored.getFileUrl();
                 String url = serverConfig.getUrl() + fileName;
                 urls.add(url);
                 fileNames.add(fileName);
@@ -147,7 +151,8 @@ public class CommonController
             // 数据库资源地址
             String downloadPath = localPath + StringUtils.substringAfter(resource, Constants.RESOURCE_PREFIX);
             // 下载名称
-            String downloadName = StringUtils.substringAfterLast(downloadPath, "/");
+            SysFilePlus stored = fileService.getByUrl(resource);
+            String downloadName = stored == null ? StringUtils.substringAfterLast(downloadPath, "/") : stored.getFileName();
             response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
             FileUtils.setAttachmentResponseHeader(response, downloadName);
             FileUtils.writeBytes(downloadPath, response.getOutputStream());
@@ -173,21 +178,7 @@ public class CommonController
                 return AjaxResult.error(StringUtils.format("资源路径({})非法，不允许删除。", resource));
             }
 
-            // 本地资源路径（来自配置）
-            String localPath = RuoYiConfig.getProfile();
-
-            // 数据库资源地址解析：去掉 "/profile" 前缀，获取相对路径
-            String relativePath = StringUtils.substringAfter(resource, Constants.RESOURCE_PREFIX);
-            String filePath = localPath + relativePath;
-
-            // 执行删除操作
-            boolean result = FileUtils.deleteFile(filePath);
-
-            if (result) {
-                return AjaxResult.success("文件删除成功");
-            } else {
-                return AjaxResult.error("文件删除失败，可能文件不存在或已被删除");
-            }
+            return AjaxResult.error("请通过业务表单删除附件，保存后生效");
         }
         catch (Exception e)
         {

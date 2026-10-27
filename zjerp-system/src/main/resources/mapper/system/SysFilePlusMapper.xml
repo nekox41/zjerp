@@ -29,9 +29,31 @@
         from sys_file
     </sql>
 
+    <select id="selectList" resultMap="SysFilePlusResult">
+        <include refid="selectSysFilePlusVo"/>
+        <where>
+            del_flag = '0'
+            <if test="fileName != null and fileName != ''">and file_name like concat('%', #{fileName}, '%')</if>
+            <if test="bizType != null and bizType != ''">and biz_type = #{bizType}</if>
+        </where>
+        order by file_id desc
+    </select>
+
+    <select id="selectByUrls" resultMap="SysFilePlusResult">
+        <include refid="selectSysFilePlusVo"/>
+        where del_flag = '0' and file_url in
+        <foreach collection="urls" item="url" open="(" separator="," close=")">#{url}</foreach>
+        order by file_id desc
+    </select>
+
     <select id="selectById" parameterType="Long" resultMap="SysFilePlusResult">
         <include refid="selectSysFilePlusVo"/>
-        where file_id = #{fileId} and del_flag = '0'
+        where file_id = #{fileId} and del_flag = '0' for update
+    </select>
+
+    <select id="selectByUrl" resultMap="SysFilePlusResult">
+        <include refid="selectSysFilePlusVo"/>
+        where file_url = #{fileUrl} and del_flag = '0' order by file_id desc limit 1 for update
     </select>
 
     <select id="selectByHash" parameterType="String" resultMap="SysFilePlusResult">
@@ -48,7 +70,7 @@
     <select id="selectByBiz" resultMap="SysFilePlusResult">
         <include refid="selectSysFilePlusVo"/>
         where biz_type = #{bizType} and biz_id = #{bizId} and del_flag = '0'
-        order by create_time desc
+        order by file_id asc
     </select>
 
     <select id="selectByIds" resultMap="SysFilePlusResult">

@@ -18,6 +18,9 @@ import top.aameow.management.service.IZjReportService;
 public class ZjReportServiceImpl implements IZjReportService 
 {
     @Autowired
+    private top.aameow.management.service.BusinessFiles businessFiles;
+
+    @Autowired
     private ZjReportMapper zjReportMapper;
 
     /**
@@ -29,7 +32,9 @@ public class ZjReportServiceImpl implements IZjReportService
     @Override
     public ZjReport selectZjReportById(Long id)
     {
-        return zjReportMapper.selectZjReportById(id);
+        ZjReport record = zjReportMapper.selectZjReportById(id);
+        hydrateFiles(record);
+        return record;
     }
 
     /**
@@ -41,7 +46,9 @@ public class ZjReportServiceImpl implements IZjReportService
     @Override
     public List<ZjReport> selectZjReportList(ZjReport zjReport)
     {
-        return zjReportMapper.selectZjReportList(zjReport);
+        List<ZjReport> records = zjReportMapper.selectZjReportList(zjReport);
+        records.forEach(this::hydrateFiles);
+        return records;
     }
 
     /**
@@ -51,9 +58,16 @@ public class ZjReportServiceImpl implements IZjReportService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int insertZjReport(ZjReport zjReport)
     {
-        return zjReportMapper.insertZjReport(zjReport);
+        int rows = zjReportMapper.insertZjReport(zjReport);
+        if (rows > 0)
+        {
+            businessFiles.save("report", zjReport.getId(), zjReport.getReportFile());
+            businessFiles.save("report_attach", zjReport.getId(), zjReport.getReportAttach());
+        }
+        return rows;
     }
 
     /**
@@ -63,9 +77,16 @@ public class ZjReportServiceImpl implements IZjReportService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int updateZjReport(ZjReport zjReport)
     {
-        return zjReportMapper.updateZjReport(zjReport);
+        int rows = zjReportMapper.updateZjReport(zjReport);
+        if (rows > 0)
+        {
+            businessFiles.save("report", zjReport.getId(), zjReport.getReportFile());
+            businessFiles.save("report_attach", zjReport.getId(), zjReport.getReportAttach());
+        }
+        return rows;
     }
 
     /**
@@ -75,9 +96,16 @@ public class ZjReportServiceImpl implements IZjReportService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int deleteZjReportByIds(Long[] ids)
     {
-        return zjReportMapper.deleteZjReportByIds(ids);
+        int rows = zjReportMapper.deleteZjReportByIds(ids);
+        for (Long fileBizId : ids)
+        {
+            businessFiles.save("report", fileBizId, "");
+            businessFiles.save("report_attach", fileBizId, "");
+        }
+        return rows;
     }
 
     /**
@@ -87,8 +115,21 @@ public class ZjReportServiceImpl implements IZjReportService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int deleteZjReportById(Long id)
     {
-        return zjReportMapper.deleteZjReportById(id);
+        int rows = zjReportMapper.deleteZjReportById(id);
+        for (Long fileBizId : new Long[] { id })
+        {
+            businessFiles.save("report", fileBizId, "");
+            businessFiles.save("report_attach", fileBizId, "");
+        }
+        return rows;
+    }
+    private void hydrateFiles(ZjReport record)
+    {
+        if (record == null) return;
+        record.setReportFile(businessFiles.read("report", record.getId(), record.getReportFile()));
+        record.setReportAttach(businessFiles.read("report_attach", record.getId(), record.getReportAttach()));
     }
 }

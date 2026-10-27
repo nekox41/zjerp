@@ -1,143 +1,211 @@
 package top.aameow.system.service.impl;
 
-import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collections;
-import java.util.List;
+import java.nio.file.*;
+import java.util.*;
 import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.io.FilenameUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.util.CollectionUtils;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import top.aameow.common.config.RuoYiConfig;
 import top.aameow.common.exception.ServiceException;
-import top.aameow.common.utils.DateUtils;
 import top.aameow.common.utils.SecurityUtils;
-import top.aameow.common.utils.StringUtils;
+import top.aameow.common.utils.file.FileUploadUtils;
+import top.aameow.common.utils.file.MimeTypeUtils;
 import top.aameow.system.domain.SysFilePlus;
 import top.aameow.system.mapper.SysFilePlusMapper;
 import top.aameow.system.service.ISysFilePlusService;
 
 @Service
-public class SysFilePlusServiceImpl implements ISysFilePlusService {
-
-    private static final Logger log = LoggerFactory.getLogger(SysFilePlusServiceImpl.class);
-
+public class SysFilePlusServiceImpl implements ISysFilePlusService
+{
     @Autowired
-    private SysFilePlusMapper SysFilePlusMapper;
+    private SysFilePlusMapper mapper;
 
     @Override
-    public SysFilePlus upload(MultipartFile file, String bizType, Long bizId) throws Exception {
-        if (file == null || file.isEmpty()) {
-            throw new ServiceException("上传文件不能为空");
+    @Transactional(rollbackFor = Exception.class)
+    public SysFilePlus upload(MultipartFile file, String bizType, Long bizId) throws Exception
+    {
+        if (file == null || file.isEmpty()) throw new ServiceException("上传文件不能为空");
+        String name = file.getOriginalFilename();
+        if (name == null || name.isBlank() || name.length() > 512) throw new ServiceException("文件名不能为空或超过512个字符");
+        FileUploadUtils.assertAllowed(file, MimeTypeUtils.DEFAULT_ALLOWED_EXTENSION);
+        String ext = FileUploadUtils.getExtension(file).toLowerCase(Locale.ROOT);
+        if (!ext.matches("[a-z0-9]{1,16}")) throw new ServiceException("文件扩展名不合法");
+        SysFilePlus record;
+        try (InputStream in = file.getInputStream())
+        {
+            record = store(in, name, ext, file.getContentType());
         }
-        String originalName = file.getOriginalFilename();
-        if (StringUtils.isEmpty(originalName)) {
-            throw new ServiceException("文件名不能为空");
-        }
+        // 上传阶段不接受业务关联；业务保存与关联必须在同一事务中完成。
+        mapper.insert(record);
+        return record;
+    }
 
-        String ext = FilenameUtils.getExtension(originalName);
-        String hash;
-        try (InputStream in = file.getInputStream()) {
-            hash = DigestUtils.sha256Hex(in);
-        } catch (IOException e) {
-            throw new ServiceException("文件哈希计算失败: " + e.getMessage());
-        }
-
-        // 秒传：如果已有相同 hash，直接复用磁盘文件
-        SysFilePlus exist = SysFilePlusMapper.selectByHash(hash);
-        String relativePath;
-        if (exist != null) {
-            relativePath = exist.getFilePath();
-        } else {
-            // 分两级目录: a1/b2/a1b2...hash.ext
-            relativePath = hash.substring(0, 2) + "/" + hash.substring(2, 4)
-                    + "/" + hash + (StringUtils.isEmpty(ext) ? "" : "." + ext);
-            File dest = new File(RuoYiConfig.getProfile(), relativePath);
-            // 创建父目录（如果不存在）
-            File parent = dest.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
+    private SysFilePlus store(InputStream in, String name, String ext, String type) throws Exception
+    {
+        Path directory = Paths.get(RuoYiConfig.getProfile(), "files").toAbsolutePath().normalize();
+        Files.createDirectories(directory);
+        Path temp = Files.createTempFile(directory, "upload-", ".tmp");
+        try
+        {
+            Files.copy(in, temp, StandardCopyOption.REPLACE_EXISTING);
+            String hash;
+            try (InputStream data = Files.newInputStream(temp)) { hash = DigestUtils.sha256Hex(data); }
+            // 每个上传独立 UUID，避免并发去重/删除竞争；原文件名只作为元数据保存。
+            String relative = "files/" + hash.substring(0, 2) + "/" + UUID.randomUUID().toString().replace("-", "") + "." + ext;
+            Path target = resolve(relative);
+            Files.createDirectories(target.getParent());
+            Files.move(temp, target);
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive())
+            {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization()
+                    {
+                        @Override
+                        public void afterCompletion(int status)
+                        {
+                            if (status != STATUS_COMMITTED)
+                            {
+                                try { Files.deleteIfExists(target); }
+                                catch (java.io.IOException e) { org.slf4j.LoggerFactory.getLogger(SysFilePlusServiceImpl.class).warn("回滚文件清理失败: {}", target, e); }
+                            }
+                        }
+                    });
             }
-            try {
-                file.transferTo(dest.getAbsoluteFile());
-            } catch (IOException e) {
-                throw new ServiceException("文件写入失败: " + e.getMessage());
+            SysFilePlus record = new SysFilePlus();
+            record.setFileName(name);
+            record.setFilePath(relative);
+            record.setFileUrl("/profile/" + relative);
+            record.setFileHash(hash);
+            record.setFileSize(Files.size(target));
+            record.setFileExt(ext);
+            record.setFileType(type == null ? "application/octet-stream" : type);
+            record.setDelFlag("0");
+            record.setCreateTime(top.aameow.common.utils.DateUtils.getNowDate());
+            record.setCreateBy(SecurityUtils.getUsername());
+            return record;
+        }
+        finally { Files.deleteIfExists(temp); }
+    }
+
+    private Path resolve(String relative) throws Exception
+    {
+        Path base = Paths.get(RuoYiConfig.getProfile()).toRealPath();
+        Path path = base.resolve(relative).normalize();
+        if (!path.startsWith(base)) throw new ServiceException("文件路径不合法");
+        Path ancestor = path;
+        while (ancestor != null && !Files.exists(ancestor)) ancestor = ancestor.getParent();
+        if (ancestor == null || !ancestor.toRealPath().startsWith(base)) throw new ServiceException("文件路径不合法");
+        return path;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SysFilePlus registerLegacy(String url, String bizType, Long bizId) throws Exception
+    {
+        String resource = url;
+        if (resource.startsWith("http://") || resource.startsWith("https://")) resource = java.net.URI.create(resource).getRawPath();
+        if (!resource.startsWith("/profile/")) throw new ServiceException("仅允许迁移本地/profile/文件");
+        String relative = resource.substring("/profile/".length());
+        Path source = resolve(relative);
+        // 先按原样查找，兼容文件名包含 %、+、# 的历史文件。
+        if (!Files.isRegularFile(source))
+        {
+            relative = java.net.URLDecoder.decode(relative.replace("+", "%2B"), java.nio.charset.StandardCharsets.UTF_8);
+            source = resolve(relative);
+        }
+        if (!Files.isRegularFile(source)) throw new ServiceException("原文件不存在: " + resource);
+        String name = source.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        String ext = dot < 0 ? "bin" : name.substring(dot + 1).toLowerCase(Locale.ROOT);
+        if (!ext.matches("[a-z0-9]{1,16}")) ext = "bin";
+        SysFilePlus record;
+        try (InputStream in = Files.newInputStream(source)) { record = store(in, name, ext, Files.probeContentType(source)); }
+        record.setBizType(bizType);
+        record.setBizId(bizId);
+        mapper.insert(record);
+        return record;
+    }
+
+    @Override
+    public SysFilePlus getById(Long id) { return mapper.selectById(id); }
+
+    @Override
+    public SysFilePlus getByUrl(String url) { return mapper.selectByUrl(url); }
+
+    @Override
+    public List<SysFilePlus> listByBiz(String type, Long id)
+    {
+        return type == null || id == null ? Collections.emptyList() : mapper.selectByBiz(type, id);
+    }
+
+    @Override
+    public List<SysFilePlus> listByIds(List<Long> ids)
+    {
+        return ids == null || ids.isEmpty() ? Collections.emptyList() : mapper.selectByIds(ids);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id)
+    {
+        SysFilePlus record = getById(id);
+        if (record == null) return;
+        if (record.getBizId() != null) throw new ServiceException("请通过业务表单解除文件关联");
+        if (!SecurityUtils.isAdmin(SecurityUtils.getUserId()) && !SecurityUtils.getUsername().equals(record.getCreateBy()))
+            throw new ServiceException("无权删除其他用户的文件");
+        // 保留磁盘文件，清理应在保留期后独立执行，避免破坏历史链接。
+        mapper.deleteById(id);
+    }
+
+    @Override
+    public void bindBiz(List<Long> ids, String type, Long id)
+    {
+        throw new ServiceException("请通过业务保存接口关联文件");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void syncBiz(String urls, String type, Long id) throws Exception
+    {
+        if (urls == null) return; // PATCH 未传附件字段时保持关联
+        if (id == null) throw new ServiceException("业务主键不能为空");
+        List<SysFilePlus> existing = mapper.selectByBiz(type, id);
+        Set<Long> keep = new HashSet<>();
+        for (String url : new LinkedHashSet<>(Arrays.asList(urls.split("[,;]"))))
+        {
+            url = url.trim();
+            if (url.isEmpty()) continue;
+            SysFilePlus record = null;
+            for (SysFilePlus candidate : existing)
+                if (url.equals(candidate.getFileUrl())) { record = candidate; break; }
+            if (record == null)
+            {
+                record = mapper.selectByUrl(url);
+                if (record != null)
+                {
+                    if (record.getBizId() == null && !SecurityUtils.isAdmin(SecurityUtils.getUserId())
+                            && !SecurityUtils.getUsername().equals(record.getCreateBy()))
+                        throw new ServiceException("无权关联其他用户的临时文件");
+                    if (record.getBizId() != null)
+                    {
+                        record.setFileId(null); // 复制元数据，各业务引用单独管理
+                        record.setBizId(null);
+                        mapper.insert(record);
+                    }
+                    mapper.updateBizId(Collections.singletonList(record.getFileId()), type, id);
+                }
+                else
+                {
+                    if (url.startsWith("/profile/files/")) throw new ServiceException("文件不存在或已删除，请重新上传");
+                    record = registerLegacy(url, type, id);
+                }
             }
+            keep.add(record.getFileId());
         }
-
-        // 落库
-        SysFilePlus SysFilePlus = new SysFilePlus();
-        SysFilePlus.setFileName(originalName);
-        SysFilePlus.setFilePath(relativePath);
-        SysFilePlus.setFileUrl(buildUrl(relativePath));
-        SysFilePlus.setFileHash(hash);
-        SysFilePlus.setFileSize(file.getSize());
-        SysFilePlus.setFileType(file.getContentType());
-        SysFilePlus.setFileExt(ext);
-        SysFilePlus.setBizType(bizType);
-        SysFilePlus.setBizId(bizId);
-        SysFilePlus.setDelFlag("0");
-        SysFilePlus.setCreateBy(SecurityUtils.getUsername());
-        SysFilePlus.setCreateTime(DateUtils.getNowDate());
-        SysFilePlusMapper.insert(SysFilePlus);
-
-        return SysFilePlus;
-    }
-
-    @Override
-    public SysFilePlus getById(Long fileId) {
-        return SysFilePlusMapper.selectById(fileId);
-    }
-
-    @Override
-    public List<SysFilePlus> listByBiz(String bizType, Long bizId) {
-        if (StringUtils.isEmpty(bizType) || bizId == null) {
-            return Collections.emptyList();
-        }
-        return SysFilePlusMapper.selectByBiz(bizType, bizId);
-    }
-
-    @Override
-    public List<SysFilePlus> listByIds(List<Long> fileIds) {
-        if (CollectionUtils.isEmpty(fileIds)) {
-            return Collections.emptyList();
-        }
-        return SysFilePlusMapper.selectByIds(fileIds);
-    }
-
-    @Override
-    public void delete(Long fileId) {
-        SysFilePlus SysFilePlus = SysFilePlusMapper.selectById(fileId);
-        if (SysFilePlus == null) {
-            return;
-        }
-        SysFilePlusMapper.deleteById(fileId);
-
-        // 判断是否还有别的记录引用同一物理文件
-        int remain = SysFilePlusMapper.countByHash(SysFilePlus.getFileHash());
-        if (remain == 0) {
-            File f = new File(RuoYiConfig.getProfile(), SysFilePlus.getFilePath());
-            if (f.exists() && !f.delete()) {
-                log.warn("物理文件删除失败: {}", f.getAbsolutePath());
-            }
-        }
-    }
-
-    @Override
-    public void bindBiz(List<Long> fileIds, String bizType, Long bizId) {
-        if (CollectionUtils.isEmpty(fileIds) || StringUtils.isEmpty(bizType) || bizId == null) {
-            return;
-        }
-        SysFilePlusMapper.updateBizId(fileIds, bizType, bizId);
-    }
-
-    private String buildUrl(String relativePath) {
-        // 返回 /profile/xx/yy/hash.pdf，前端会自动补全域名
-        return "/profile/" + relativePath;
+        for (SysFilePlus record : existing)
+            if (!keep.contains(record.getFileId())) mapper.deleteById(record.getFileId());
     }
 }

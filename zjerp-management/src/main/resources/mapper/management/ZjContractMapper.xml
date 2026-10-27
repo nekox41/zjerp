@@ -55,7 +55,6 @@
             <if test="updateBy != null">update_by,</if>
             <if test="updateTime != null">update_time,</if>
             <if test="remark != null">remark,</if>
-            <if test="contractFile != null">contract_file,</if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="contractId != null and contractId != ''">#{contractId},</if>
@@ -70,7 +69,6 @@
             <if test="updateBy != null">#{updateBy},</if>
             <if test="updateTime != null">#{updateTime},</if>
             <if test="remark != null">#{remark},</if>
-            <if test="contractFile != null">#{contractFile},</if>
         </trim>
     </insert>
 
@@ -89,7 +87,7 @@
             <if test="updateBy != null">update_by = #{updateBy},</if>
             <if test="updateTime != null">update_time = #{updateTime},</if>
             <if test="remark != null">remark = #{remark},</if>
-            <if test="contractFile != null">contract_file = #{contractFile},</if>
+            <if test="contractFile != null">contract_file = null,</if>
         </trim>
         where id = #{id}
     </update>

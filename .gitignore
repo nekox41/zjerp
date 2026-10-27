@@ -51,3 +51,13 @@ upload/
 doc/
 bin/
 zjerp-admin.jar
+
+# Local deployment configuration and backups
+.env
+.env.*
+!.env.compose.example
+backups/
+*.dump
+server_full_*.sql
+__pycache__/
+*.pyc

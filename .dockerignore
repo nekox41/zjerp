@@ -1,0 +1,13 @@
+.git
+.github
+**/target
+**/node_modules
+**/__pycache__
+*.log
+logs
+upload
+backups
+*.dump
+server_full_*.sql
+.env*
+ARCHITECTURE.md

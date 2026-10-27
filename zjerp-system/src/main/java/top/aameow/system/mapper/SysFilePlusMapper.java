@@ -6,7 +6,13 @@ import top.aameow.system.domain.SysFilePlus;
 
 public interface SysFilePlusMapper {
 
+    List<SysFilePlus> selectList(SysFilePlus query);
+
+    List<SysFilePlus> selectByUrls(@Param("urls") List<String> urls);
+
     SysFilePlus selectById(Long fileId);
+
+    SysFilePlus selectByUrl(String fileUrl);
 
     SysFilePlus selectByHash(String fileHash);
 

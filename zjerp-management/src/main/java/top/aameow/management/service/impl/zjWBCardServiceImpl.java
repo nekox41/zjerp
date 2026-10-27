@@ -19,6 +19,9 @@ import top.aameow.management.service.IzjWBCardService;
 public class zjWBCardServiceImpl implements IzjWBCardService 
 {
     @Autowired
+    private top.aameow.management.service.BusinessFiles businessFiles;
+
+    @Autowired
     private zjWBCardMapper zjWBCardMapper;
 
     /**
@@ -30,7 +33,9 @@ public class zjWBCardServiceImpl implements IzjWBCardService
     @Override
     public zjWBCard selectzjWBCardById(Long id)
     {
-        return zjWBCardMapper.selectzjWBCardById(id);
+        zjWBCard record = zjWBCardMapper.selectzjWBCardById(id);
+        hydrateFiles(record);
+        return record;
     }
 
     /**
@@ -42,7 +47,9 @@ public class zjWBCardServiceImpl implements IzjWBCardService
     @Override
     public List<zjWBCard> selectzjWBCardList(zjWBCard zjWBCard)
     {
-        return zjWBCardMapper.selectzjWBCardList(zjWBCard);
+        List<zjWBCard> records = zjWBCardMapper.selectzjWBCardList(zjWBCard);
+        records.forEach(this::hydrateFiles);
+        return records;
     }
 
     /**
@@ -52,10 +59,16 @@ public class zjWBCardServiceImpl implements IzjWBCardService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int insertzjWBCard(zjWBCard zjWBCard)
     {
         zjWBCard.setCreateTime(DateUtils.getNowDate());
-        return zjWBCardMapper.insertzjWBCard(zjWBCard);
+        int rows = zjWBCardMapper.insertzjWBCard(zjWBCard);
+        if (rows > 0)
+        {
+            businessFiles.save("wbcard", zjWBCard.getId(), zjWBCard.getFile());
+        }
+        return rows;
     }
 
     /**
@@ -65,10 +78,16 @@ public class zjWBCardServiceImpl implements IzjWBCardService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int updatezjWBCard(zjWBCard zjWBCard)
     {
         zjWBCard.setUpdateTime(DateUtils.getNowDate());
-        return zjWBCardMapper.updatezjWBCard(zjWBCard);
+        int rows = zjWBCardMapper.updatezjWBCard(zjWBCard);
+        if (rows > 0)
+        {
+            businessFiles.save("wbcard", zjWBCard.getId(), zjWBCard.getFile());
+        }
+        return rows;
     }
 
     /**
@@ -78,9 +97,15 @@ public class zjWBCardServiceImpl implements IzjWBCardService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int deletezjWBCardByIds(Long[] ids)
     {
-        return zjWBCardMapper.deletezjWBCardByIds(ids);
+        int rows = zjWBCardMapper.deletezjWBCardByIds(ids);
+        for (Long fileBizId : ids)
+        {
+            businessFiles.save("wbcard", fileBizId, "");
+        }
+        return rows;
     }
 
     /**
@@ -90,9 +115,15 @@ public class zjWBCardServiceImpl implements IzjWBCardService
      * @return 结果
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int deletezjWBCardById(Long id)
     {
-        return zjWBCardMapper.deletezjWBCardById(id);
+        int rows = zjWBCardMapper.deletezjWBCardById(id);
+        for (Long fileBizId : new Long[] { id })
+        {
+            businessFiles.save("wbcard", fileBizId, "");
+        }
+        return rows;
     }
 
     /**
@@ -122,5 +153,10 @@ public class zjWBCardServiceImpl implements IzjWBCardService
     @Override
     public int deleteWBCardPhoneById(Long id) {
         return zjWBCardMapper.deleteWBCardPhoneById(id);
+    }
+    private void hydrateFiles(zjWBCard record)
+    {
+        if (record == null) return;
+        record.setFile(businessFiles.read("wbcard", record.getId(), record.getFile()));
     }
 }

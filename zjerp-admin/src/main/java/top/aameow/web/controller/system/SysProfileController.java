@@ -39,6 +39,9 @@ public class SysProfileController extends BaseController
     @Autowired
     private TokenService tokenService;
 
+    @Autowired
+    private top.aameow.system.service.ISysFilePlusService fileService;
+
     /**
      * 个人信息
      */
@@ -124,7 +127,8 @@ public class SysProfileController extends BaseController
         if (!file.isEmpty())
         {
             LoginUser loginUser = getLoginUser();
-            String avatar = FileUploadUtils.upload(RuoYiConfig.getAvatarPath(), file, MimeTypeUtils.IMAGE_EXTENSION);
+            FileUploadUtils.assertAllowed(file, MimeTypeUtils.IMAGE_EXTENSION);
+            String avatar = fileService.upload(file, null, null).getFileUrl();
             if (userService.updateUserAvatar(loginUser.getUsername(), avatar))
             {
                 AjaxResult ajax = AjaxResult.success();

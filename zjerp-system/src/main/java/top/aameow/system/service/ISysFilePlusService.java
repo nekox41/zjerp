@@ -12,15 +12,22 @@ public interface ISysFilePlusService {
     /** 按 fileId 查询 */
     SysFilePlus getById(Long fileId);
 
+    SysFilePlus getByUrl(String url);
+
     /** 按业务查询 */
     List<SysFilePlus> listByBiz(String bizType, Long bizId);
 
     /** 按 ID 列表批量查询 */
     List<SysFilePlus> listByIds(List<Long> fileIds);
 
-    /** 逻辑删除 + 按 hash 决定是否删物理文件 */
+    /** 仅允许逻辑删除暂存文件；磁盘文件保留 */
     void delete(Long fileId);
 
-    /** 业务保存后回填 biz_id */
+    /** 旧入口仅用于返回兼容性提示；不允许直接绑定 */
     void bindBiz(List<Long> fileIds, String bizType, Long bizId);
+
+    void syncBiz(String urls, String bizType, Long bizId) throws Exception;
+
+    /** 登记已有文件（老接口上传的文件补录到新表） */
+    SysFilePlus registerLegacy(String url, String bizType, Long bizId) throws Exception;
 }
