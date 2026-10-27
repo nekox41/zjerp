@@ -28,7 +28,7 @@
     <!-- 文件列表 -->
     <transition-group class="upload-file-list el-upload-list el-upload-list--text" name="el-fade-in-linear" tag="ul">
       <li :key="file.uid" class="el-upload-list__item ele-upload-list__item-content" v-for="(file, index) in fileList">
-        <el-link :href="`${baseUrl}${file.url}`" :underline="false" target="_blank">
+        <el-link :href="fileUrl(file.url)" :underline="false" target="_blank">
           <span class="el-icon-document"> {{ getFileName(file.name) }} </span>
         </el-link>
         <div class="ele-upload-list__item-content-action">
@@ -40,8 +40,9 @@
 </template>
 
 <script setup>
+import { restoreFileNames, fileUrl } from "@/utils/files";
 import { getToken } from "@/utils/auth";
-import fileDelete from "@/plugins/delete";
+
 
 const props = defineProps({
   modelValue: [String, Object, Array],
@@ -115,11 +116,6 @@ function handleBeforeUpload(file) {
       return false;
     }
   }
-  // 校检文件名是否包含特殊字符
-  if (file.name.includes(',')) {
-    proxy.$modal.msgError('文件名不正确，不能包含英文逗号!');
-    return false;
-  }
   // 校检文件大小
   if (props.fileSize) {
     const isLt = file.size / 1024 / 1024 < props.fileSize;
@@ -140,13 +136,16 @@ function handleExceed() {
 
 // 上传失败
 function handleUploadError(err) {
+  number.value = Math.max(0, number.value - 1);
+  uploadedSuccessfully();
+  proxy.$modal.closeLoading();
   proxy.$modal.msgError("上传文件失败");
 }
 
 // 上传成功回调
 function handleUploadSuccess(res, file) {
   if (res.code === 200) {
-    uploadList.value.push({ name: res.fileName, url: res.fileName });
+    uploadList.value.push({ name: res.originalFilename, url: res.fileName });
     uploadedSuccessfully();
   } else {
     number.value--;
@@ -158,22 +157,8 @@ function handleUploadSuccess(res, file) {
 }
 
 function handleDelete(index) {
-  const file = fileList.value[index];
-  
-  // 弹出确认框
-  proxy.$modal.confirm(`确认要删除文件 "${getFileName(file.name)}" 吗？`).then(() => {
-    
-    // 调用封装好的删除方法
-    return fileDelete.file(file.url);
-    
-  }).then(() => {
-    // 只有在 fileDelete 成功 resolve 后（即 code === 200），才会执行到这里
-    // 清理前端的列表数据
-    fileList.value.splice(index, 1);
-    emit("update:modelValue", listToString(fileList.value));
-  }).catch(() => {
-    // 捕获取消操作或网络异常，封装内部已经处理了报错提示，这里无需额外处理
-  });
+  fileList.value.splice(index, 1);
+  emit("update:modelValue", listToString(fileList.value));
 }
 
 // 上传结束处理

@@ -46,6 +46,7 @@
 </template>
 
 <script setup>
+import { restoreFileNames, fileUrl } from "@/utils/files";
 import { getToken } from "@/utils/auth";
 import { isExternal } from "@/utils/validate";
 
@@ -106,6 +107,7 @@ watch(() => props.modelValue, val => {
     fileList.value = [];
     return [];
   }
+  restoreFileNames(fileList.value).catch(() => {});
 },{ deep: true, immediate: true });
 
 // 上传前loading加载
@@ -128,10 +130,6 @@ function handleBeforeUpload(file) {
     proxy.$modal.msgError(`文件格式不正确，请上传${props.fileType.join("/")}图片格式文件!`);
     return false;
   }
-  if (file.name.includes(',')) {
-    proxy.$modal.msgError('文件名不正确，不能包含英文逗号!');
-    return false;
-  }
   if (props.fileSize) {
     const isLt = file.size / 1024 / 1024 < props.fileSize;
     if (!isLt) {
@@ -151,7 +149,7 @@ function handleExceed() {
 // 上传成功回调
 function handleUploadSuccess(res, file) {
   if (res.code === 200) {
-    uploadList.value.push({ name: res.fileName, url: res.fileName });
+    uploadList.value.push({ name: res.originalFilename, url: res.fileName });
     uploadedSuccessfully();
   } else {
     number.value--;
@@ -164,7 +162,7 @@ function handleUploadSuccess(res, file) {
 
 // 删除图片
 function handleDelete(file) {
-  const findex = fileList.value.map(f => f.name).indexOf(file.name);
+  const findex = fileList.value.map(f => f.url).indexOf(file.url);
   if (findex > -1 && uploadList.value.length === number.value) {
     fileList.value.splice(findex, 1);
     emit("update:modelValue", listToString(fileList.value));
@@ -185,6 +183,8 @@ function uploadedSuccessfully() {
 
 // 上传失败
 function handleUploadError() {
+  number.value = Math.max(0, number.value - 1);
+  uploadedSuccessfully();
   proxy.$modal.msgError("上传图片失败");
   proxy.$modal.closeLoading();
 }

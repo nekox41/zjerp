@@ -1,5 +1,6 @@
 <template>
   <div class="upload-file">
+    <div v-if="disabled" v-for="file in fileList" :key="file.url"><el-link :href="fileUrl(file.url)" target="_blank">{{ file.name }}</el-link></div>
     <el-upload multiple :action="uploadFileUrl" :before-upload="handleBeforeUpload" :file-list="fileList" :limit="limit"
       :on-error="handleUploadError" :on-exceed="handleExceed" :on-success="handleUploadSuccess" drag
       :on-remove="handleDelete" :headers="headers" class="upload-file-uploader" ref="fileUpload" v-if="!disabled">
@@ -17,6 +18,7 @@
 </template>
 
 <script setup>
+import { restoreFileNames, fileUrl } from "@/utils/files";
 import { getToken } from "@/utils/auth";
 
 const props = defineProps({
@@ -77,6 +79,7 @@ watch(() => props.modelValue, val => {
     fileList.value = [];
     return [];
   }
+  restoreFileNames(fileList.value).catch(() => {});
 }, { deep: true, immediate: true });
 
 // 上传前校检格式和大小
@@ -90,11 +93,6 @@ function handleBeforeUpload(file) {
       proxy.$modal.msgError(`文件格式不正确，请上传${props.fileType.join("/")}格式文件!`);
       return false;
     }
-  }
-  // 校检文件名是否包含特殊字符
-  if (file.name.includes(',')) {
-    proxy.$modal.msgError('文件名不正确，不能包含英文逗号!');
-    return false;
   }
   // 校检文件大小
   if (props.fileSize) {
@@ -116,13 +114,16 @@ function handleExceed() {
 
 // 上传失败
 function handleUploadError(err) {
+  number.value = Math.max(0, number.value - 1);
+  uploadedSuccessfully();
+  proxy.$modal.closeLoading();
   proxy.$modal.msgError("上传文件失败");
 }
 
 // 上传成功回调
 function handleUploadSuccess(res, file) {
   if (res.code === 200) {
-    uploadList.value.push({ name: res.fileName, url: res.fileName });
+    uploadList.value.push({ name: res.originalFilename, url: res.fileName });
     uploadedSuccessfully();
   } else {
     number.value--;

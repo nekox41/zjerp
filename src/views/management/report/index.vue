@@ -108,7 +108,7 @@
     <!-- 下载展示 -->
     <el-dialog :title="currentRow.title" :append-to-body="true" v-model="downloadActivate"
       :close-on-click-modal="false">
-      <el-table ref="myTable" :data="formatData(currentRow)" @selection-change="handleFileSelectionChange">
+      <el-table ref="myTable" :data="downloadFiles" @selection-change="handleFileSelectionChange">
         <el-table-column type="selection" width="55" align="center" />
         <el-table-column label="文件名" align="center" prop="filename" />
         <el-table-column label="操作" align="center">
@@ -220,6 +220,7 @@ const title = ref("");
 const downloadActivate = ref(false);
 const myTable = ref(null);
 const currentRow = ref({});
+const downloadFiles = ref([]);
 const batchAddActivate = ref(false);
 
 const data = reactive({
@@ -253,6 +254,9 @@ const { queryParams, form, rules } = toRefs(data);
 
 function handleDownload(row) {
   currentRow.value = row; // 设置当前行数据
+  downloadFiles.value = formatData(row).map(file => ({ ...file, name: file.filename }));
+  const files = downloadFiles.value;
+  restoreFileNames(files).then(() => files.forEach(file => { file.filename = file.name })).catch(() => {});
   downloadActivate.value = true; // 打开对话框
 }
 

@@ -3,7 +3,7 @@
         <div v-if="fileList.length">
             <ul>
                 <li v-for="(file, index) in fileList" :key="index">
-                    <el-link :href="`${baseUrl}${file.url}`" :underline="true" target="_blank">
+                    <el-link :href="fileUrl(file.url)" :underline="true" target="_blank">
                         <span class="el-icon-document"> {{ file.name }} </span>
                     </el-link>
                 </li>
@@ -16,7 +16,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, watch, ref } from 'vue';
+import { restoreFileNames, fileUrl } from '@/utils/files';
 
 const baseUrl = import.meta.env.VITE_APP_BASE_API;
 
@@ -37,16 +38,18 @@ const handleClose = () => {
     emit("update:visible", false);
 }
 
-const fileList = computed(() => {
+const fileList = ref([]);
+watch(() => props.contractFile, () => {
     let temp = 1;
-    const list = Array.isArray(props.contractFile) ? props.contractFile : props.contractFile.split(',');
-    return list.map(item => {
+    const list = Array.isArray(props.contractFile) ? props.contractFile : (props.contractFile || '').split(/[,;]/);
+    fileList.value = list.filter(Boolean).map(item => {
         if (typeof item === "string") {
             item = { name: item.split('/').at(-1), url: item };
         }
         item.uid = item.uid || new Date().getTime() + temp++;
         return item;
     })
-})
+    restoreFileNames(fileList.value).catch(() => {});
+}, { immediate: true })
 
 </script>

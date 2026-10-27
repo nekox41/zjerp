@@ -22,7 +22,7 @@
     <!-- 文件列表 -->
     <transition-group class="upload-file-list el-upload-list el-upload-list--text" name="el-fade-in-linear" tag="ul">
       <li :key="file.uid" class="el-upload-list__item ele-upload-list__item-content" v-for="(file, index) in fileList">
-        <el-link :href="`${baseUrl}${file.url}`" :underline="false" target="_blank">
+        <el-link :href="fileUrl(file.url)" :underline="false" target="_blank">
           <span class="el-icon-document"> {{ getFileName(file.name) }} </span>
         </el-link>
         <div class="ele-upload-list__item-content-action">
@@ -34,8 +34,9 @@
 </template>
 
 <script setup>
+import { restoreFileNames, fileUrl } from "@/utils/files";
 import { getToken } from "@/utils/auth";
-import { delReportFile } from "../../../../api/management/report";
+
 
 const props = defineProps({
   modelValue: [String, Object, Array],
@@ -101,12 +102,13 @@ watch(() => props.modelValue, val => {
     fileList.value = [];
     return [];
   }
+  restoreFileNames(fileList.value).catch(() => {});
 }, { deep: true, immediate: true });
 
 // 上传前校检格式和大小
 function handleBeforeUpload(file) {
   // 校检文件类型
-  if (props.fileType.length) {
+  if (props.fileType?.length) {
     const fileName = file.name.split('.');
     const fileExt = fileName[fileName.length - 1];
     const isTypeOk = props.fileType.indexOf(fileExt) >= 0;
@@ -114,11 +116,6 @@ function handleBeforeUpload(file) {
       proxy.$modal.msgError(`文件格式不正确，请上传${props.fileType.join("/")}格式文件!`);
       return false;
     }
-  }
-  // 校检文件名是否包含特殊字符
-  if (file.name.includes(',')) {
-    proxy.$modal.msgError('文件名不正确，不能包含英文逗号!');
-    return false;
   }
   // 校检文件大小
   if (props.fileSize) {
@@ -141,6 +138,9 @@ function handleExceed() {
 
 // 上传失败
 function handleUploadError(err) {
+  number.value = Math.max(0, number.value - 1);
+  uploadedSuccessfully();
+  proxy.$modal.closeLoading();
   proxy.$modal.msgError("上传文件失败");
 }
 
@@ -148,19 +148,15 @@ function handleUploadError(err) {
 function handleUploadSuccess(res, file) {
   if (res.code === 200) {
     if (props.isReportFile) {
-      // 先删除 fileList 中原本的 file
-      fileList.value.forEach(item => {
-        delReportFile({resource: item.url})
-      })
       fileList.value = []
     }
-    uploadList.value.push({ name: res.fileName, url: res.fileName });
+    uploadList.value.push({ name: res.originalFilename, url: res.fileName });
     uploadedSuccessfully();
   } else {
     number.value--;
     proxy.$modal.closeLoading();
     proxy.$modal.msgError(res.msg);
-    proxy.$refs.fileUpload.handleRemove(file);
+    uploadRef.value?.handleRemove(file);
     uploadedSuccessfully();
   }
 }
