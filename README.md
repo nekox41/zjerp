@@ -49,6 +49,8 @@ java -jar zjerp-admin/target/zjerp-admin.jar --spring.profiles.active=dev
 
 ## 模块
 
+下表为现有 Maven 工程模块。后续业务开发拆分为 13 个逻辑模块，功能、依赖和验收清单见 [业务模块实施计划](MODULE_PLAN.md)。
+
 | 模块 | 用途 |
 | --- | --- |
 | zjerp-admin | 应用入口、系统和通用接口 |
@@ -59,6 +61,9 @@ java -jar zjerp-admin/target/zjerp-admin.jar --spring.profiles.active=dev
 | zjerp-common / zjerp-quartz | 公共工具与任务调度 |
 
 ## 文档
+
+- [业务模块实施计划](MODULE_PLAN.md)
+- [系统设计方案](SYSTEM_DESIGN.md)
 
 - [Docker 与 Compose 部署](DEPLOYMENT.md)
 - [文件系统迁移步骤](FILE_MIGRATION.md)
