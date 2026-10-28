@@ -80,13 +80,13 @@
               <el-tag size="small" effect="plain">共 {{ userStat.total }} 人</el-tag>
             </div>
           </template>
-          <div v-if="userStat.posts.length" class="post-grid">
-            <div v-for="p in userStat.posts" :key="p.postId" class="post-item">
-              <div class="post-count">{{ p.userCount }}</div>
-              <div class="post-name">{{ p.postName }}</div>
+          <div v-if="userStat.roles.length" class="role-grid">
+            <div v-for="p in userStat.roles" :key="p.roleId" class="role-item">
+              <div class="role-count">{{ p.userCount }}</div>
+              <div class="role-name">{{ p.roleName }}</div>
             </div>
           </div>
-          <el-empty v-else description="暂无岗位数据" :image-size="60" />
+          <el-empty v-else description="暂无角色数据" :image-size="60" />
         </el-card>
       </el-col>
 
@@ -171,15 +171,15 @@ const loadNotices = async () => {
 }
 
 /* ---------------- 员工统计（接入自定义接口） ---------------- */
-const userStat = ref({ total: 0, posts: [] })
+const userStat = ref({ total: 0, roles: [] })
 
 const loadUserStat = async () => {
   try {
     const res = await getUserStat()
-    userStat.value = res.data || { total: 0, posts: [] }
+    userStat.value = res.data || { total: 0, roles: [] }
   } catch (e) {
     // 静默失败，不干扰首页展示
-    userStat.value = { total: 0, posts: [] }
+    userStat.value = { total: 0, roles: [] }
   }
 }
 
@@ -351,14 +351,14 @@ onMounted(() => {
 }
 
 /* 员工统计 */
-.post-grid {
+.role-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 12px;
   padding: 4px 0;
 }
 
-.post-item {
+.role-item {
   padding: 16px 8px;
   text-align: center;
   border-radius: 8px;
@@ -366,18 +366,18 @@ onMounted(() => {
   transition: background-color 0.2s;
 }
 
-.post-item:hover {
+.role-item:hover {
   background-color: #ecf5ff;
 }
 
-.post-count {
+.role-count {
   font-size: 22px;
   font-weight: 600;
   color: #409eff;
   line-height: 1.2;
 }
 
-.post-name {
+.role-name {
   margin-top: 6px;
   font-size: 13px;
   color: #606266;
