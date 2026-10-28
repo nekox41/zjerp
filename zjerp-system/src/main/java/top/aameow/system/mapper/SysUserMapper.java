@@ -133,8 +133,8 @@ public interface SysUserMapper
     public Long countActiveUsers();
 
     /**
-     * 查询各个岗位人数
+     * 查询各个角色人数
      * @return 结果
      */
-    public List<Map<String, Object>> countUsersByPost();
+    public List<Map<String, Object>> countUsersByRole();
 }

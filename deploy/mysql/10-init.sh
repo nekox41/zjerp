@@ -8,7 +8,7 @@ if [ "${BOOTSTRAP_DATABASE:-true}" != "true" ]; then
 fi
 
 export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"
-for script in ry_20250417.sql quartz.sql business_schema.sql sys_file.sql; do
+for script in ry_20250417.sql quartz.sql business_schema.sql sys_file.sql zhongji_contract_upgrade.sql zhongji_contract_menus.sql; do
     echo "Initializing $script"
     mysql --default-character-set=utf8mb4 -uroot "$MYSQL_DATABASE" < "/opt/zjerp/sql/$script"
 done

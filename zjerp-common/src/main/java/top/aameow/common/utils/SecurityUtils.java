@@ -36,20 +36,7 @@ public class SecurityUtils
         }
     }
 
-    /**
-     * 获取部门ID
-     **/
-    public static Long getDeptId()
-    {
-        try
-        {
-            return getLoginUser().getDeptId();
-        }
-        catch (Exception e)
-        {
-            throw new ServiceException("获取部门ID异常", HttpStatus.UNAUTHORIZED);
-        }
-    }
+    
 
     /**
      * 获取用户账户
@@ -117,12 +104,11 @@ public class SecurityUtils
     /**
      * 是否为管理员
      * 
-     * @param userId 用户ID
      * @return 结果
      */
-    public static boolean isAdmin(Long userId)
+    public static boolean isAdmin()
     {
-        return userId != null && 1L == userId;
+        return getLoginUser().getUser().isAdmin();
     }
 
     /**
@@ -158,7 +144,7 @@ public class SecurityUtils
     public static boolean hasRole(String role)
     {
         List<SysRole> roleList = getLoginUser().getUser().getRoles();
-        Collection<String> roles = roleList.stream().map(SysRole::getRoleKey).collect(Collectors.toSet());
+        Collection<String> roles = roleList.stream().filter(item -> "0".equals(item.getStatus()) && "0".equals(item.getDelFlag())).map(SysRole::getRoleKey).collect(Collectors.toSet());
         return hasRole(roles, role);
     }
 

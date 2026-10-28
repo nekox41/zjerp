@@ -4,10 +4,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import top.aameow.common.constant.UserConstants;
-import top.aameow.common.core.domain.entity.SysDept;
 import top.aameow.common.core.domain.entity.SysMenu;
-import top.aameow.common.utils.StringUtils;
 
 /**
  * Treeselect树结构实体类
@@ -36,13 +33,6 @@ public class TreeSelect implements Serializable
 
     }
 
-    public TreeSelect(SysDept dept)
-    {
-        this.id = dept.getDeptId();
-        this.label = dept.getDeptName();
-        this.disabled = StringUtils.equals(UserConstants.DEPT_DISABLE, dept.getStatus());
-        this.children = dept.getChildren().stream().map(TreeSelect::new).collect(Collectors.toList());
-    }
 
     public TreeSelect(SysMenu menu)
     {

@@ -104,7 +104,7 @@ docker compose run --rm --no-deps --user root --entrypoint sh backend -c 'tar -x
 ```bash
 docker compose ps
 curl -fsS http://localhost:8088/
-curl -fsS http://localhost:8088/prod-api/captchaImage
+curl -fsS http://localhost:8088/prod-api/health
 docker compose logs --tail=100 backend frontend
 ```
 

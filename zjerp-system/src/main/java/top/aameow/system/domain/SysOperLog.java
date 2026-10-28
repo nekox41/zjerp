@@ -46,9 +46,7 @@ public class SysOperLog extends BaseEntity
     @Excel(name = "操作人员")
     private String operName;
 
-    /** 部门名称 */
-    @Excel(name = "部门名称")
-    private String deptName;
+    
 
     /** 请求url */
     @Excel(name = "请求地址")
@@ -167,15 +165,6 @@ public class SysOperLog extends BaseEntity
         this.operName = operName;
     }
 
-    public String getDeptName()
-    {
-        return deptName;
-    }
-
-    public void setDeptName(String deptName)
-    {
-        this.deptName = deptName;
-    }
 
     public String getOperUrl()
     {

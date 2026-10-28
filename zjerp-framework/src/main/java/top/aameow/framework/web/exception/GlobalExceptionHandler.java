@@ -29,6 +29,13 @@ public class GlobalExceptionHandler
 {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NOT_FOUND)
+    public AjaxResult handleMissingResource(org.springframework.web.servlet.resource.NoResourceFoundException e)
+    {
+        return AjaxResult.error(HttpStatus.NOT_FOUND, "请求地址不存在");
+    }
+
     /**
      * 权限校验异常
      */
@@ -44,12 +51,13 @@ public class GlobalExceptionHandler
      * 请求方式不支持
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED)
     public AjaxResult handleHttpRequestMethodNotSupported(HttpRequestMethodNotSupportedException e,
             HttpServletRequest request)
     {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',不支持'{}'请求", requestURI, e.getMethod());
-        return AjaxResult.error(e.getMessage());
+        return AjaxResult.error(org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED.value(), e.getMessage());
     }
 
     /**

@@ -40,8 +40,7 @@ public class ZjContractController extends BaseController
     /**
      * 查询合同管理列表
      */
-//    @PreAuthorize("@ss.hasPermi('management:contract:list')")
-    @Anonymous
+    @PreAuthorize("@ss.hasPermi('management:contract:list')")
     @GetMapping("/list")
     public TableDataInfo list(ZjContract zjContract)
     {
@@ -115,7 +114,7 @@ public class ZjContractController extends BaseController
     /**
      * 查询某个类型的合同的数量
      */
-    @Anonymous
+    @PreAuthorize("@ss.hasPermi('management:contract:list')")
     @GetMapping("/count/{contractType}")
     public AjaxResult countByContractType(@PathVariable String contractType)
     {

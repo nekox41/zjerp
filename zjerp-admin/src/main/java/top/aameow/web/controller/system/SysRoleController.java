@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 import top.aameow.common.annotation.Log;
 import top.aameow.common.core.controller.BaseController;
 import top.aameow.common.core.domain.AjaxResult;
-import top.aameow.common.core.domain.entity.SysDept;
 import top.aameow.common.core.domain.entity.SysRole;
 import top.aameow.common.core.domain.entity.SysUser;
 import top.aameow.common.core.domain.model.LoginUser;
@@ -27,7 +26,6 @@ import top.aameow.common.utils.poi.ExcelUtil;
 import top.aameow.framework.web.service.SysPermissionService;
 import top.aameow.framework.web.service.TokenService;
 import top.aameow.system.domain.SysUserRole;
-import top.aameow.system.service.ISysDeptService;
 import top.aameow.system.service.ISysRoleService;
 import top.aameow.system.service.ISysUserService;
 
@@ -52,10 +50,7 @@ public class SysRoleController extends BaseController
     @Autowired
     private ISysUserService userService;
 
-    @Autowired
-    private ISysDeptService deptService;
-
-    @PreAuthorize("@ss.hasPermi('system:role:list')")
+@PreAuthorize("@ss.hasPermi('system:role:list')")
     @GetMapping("/list")
     public TableDataInfo list(SysRole role)
     {
@@ -81,7 +76,6 @@ public class SysRoleController extends BaseController
     @GetMapping(value = "/{roleId}")
     public AjaxResult getInfo(@PathVariable Long roleId)
     {
-        roleService.checkRoleDataScope(roleId);
         return success(roleService.selectRoleById(roleId));
     }
 
@@ -115,7 +109,6 @@ public class SysRoleController extends BaseController
     public AjaxResult edit(@Validated @RequestBody SysRole role)
     {
         roleService.checkRoleAllowed(role);
-        roleService.checkRoleDataScope(role.getRoleId());
         if (!roleService.checkRoleNameUnique(role))
         {
             return error("修改角色'" + role.getRoleName() + "'失败，角色名称已存在");
@@ -141,18 +134,7 @@ public class SysRoleController extends BaseController
         return error("修改角色'" + role.getRoleName() + "'失败，请联系管理员");
     }
 
-    /**
-     * 修改保存数据权限
-     */
-    @PreAuthorize("@ss.hasPermi('system:role:edit')")
-    @Log(title = "角色管理", businessType = BusinessType.UPDATE)
-    @PutMapping("/dataScope")
-    public AjaxResult dataScope(@RequestBody SysRole role)
-    {
-        roleService.checkRoleAllowed(role);
-        roleService.checkRoleDataScope(role.getRoleId());
-        return toAjax(roleService.authDataScope(role));
-    }
+    
 
     /**
      * 状态修改
@@ -163,7 +145,6 @@ public class SysRoleController extends BaseController
     public AjaxResult changeStatus(@RequestBody SysRole role)
     {
         roleService.checkRoleAllowed(role);
-        roleService.checkRoleDataScope(role.getRoleId());
         role.setUpdateBy(getUsername());
         return toAjax(roleService.updateRoleStatus(role));
     }
@@ -243,20 +224,8 @@ public class SysRoleController extends BaseController
     @PutMapping("/authUser/selectAll")
     public AjaxResult selectAuthUserAll(Long roleId, Long[] userIds)
     {
-        roleService.checkRoleDataScope(roleId);
         return toAjax(roleService.insertAuthUsers(roleId, userIds));
     }
 
-    /**
-     * 获取对应角色部门树列表
-     */
-    @PreAuthorize("@ss.hasPermi('system:role:query')")
-    @GetMapping(value = "/deptTree/{roleId}")
-    public AjaxResult deptTree(@PathVariable("roleId") Long roleId)
-    {
-        AjaxResult ajax = AjaxResult.success();
-        ajax.put("checkedKeys", deptService.selectDeptListByRoleId(roleId));
-        ajax.put("depts", deptService.selectDeptTreeList(new SysDept()));
-        return ajax;
-    }
+    
 }

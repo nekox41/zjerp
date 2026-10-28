@@ -10,8 +10,6 @@ ruoyi:
   profile: ./upload
   # 获取ip地址开关
   addressEnabled: false
-  # 验证码类型 math 数字计算 char 字符验证
-  captchaType: math
   url: http://localhost:8080
   
 # 开发环境配置
@@ -72,7 +70,7 @@ token:
   # 令牌自定义标识
   header: Authorization
   # 令牌密钥
-  secret: abcdefghijklmnopqraabbxyz
+  secret: ${TOKEN_SECRET}
   # 令牌有效期（默认30分钟）
   expireTime: 1440
 
@@ -117,8 +115,8 @@ xss:
 # 文件备份相关配置
 alist:
   api-url: "http://host.docker.internal:5244"
-  username: "admin"
-  password: "AFzFXBFL"
+  username: ${ALIST_USERNAME:}
+  password: ${ALIST_PASSWORD:}
   backup-path: "/ecloud"
 
 upload:

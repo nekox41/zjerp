@@ -33,6 +33,8 @@ import top.aameow.system.service.ISysMenuService;
 @Service
 public class SysMenuServiceImpl implements ISysMenuService
 {
+    @Autowired
+    private top.aameow.system.mapper.SysUserMapper userMapper;
     public static final String PREMISSION_STRING = "perms[\"{0}\"]";
 
     @Autowired
@@ -67,7 +69,7 @@ public class SysMenuServiceImpl implements ISysMenuService
     {
         List<SysMenu> menuList = null;
         // 管理员显示所有菜单信息
-        if (SysUser.isAdmin(userId))
+        if (userMapper.selectUserById(userId).isAdmin())
         {
             menuList = menuMapper.selectMenuList(menu);
         }
@@ -131,7 +133,7 @@ public class SysMenuServiceImpl implements ISysMenuService
     public List<SysMenu> selectMenuTreeByUserId(Long userId)
     {
         List<SysMenu> menus = null;
-        if (SecurityUtils.isAdmin(userId))
+        if (userMapper.selectUserById(userId).isAdmin())
         {
             menus = menuMapper.selectMenuTreeAll();
         }

@@ -62,6 +62,8 @@ public class ZjContractServiceImpl implements IZjContractService
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int insertZjContract(ZjContract zjContract)
     {
+        validate(zjContract, false);
+        zjContractMapper.allocateId(zjContract);
         int rows = zjContractMapper.insertZjContract(zjContract);
         if (rows > 0)
         {
@@ -80,6 +82,7 @@ public class ZjContractServiceImpl implements IZjContractService
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int updateZjContract(ZjContract zjContract)
     {
+        validate(zjContract, true);
         int rows = zjContractMapper.updateZjContract(zjContract);
         if (rows > 0)
         {
@@ -132,6 +135,46 @@ public class ZjContractServiceImpl implements IZjContractService
     @Override
     public WbSummary getWbSummary() {
         return zjContractMapper.getWbSummary();
+    }
+    @Autowired private top.aameow.management.mapper.IntermediaryMapper intermediaryMapper;
+    private void validate(ZjContract c, boolean editing) {
+        if(editing) {
+            ZjContract old=zjContractMapper.selectZjContractById(c.getId());
+            if(old==null) throw new top.aameow.common.exception.ServiceException("合同不存在");
+            if(c.getContractType()!=null && !c.getContractType().equals(old.getContractType())) throw new top.aameow.common.exception.ServiceException("不能直接修改合同所属模块");
+            c.setContractType(old.getContractType());
+        }
+        if(c.getStorageTable().isEmpty()) throw new top.aameow.common.exception.ServiceException("不支持的合同类型");
+        if(c.getAmount()!=null && c.getAmount().stripTrailingZeros().scale()>2) {
+            ZjContract previous=editing?zjContractMapper.selectZjContractById(c.getId()):null;
+            if(previous==null || previous.getAmount()==null || previous.getAmount().compareTo(c.getAmount())!=0) throw new top.aameow.common.exception.ServiceException("金额最多两位小数");
+        }
+        if(c.getManager()!=null && c.getManager().length()>255 || c.getRemark()!=null && c.getRemark().length()>5000) throw new top.aameow.common.exception.ServiceException("文本超出长度限制");
+        if(c.getContractName()==null || c.getContractName().isBlank() || c.getContractName().length()>255) throw new top.aameow.common.exception.ServiceException("请填写合同名称，最多255字符");
+        if(c.getContractId()==null || c.getContractId().isBlank() || c.getContractId().length()>255) throw new top.aameow.common.exception.ServiceException("请填写合同编号，最多255字符");
+        if(c.getAmount()!=null && (c.getAmount().signum()<0 || c.getAmount().precision()-c.getAmount().scale()>13)) throw new top.aameow.common.exception.ServiceException("合同金额超出范围");
+        if(c.getStartTime()!=null && c.getEndTime()!=null && c.getEndTime().before(c.getStartTime())) throw new top.aameow.common.exception.ServiceException("结束日期不能早于开始日期");
+        if(c.getOwnership()==null) c.setOwnership("pending");
+        if(!java.util.Arrays.asList("pending","company","intermediary").contains(c.getOwnership())) throw new top.aameow.common.exception.ServiceException("合同归属无效");
+        if("intermediary".equals(c.getOwnership())) {
+            if(c.getIntermediaryId()==null || intermediaryMapper.get(c.getIntermediaryId())==null) throw new top.aameow.common.exception.ServiceException("请选择中间人");
+        } else c.setIntermediaryId(null);
+        if(c.getPaymentPlan()!=null) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode plan=new com.fasterxml.jackson.databind.ObjectMapper().readTree(c.getPaymentPlan());
+                if(!plan.isArray() || plan.size()>100) throw new IllegalArgumentException();
+                java.math.BigDecimal total=java.math.BigDecimal.ZERO;
+                for(com.fasterxml.jackson.databind.JsonNode item:plan) {
+                    if(!item.hasNonNull("name") || item.get("name").asText().isBlank() || item.get("name").asText().length()>100 || !item.hasNonNull("amount")) throw new IllegalArgumentException();
+                    java.math.BigDecimal amount=new java.math.BigDecimal(item.get("amount").asText());
+                    if(amount.signum()<0 || amount.scale()>2) throw new IllegalArgumentException();
+                    total=total.add(amount);
+                    if(item.hasNonNull("dueDate") && !item.get("dueDate").asText().isBlank()) java.time.LocalDate.parse(item.get("dueDate").asText());
+                }
+                if(c.getAmount()!=null && total.compareTo(c.getAmount())>0) throw new IllegalArgumentException();
+            } catch(Exception e) { throw new top.aameow.common.exception.ServiceException("付款计划格式无效，金额须非负且合计不得超过合同金额"); }
+        }
+        if(!editing) c.setClassificationPending(false);
     }
     private void hydrateFiles(ZjContract record)
     {

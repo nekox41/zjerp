@@ -184,13 +184,7 @@ public class BaseController
         return getLoginUser().getUserId();
     }
 
-    /**
-     * 获取登录部门id
-     */
-    public Long getDeptId()
-    {
-        return getLoginUser().getDeptId();
-    }
+    
 
     /**
      * 获取登录用户名

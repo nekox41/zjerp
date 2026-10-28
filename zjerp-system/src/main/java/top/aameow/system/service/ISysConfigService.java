@@ -26,12 +26,7 @@ public interface ISysConfigService
      */
     public String selectConfigByKey(String configKey);
 
-    /**
-     * 获取验证码开关
-     * 
-     * @return true开启，false关闭
-     */
-    public boolean selectCaptchaEnabled();
+    
 
     /**
      * 查询参数配置列表

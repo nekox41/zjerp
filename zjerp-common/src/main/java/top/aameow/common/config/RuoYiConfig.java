@@ -27,8 +27,7 @@ public class RuoYiConfig
     /** 获取地址开关 */
     private static boolean addressEnabled;
 
-    /** 验证码类型 */
-    private static String captchaType;
+    
 
     private static String url;
 
@@ -82,13 +81,6 @@ public class RuoYiConfig
         RuoYiConfig.addressEnabled = addressEnabled;
     }
 
-    public static String getCaptchaType() {
-        return captchaType;
-    }
-
-    public void setCaptchaType(String captchaType) {
-        RuoYiConfig.captchaType = captchaType;
-    }
 
     /**
      * 获取导入上传路径

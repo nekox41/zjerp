@@ -2,14 +2,10 @@ package top.aameow.framework.web.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import top.aameow.common.constant.CacheConstants;
 import top.aameow.common.constant.Constants;
 import top.aameow.common.constant.UserConstants;
 import top.aameow.common.core.domain.entity.SysUser;
 import top.aameow.common.core.domain.model.RegisterBody;
-import top.aameow.common.core.redis.RedisCache;
-import top.aameow.common.exception.user.CaptchaException;
-import top.aameow.common.exception.user.CaptchaExpireException;
 import top.aameow.common.utils.MessageUtils;
 import top.aameow.common.utils.SecurityUtils;
 import top.aameow.common.utils.StringUtils;
@@ -29,13 +25,7 @@ public class SysRegisterService
     @Autowired
     private ISysUserService userService;
 
-    @Autowired
-    private ISysConfigService configService;
-
-    @Autowired
-    private RedisCache redisCache;
-
-    /**
+/**
      * 注册
      */
     public String register(RegisterBody registerBody)
@@ -43,13 +33,6 @@ public class SysRegisterService
         String msg = "", username = registerBody.getUsername(), password = registerBody.getPassword();
         SysUser sysUser = new SysUser();
         sysUser.setUserName(username);
-
-        // 验证码开关
-        boolean captchaEnabled = configService.selectCaptchaEnabled();
-        if (captchaEnabled)
-        {
-            validateCaptcha(username, registerBody.getCode(), registerBody.getUuid());
-        }
 
         if (StringUtils.isEmpty(username))
         {
@@ -90,26 +73,5 @@ public class SysRegisterService
         return msg;
     }
 
-    /**
-     * 校验验证码
-     * 
-     * @param username 用户名
-     * @param code 验证码
-     * @param uuid 唯一标识
-     * @return 结果
-     */
-    public void validateCaptcha(String username, String code, String uuid)
-    {
-        String verifyKey = CacheConstants.CAPTCHA_CODE_KEY + StringUtils.nvl(uuid, "");
-        String captcha = redisCache.getCacheObject(verifyKey);
-        redisCache.deleteObject(verifyKey);
-        if (captcha == null)
-        {
-            throw new CaptchaExpireException();
-        }
-        if (!code.equalsIgnoreCase(captcha))
-        {
-            throw new CaptchaException();
-        }
-    }
+    
 }

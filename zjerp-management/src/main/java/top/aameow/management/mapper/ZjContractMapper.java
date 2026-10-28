@@ -13,6 +13,9 @@ import top.aameow.management.domain.ZjContract;
  */
 public interface ZjContractMapper 
 {
+    @org.apache.ibatis.annotations.Insert("insert into zj_contract_identity(contract_type) values(#{contractType})")
+    @org.apache.ibatis.annotations.Options(useGeneratedKeys=true,keyProperty="id")
+    int allocateId(ZjContract record);
     /**
      * 查询合同管理
      * 

@@ -22,7 +22,7 @@ public class SysDashboardController extends BaseController {
     public AjaxResult userStat() {
         Map<String, Object> data = new HashMap<>();
         data.put("total", userMapper.countActiveUsers());
-        data.put("posts", userMapper.countUsersByPost());
+        data.put("roles", userMapper.countUsersByRole());
         return AjaxResult.success(data);
     }
 }

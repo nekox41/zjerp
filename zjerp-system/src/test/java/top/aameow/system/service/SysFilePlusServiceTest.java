@@ -39,7 +39,7 @@ public class SysFilePlusServiceTest
     {
         new RuoYiConfig().setProfile(directory.toString());
         SysUser user = new SysUser(); user.setUserName("tester");
-        LoginUser login = new LoginUser(2L, 1L, user, Collections.emptySet());
+        LoginUser login = new LoginUser(2L, user, Collections.emptySet());
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(login, null));
         List<String> calls = new ArrayList<>();
         List<SysFilePlus> existing = new ArrayList<>();

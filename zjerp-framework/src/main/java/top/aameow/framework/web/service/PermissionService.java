@@ -8,7 +8,6 @@ import top.aameow.common.core.domain.entity.SysRole;
 import top.aameow.common.core.domain.model.LoginUser;
 import top.aameow.common.utils.SecurityUtils;
 import top.aameow.common.utils.StringUtils;
-import top.aameow.framework.security.context.PermissionContextHolder;
 
 /**
  * RuoYi首创 自定义权限实现，ss取自SpringSecurity首字母
@@ -35,7 +34,6 @@ public class PermissionService
         {
             return false;
         }
-        PermissionContextHolder.setContext(permission);
         return hasPermissions(loginUser.getPermissions(), permission);
     }
 
@@ -67,7 +65,6 @@ public class PermissionService
         {
             return false;
         }
-        PermissionContextHolder.setContext(permissions);
         Set<String> authorities = loginUser.getPermissions();
         for (String permission : permissions.split(Constants.PERMISSION_DELIMETER))
         {
@@ -98,6 +95,7 @@ public class PermissionService
         }
         for (SysRole sysRole : loginUser.getUser().getRoles())
         {
+            if (!"0".equals(sysRole.getStatus()) || !"0".equals(sysRole.getDelFlag())) continue;
             String roleKey = sysRole.getRoleKey();
             if (Constants.SUPER_ADMIN.equals(roleKey) || roleKey.equals(StringUtils.trim(role)))
             {

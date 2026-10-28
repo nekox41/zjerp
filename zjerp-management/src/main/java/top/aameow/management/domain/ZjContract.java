@@ -52,7 +52,27 @@ public class ZjContract extends BaseEntity
 
     /** 合同金额 */
     @Excel(name = "合同金额")
-    private Float amount;
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
+    private java.math.BigDecimal amount;
+    private String ownership;
+    private Long intermediaryId;
+    private String intermediaryName;
+    private String paymentPlan;
+    private String legacyType;
+    private Boolean classificationPending;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public String getStorageTable() {
+        if (contractType == null) return "";
+        return switch(contractType) {
+            case "WB" -> "zj_contract_maintenance";
+            case "JC" -> "zj_contract_inspection";
+            case "PD" -> "zj_contract_rating";
+            case "PG" -> "zj_contract_assessment";
+            case "QT" -> "zj_contract_other";
+            default -> "";
+        };
+    }
 
     /** 合同附件 */
     @Excel(name = "合同附件")

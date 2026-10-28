@@ -27,6 +27,12 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter
     @Autowired
     private TokenService tokenService;
 
+    @Autowired
+    private top.aameow.system.service.ISysUserService userService;
+
+    @Autowired
+    private top.aameow.framework.web.service.SysPermissionService permissionService;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException
@@ -34,6 +40,14 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter
         LoginUser loginUser = tokenService.getLoginUser(request);
         if (StringUtils.isNotNull(loginUser) && StringUtils.isNull(SecurityUtils.getAuthentication()))
         {
+            top.aameow.common.core.domain.entity.SysUser current = userService.selectUserById(loginUser.getUserId());
+            if (current == null || !"0".equals(current.getStatus()) || !"0".equals(current.getDelFlag()))
+            {
+                chain.doFilter(request, response);
+                return;
+            }
+            loginUser.setUser(current);
+            loginUser.setPermissions(permissionService.getMenuPermission(current));
             tokenService.verifyToken(loginUser);
             UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities());
             authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

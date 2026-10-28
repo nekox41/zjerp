@@ -1,117 +1,41 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<!DOCTYPE mapper
-        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
-        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="top.aameow.management.mapper.ZjContractMapper">
-
-    <resultMap type="top.aameow.management.domain.ZjContract" id="ZjContractResult">
-        <result property="id"    column="id"    />
-        <result property="contractId"    column="contract_id"    />
-        <result property="contractType"    column="contract_type"    javaType="java.lang.String"/>
-        <result property="contractName"    column="contract_name"    />
-        <result property="startTime"    column="start_time"    />
-        <result property="endTime"    column="end_time"    />
-        <result property="manager"    column="manager"    />
-        <result property="amount"    column="amount"    />
-        <result property="createBy"    column="create_by"    />
-        <result property="createTime"    column="create_time"    />
-        <result property="updateBy"    column="update_by"    />
-        <result property="updateTime"    column="update_time"    />
-        <result property="remark"    column="remark"    />
-        <result property="contractFile"    column="contract_file"    />
-    </resultMap>
-
-    <sql id="selectZjContractVo">
-        select id, contract_id, contract_type, contract_name, start_time, end_time, manager, amount, create_by, create_time, update_by, update_time, remark, contract_file from zj_contract
-    </sql>
-
-    <select id="selectZjContractList" parameterType="top.aameow.management.domain.ZjContract" resultMap="ZjContractResult">
-        <include refid="selectZjContractVo"/>
-        <where>
-            <if test="contractId != null  and contractId != ''"> and contract_id = #{contractId}</if>
-            <if test="contractType != null "> and contract_type = #{contractType}</if>
-            <if test="contractName != null  and contractName != ''"> and contract_name like concat('%', #{contractName}, '%')</if>
-            <if test="manager != null  and manager != ''"> and manager = #{manager}</if>
-        </where>
-    </select>
-
-    <select id="selectZjContractById" parameterType="Long" resultMap="ZjContractResult">
-        <include refid="selectZjContractVo"/>
-        where id = #{id}
-    </select>
-
-    <insert id="insertZjContract" parameterType="top.aameow.management.domain.ZjContract" useGeneratedKeys="true" keyProperty="id">
-        insert into zj_contract
-        <trim prefix="(" suffix=")" suffixOverrides=",">
-            <if test="contractId != null and contractId != ''">contract_id,</if>
-            <if test="contractType != null">contract_type,</if>
-            <if test="contractName != null and contractName != ''">contract_name,</if>
-            <if test="startTime != null">start_time,</if>
-            <if test="endTime != null">end_time,</if>
-            <if test="manager != null and manager != ''">manager,</if>
-            <if test="amount != null">amount,</if>
-            <if test="createBy != null">create_by,</if>
-            <if test="createTime != null">create_time,</if>
-            <if test="updateBy != null">update_by,</if>
-            <if test="updateTime != null">update_time,</if>
-            <if test="remark != null">remark,</if>
-        </trim>
-        <trim prefix="values (" suffix=")" suffixOverrides=",">
-            <if test="contractId != null and contractId != ''">#{contractId},</if>
-            <if test="contractType != null">#{contractType},</if>
-            <if test="contractName != null and contractName != ''">#{contractName},</if>
-            <if test="startTime != null">#{startTime},</if>
-            <if test="endTime != null">#{endTime},</if>
-            <if test="manager != null and manager != ''">#{manager},</if>
-            <if test="amount != null">#{amount},</if>
-            <if test="createBy != null">#{createBy},</if>
-            <if test="createTime != null">#{createTime},</if>
-            <if test="updateBy != null">#{updateBy},</if>
-            <if test="updateTime != null">#{updateTime},</if>
-            <if test="remark != null">#{remark},</if>
-        </trim>
-    </insert>
-
-    <update id="updateZjContract" parameterType="top.aameow.management.domain.ZjContract">
-        update zj_contract
-        <trim prefix="SET" suffixOverrides=",">
-            <if test="contractId != null and contractId != ''">contract_id = #{contractId},</if>
-            <if test="contractType != null">contract_type = #{contractType},</if>
-            <if test="contractName != null and contractName != ''">contract_name = #{contractName},</if>
-            <if test="startTime != null">start_time = #{startTime},</if>
-            <if test="endTime != null">end_time = #{endTime},</if>
-            <if test="manager != null and manager != ''">manager = #{manager},</if>
-            <if test="amount != null">amount = #{amount},</if>
-            <if test="createBy != null">create_by = #{createBy},</if>
-            <if test="createTime != null">create_time = #{createTime},</if>
-            <if test="updateBy != null">update_by = #{updateBy},</if>
-            <if test="updateTime != null">update_time = #{updateTime},</if>
-            <if test="remark != null">remark = #{remark},</if>
-            <if test="contractFile != null">contract_file = null,</if>
-        </trim>
-        where id = #{id}
-    </update>
-
-    <delete id="deleteZjContractById" parameterType="Long">
-        delete from zj_contract where id = #{id}
-    </delete>
-
-    <delete id="deleteZjContractByIds" parameterType="String">
-        delete from zj_contract where id in
-        <foreach item="id" collection="array" open="(" separator="," close=")">
-            #{id}
-        </foreach>
-    </delete>
-
-    <select id="countByContractType" resultType="int">
-        SELECT COUNT(*) FROM zj_contract WHERE contract_type = #{contractType}
-    </select>
-
-    <select id="getWbSummary" resultType="top.aameow.management.domain.WbSummary">
-        SELECT
-            COUNT(*) AS contractCount,
-            ROUND(SUM(amount), 2) AS amountSum
-        FROM zj_contract
-        WHERE contract_type = 'WB'
-    </select>
+<resultMap type="top.aameow.management.domain.ZjContract" id="ZjContractResult">
+<result property="id" column="id"/>
+<result property="contractId" column="contract_id"/>
+<result property="contractType" column="contract_type"/>
+<result property="contractName" column="contract_name"/>
+<result property="startTime" column="start_time"/>
+<result property="endTime" column="end_time"/>
+<result property="manager" column="manager"/>
+<result property="amount" column="amount"/>
+<result property="createBy" column="create_by"/>
+<result property="createTime" column="create_time"/>
+<result property="updateBy" column="update_by"/>
+<result property="updateTime" column="update_time"/>
+<result property="remark" column="remark"/>
+<result property="contractFile" column="contract_file"/>
+<result property="ownership" column="ownership"/>
+<result property="intermediaryId" column="intermediary_id"/>
+<result property="paymentPlan" column="payment_plan"/>
+<result property="legacyType" column="legacy_type"/>
+<result property="classificationPending" column="classification_pending"/>
+<result property="intermediaryName" column="intermediary_name"/></resultMap>
+<sql id="selectZjContractVo">select c.*,i.name intermediary_name from zj_contract c left join zj_intermediary i on i.id=c.intermediary_id</sql>
+<select id="selectZjContractById" resultMap="ZjContractResult"><include refid="selectZjContractVo"/> where c.id=#{id}</select>
+<select id="selectZjContractList" resultMap="ZjContractResult"><include refid="selectZjContractVo"/>
+<where>
+<if test="contractType != null and contractType != ''">and c.contract_type=#{contractType}</if>
+<if test="contractId != null and contractId != ''">and c.contract_id like concat('%',#{contractId},'%')</if>
+<if test="contractName != null and contractName != ''">and c.contract_name like concat('%',#{contractName},'%')</if>
+<if test="manager != null and manager != ''">and c.manager like concat('%',#{manager},'%')</if>
+<if test="ownership != null and ownership != ''">and c.ownership=#{ownership}</if>
+</where> order by c.id desc</select>
+<insert id="insertZjContract">insert into ${storageTable} (id,contract_id,contract_type,contract_name,start_time,end_time,manager,amount,create_by,create_time,update_by,update_time,remark,contract_file,ownership,intermediary_id,payment_plan,legacy_type,classification_pending) values (#{id},#{contractId},#{contractType},#{contractName},#{startTime},#{endTime},#{manager},#{amount},#{createBy},#{createTime},#{updateBy},#{updateTime},#{remark},#{contractFile},#{ownership},#{intermediaryId},#{paymentPlan},#{legacyType},#{classificationPending})</insert>
+<update id="updateZjContract">update ${storageTable} <set><if test="contractId != null">contract_id=#{contractId},</if><if test="contractName != null">contract_name=#{contractName},</if>start_time=#{startTime},end_time=#{endTime},<if test="manager != null">manager=#{manager},</if>amount=#{amount},<if test="updateBy != null">update_by=#{updateBy},</if><if test="updateTime != null">update_time=#{updateTime},</if><if test="remark != null">remark=#{remark},</if><if test="contractFile != null">contract_file=#{contractFile},</if><if test="ownership != null">ownership=#{ownership},</if>intermediary_id=#{intermediaryId},<if test="paymentPlan != null">payment_plan=#{paymentPlan},</if></set> where id=#{id}</update>
+<delete id="deleteZjContractById">delete from zj_contract_identity where id=#{id}</delete>
+<delete id="deleteZjContractByIds">delete from zj_contract_identity where id in <foreach collection="array" item="id" open="(" separator="," close=")">#{id}</foreach></delete>
+<select id="countByContractType" resultType="int">select count(*) from zj_contract where contract_type=#{contractType}</select>
+<select id="getWbSummary" resultType="top.aameow.management.domain.WbSummary">select count(*) contractCount,round(sum(amount),2) amountSum from zj_contract where contract_type='WB'</select>
 </mapper>

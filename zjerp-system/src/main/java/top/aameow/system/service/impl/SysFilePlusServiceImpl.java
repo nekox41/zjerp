@@ -154,7 +154,7 @@ public class SysFilePlusServiceImpl implements ISysFilePlusService
         SysFilePlus record = getById(id);
         if (record == null) return;
         if (record.getBizId() != null) throw new ServiceException("请通过业务表单解除文件关联");
-        if (!SecurityUtils.isAdmin(SecurityUtils.getUserId()) && !SecurityUtils.getUsername().equals(record.getCreateBy()))
+        if (!SecurityUtils.isAdmin() && !SecurityUtils.getUsername().equals(record.getCreateBy()))
             throw new ServiceException("无权删除其他用户的文件");
         // 保留磁盘文件，清理应在保留期后独立执行，避免破坏历史链接。
         mapper.deleteById(id);
@@ -186,7 +186,7 @@ public class SysFilePlusServiceImpl implements ISysFilePlusService
                 record = mapper.selectByUrl(url);
                 if (record != null)
                 {
-                    if (record.getBizId() == null && !SecurityUtils.isAdmin(SecurityUtils.getUserId())
+                    if (record.getBizId() == null && !SecurityUtils.isAdmin()
                             && !SecurityUtils.getUsername().equals(record.getCreateBy()))
                         throw new ServiceException("无权关联其他用户的临时文件");
                     if (record.getBizId() != null)
