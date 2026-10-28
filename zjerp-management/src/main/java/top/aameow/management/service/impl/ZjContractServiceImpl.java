@@ -101,7 +101,8 @@ public class ZjContractServiceImpl implements IZjContractService
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int deleteZjContractByIds(Long[] ids)
     {
-        int rows = zjContractMapper.deleteZjContractByIds(ids);
+        int rows;
+        try { rows = zjContractMapper.deleteZjContractByIds(ids); } catch(org.springframework.dao.DataIntegrityViolationException e) { throw new top.aameow.common.exception.ServiceException("合同已关联项目，不能删除"); }
         for (Long fileBizId : ids)
         {
             businessFiles.save("contract", fileBizId, "");
@@ -119,7 +120,8 @@ public class ZjContractServiceImpl implements IZjContractService
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public int deleteZjContractById(Long id)
     {
-        int rows = zjContractMapper.deleteZjContractById(id);
+        int rows;
+        try { rows = zjContractMapper.deleteZjContractById(id); } catch(org.springframework.dao.DataIntegrityViolationException e) { throw new top.aameow.common.exception.ServiceException("合同已关联项目，不能删除"); }
         for (Long fileBizId : new Long[] { id })
         {
             businessFiles.save("contract", fileBizId, "");
@@ -149,7 +151,7 @@ public class ZjContractServiceImpl implements IZjContractService
             ZjContract previous=editing?zjContractMapper.selectZjContractById(c.getId()):null;
             if(previous==null || previous.getAmount()==null || previous.getAmount().compareTo(c.getAmount())!=0) throw new top.aameow.common.exception.ServiceException("金额最多两位小数");
         }
-        if(c.getManager()!=null && c.getManager().length()>255 || c.getRemark()!=null && c.getRemark().length()>5000) throw new top.aameow.common.exception.ServiceException("文本超出长度限制");
+        if(c.getRemark()!=null && c.getRemark().length()>5000) throw new top.aameow.common.exception.ServiceException("文本超出长度限制");
         if(c.getContractName()==null || c.getContractName().isBlank() || c.getContractName().length()>255) throw new top.aameow.common.exception.ServiceException("请填写合同名称，最多255字符");
         if(c.getContractId()==null || c.getContractId().isBlank() || c.getContractId().length()>255) throw new top.aameow.common.exception.ServiceException("请填写合同编号，最多255字符");
         if(c.getAmount()!=null && (c.getAmount().signum()<0 || c.getAmount().precision()-c.getAmount().scale()>13)) throw new top.aameow.common.exception.ServiceException("合同金额超出范围");

@@ -15,3 +15,7 @@ done
 
 # 原始框架种子包含定时演示任务，新部署时先暂停，避免自动执行示例。
 mysql -uroot "$MYSQL_DATABASE" -e "UPDATE sys_job SET status = '1';"
+
+# Initialize empty unified project tables after legacy schemas. Production uses the audited migration script.
+mysql --default-character-set=utf8mb4 -uroot "$MYSQL_DATABASE" < /opt/zjerp/sql/work_projects_schema.sql
+mysql --default-character-set=utf8mb4 -uroot "$MYSQL_DATABASE" < /opt/zjerp/sql/work_projects_menus.sql

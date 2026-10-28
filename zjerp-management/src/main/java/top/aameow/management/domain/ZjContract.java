@@ -46,9 +46,6 @@ public class ZjContract extends BaseEntity
     @Excel(name = "结束时间", width = 30, dateFormat = "yyyy-MM-dd")
     private Date endTime;
 
-    /** 合同负责人 */
-    @Excel(name = "合同负责人")
-    private String manager;
 
     /** 合同金额 */
     @Excel(name = "合同金额")
@@ -87,7 +84,6 @@ public class ZjContract extends BaseEntity
                 .append("contractName", getContractName())
                 .append("startTime", getStartTime())
                 .append("endTime", getEndTime())
-                .append("manager", getManager())
                 .append("amount", getAmount())
                 .append("createBy", getCreateBy())
                 .append("createTime", getCreateTime())

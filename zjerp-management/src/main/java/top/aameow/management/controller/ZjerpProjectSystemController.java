@@ -88,30 +88,18 @@ public class ZjerpProjectSystemController extends BaseController
     @PostMapping
     public AjaxResult add(@RequestBody ZjerpProjectSystem zjerpProjectSystem)
     {
-        // TODO 生成二维码
-        // set system template
-        Resource resource = resourceLoader.getResource("classpath:template.json");
-        StringBuilder content = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8))) {            String line;
-            while ((line = reader.readLine()) != null) {
-                content.append(line);
-            }
-        } catch (IOException e) {
-            logger.error(e.getMessage());
-        }
-        zjerpProjectSystem.setProjectSystem(content.toString());
-        return toAjax(zjerpProjectSystemService.insertZjerpProjectSystem(zjerpProjectSystem));
+        return AjaxResult.error("旧项目系统已合并，请使用众基消防项目管理");
     }
 
     /**
      * 修改项目系统
      */
-    @Anonymous
+    @PreAuthorize("@ss.hasPermi('management:project:edit')")
     @Log(title = "项目系统", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@RequestBody ZjerpProjectSystem zjerpProjectSystem)
     {
-        return toAjax(zjerpProjectSystemService.updateZjerpProjectSystem(zjerpProjectSystem));
+        return AjaxResult.error("旧项目系统已合并，请使用众基消防项目管理");
     }
 
     /**
@@ -122,6 +110,6 @@ public class ZjerpProjectSystemController extends BaseController
 	@DeleteMapping("/{ids}")
     public AjaxResult remove(@PathVariable Long[] ids)
     {
-        return toAjax(zjerpProjectSystemService.deleteZjerpProjectSystemByIds(ids));
+        return AjaxResult.error("旧项目系统已合并，请使用众基消防项目管理");
     }
 }
