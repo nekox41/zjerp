@@ -1,0 +1,1 @@
+<template><ProjectWorkspace project-type="QT"/></template><script setup name="WorkProjectOther">import ProjectWorkspace from './components/ProjectWorkspace.vue';</script>

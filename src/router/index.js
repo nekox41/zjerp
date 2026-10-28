@@ -103,6 +103,9 @@ export const constantRoutes = [
 
 // 动态路由，基于用户权限动态去加载
 export const dynamicRoutes = [
+  { path: '/zhongji-project', component: Layout, hidden: true, permissions: ['management:project:query'], children: [
+    {path: ':id(\\d+)', component: () => import('@/views/zhongji/projects/detail.vue'), name: 'ZhongjiProjectDetail', meta: { title: '项目工作台', noCache: true }}
+  ] },
   {
     path: '/system/user-auth',
     component: Layout,
