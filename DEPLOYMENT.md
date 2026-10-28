@@ -1,5 +1,7 @@
 # Docker 与 Compose 部署
 
+从已有生产机器迁往另一台空机器并保留数据与原文件，请先阅读 [机器 A → 机器 B 生产迁移方案](PRODUCTION_MIGRATION_A_TO_B.md)。
+
 ## Dockerfile 检查与调整
 
 | 原配置问题 | 当前处理 |

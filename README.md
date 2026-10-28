@@ -27,6 +27,10 @@ docker compose ps
 
 **已有数据库请先阅读 [容器部署说明](DEPLOYMENT.md) 的旧库导入流程，不能把全新初始化当作升级步骤。**
 
+## 生产环境跨机器迁移
+
+[机器 A → 机器 B 生产迁移方案](PRODUCTION_MIGRATION_A_TO_B.md) 适用于旧 Compose 部署迁往空机器并更换访问 IP，包含数据库、上传文件和维保卡模板备份恢复、带文件迁移、演练、正式切换、验收及回退步骤。
+
 ## 文件系统迁移
 
 附件元数据和业务关联统一保存在 `sys_file`。新上传采用 `files/<哈希前两位>/<UUID>.<扩展名>`，原始文件名只作为元数据保存。
@@ -65,6 +69,7 @@ java -jar zjerp-admin/target/zjerp-admin.jar --spring.profiles.active=dev
 - [业务模块实施计划](MODULE_PLAN.md)
 - [系统设计方案](SYSTEM_DESIGN.md)
 
+- [机器 A → 机器 B 生产迁移方案](PRODUCTION_MIGRATION_A_TO_B.md)
 - [Docker 与 Compose 部署](DEPLOYMENT.md)
 - [文件系统迁移步骤](FILE_MIGRATION.md)
 - [统一文件存储设计](FILE_STORAGE.md)
