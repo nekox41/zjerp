@@ -14,7 +14,7 @@ def rows(t):
  return [json.loads(line,parse_float=Decimal) for line in sql('SELECT JSON_OBJECT('+','.join("'"+c+"',`"+c+'`' for c in cols)+') FROM '+t).splitlines()]
 def dump(v):return json.dumps(v,ensure_ascii=False,default=str)
 version='project-finance-20261029'
-old=sql('SELECT report FROM zj_project_finance_migration WHERE version='+literal(version))
+old=sql('SELECT report FROM zj_project_finance_migration WHERE CAST(version AS BINARY)=CAST('+literal(version)+' AS BINARY)')
 if old:Path(a.report).write_text(old,encoding='utf8');print('Migration already applied');raise SystemExit(0)
 projects=rows('zj_work_project');reports=rows('zj_report');source_files=rows('sys_file');costs=rows('zj_cost') if sql("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='zj_cost'")=='1' else []
 index_no={};index_name={}
