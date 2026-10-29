@@ -35,6 +35,9 @@ public class WBCardController extends BaseController {
         zjWBCard record=new zjWBCard();record.setCode(card.getNo());record.setTitle(card.getName());record.setFile(url);
         record.setPrintCheck("N");record.setSendCheck("N");record.setCreateBy(getUsername());record.setUpdateBy(getUsername());
         try {cards.insertzjWBCard(record);} catch(RuntimeException ex){Files.deleteIfExists(path);throw ex;}
-        return success(Map.of("id",record.getId(),"file",url));
+        String canonical=cards.selectzjWBCardById(record.getId()).getFile();
+        // The unified file service has copied the PDF into its managed storage.
+        Files.deleteIfExists(path);
+        return success(Map.of("id",record.getId(),"file",canonical));
     }
 }
