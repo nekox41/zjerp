@@ -11,3 +11,6 @@ backups
 server_full_*.sql
 .env*
 ARCHITECTURE.md
+
+# Agent handoff documentation and historical tools are not runtime inputs.
+codex/

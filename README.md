@@ -75,3 +75,7 @@ java -jar zjerp-admin/target/zjerp-admin.jar --spring.profiles.active=dev
 - [统一文件存储设计](FILE_STORAGE.md)
 
 `.env`、上传文件、日志和数据库备份均不应提交到 Git。仓库已有的历史完整 SQL 备份不参与自动初始化，也不会进入 Docker 构建上下文。
+
+
+## Codex 交接资料
+[设计、规范、现状、计划及操作索引](codex/README.md)

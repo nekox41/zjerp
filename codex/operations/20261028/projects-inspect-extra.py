@@ -1,0 +1,8 @@
+exec(open('/vol2/zjerp-migration/projects-inspect.py').read().split('tables=')[0])
+print('overlap',sql("SELECT COUNT(*) FROM zj_project_code c JOIN zjerp_project_system p ON TRIM(c.name) COLLATE utf8mb4_general_ci=TRIM(p.project_name);"))
+print('legacy project',sql("SELECT id,project_name,LENGTH(project_system),COALESCE(qrcode,'') FROM zjerp_project_system;"))
+print('expense group',sql("SELECT id,project_name,project_cost FROM zj_project_cost;"))
+print('expense data',sql("SELECT id,project_id,participant,cost,date,LENGTH(attachment) FROM zj_cost;"))
+print('duplicates',sql("SELECT COUNT(*) FROM (SELECT name FROM zj_project_code GROUP BY name HAVING COUNT(*)>1) t;"))
+print('contract match',sql("SELECT COUNT(*) FROM zj_project_code p WHERE (SELECT COUNT(*) FROM zj_contract c WHERE c.contract_type=CASE WHEN p.type IN ('WB','JC','PD','PG') THEN p.type ELSE 'QT' END AND TRIM(c.contract_name) COLLATE utf8mb4_general_ci=TRIM(p.name) COLLATE utf8mb4_general_ci)=1;"))
+print('existing intermediary',sql("SELECT COUNT(*) FROM zj_intermediary;"))
