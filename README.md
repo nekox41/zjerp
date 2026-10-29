@@ -30,7 +30,7 @@ python3 scripts/init-compose-env.py
 docker compose up -d --build
 ```
 
-默认访问 `http://localhost:8088`。详见后端的 [部署说明](https://github.com/nekox41/zjerp_backend/blob/master/DEPLOYMENT.md) 和 [文件系统迁移步骤](https://github.com/nekox41/zjerp_backend/blob/master/FILE_MIGRATION.md)。
+默认访问 `http://localhost:8088`。详见后端的 [部署说明](https://github.com/nekox41/zjerp_backend/blob/master/DEPLOYMENT.md) 和 [Codespaces 开发指南](https://github.com/nekox41/zjerp_backend/blob/master/codex/DEVELOPMENT.md)。
 
 文件管理页面为 `/system/file`，动态路由及权限由后端菜单下发。旧数据仅迁移数据库时，列表可显示元数据，但下载仍需原文件；未知大小显示“未核实”。
 
