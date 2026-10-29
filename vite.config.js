@@ -5,6 +5,9 @@ import createVitePlugins from './vite/plugins'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd())
+  if (!env.VITE_APP_BASE_API?.trim()) {
+    throw new Error('缺少 VITE_APP_BASE_API：请保留对应模式的 .env 配置文件后重新构建，避免将接口请求发送到静态页面。')
+  }
   const { VITE_APP_ENV } = env
   return {
     // 部署生产环境和开发环境下的URL。
