@@ -4,7 +4,7 @@ import org.springframework.stereotype.Service;import org.springframework.beans.f
 import top.aameow.management.mapper.ReimbursementMapper;import top.aameow.system.service.ISysFilePlusService;import top.aameow.common.exception.ServiceException;import top.aameow.common.utils.SecurityUtils;
 @Service
 public class ReimbursementService {
- @Autowired private ReimbursementMapper mapper;@Autowired private ISysFilePlusService files;
+ @Autowired private top.aameow.management.mapper.FinanceLedgerMapper ledger;@Autowired private ReimbursementMapper mapper;@Autowired private ISysFilePlusService files;
  public ReimbursementMapper data(){return mapper;}
  public static String text(Map<String,?> m,String k){return Objects.toString(m.get(k),"").trim();}
  public void filter(Map<String,Object> q){for(String k:List.of("projectId","userId")){String s=text(q,k);q.put(k,s.isEmpty()?null:WorkProjectService.number(s));}for(String k:List.of("dateFrom","dateTo")){String s=text(q,k);if(!s.isEmpty())try{LocalDate.parse(s);}catch(Exception ex){throw new ServiceException("日期格式错误");}}if(!text(q,"dateFrom").isEmpty()&&!text(q,"dateTo").isEmpty()&&text(q,"dateFrom").compareTo(text(q,"dateTo"))>0)throw new ServiceException("结束日期不能早于开始日期");}
@@ -26,5 +26,5 @@ public class ReimbursementService {
   List<String> urls=new ArrayList<>();for(MultipartFile file:incoming)if(!file.isEmpty())urls.add(files.uploadInvoice(file,WorkProjectService.number(v.get("id")),v.get("actor").toString()).getFileUrl());mapper.invoices(WorkProjectService.number(v.get("id")),String.join(",",urls));return v.get("receipt").toString();
  }
  @Transactional(rollbackFor=Exception.class)
- public void status(Long id,Map<String,Object> v){if(!List.of("pending","paid","rejected").contains(text(v,"status")))throw new ServiceException("无效状态");v.put("id",id);v.put("version",WorkProjectService.number(v.get("version")));if(mapper.status(v)!=1)throw new ServiceException("记录已被修改，请刷新重试");}
+ public void status(Long id,Map<String,Object> v){if(ledger.lockClaim(id)==null)throw new ServiceException("报账不存在");if("paid".equals(text(v,"status")))throw new ServiceException("请在财务工作台登记支付流水并选择资金账户");if(ledger.claimEntries(id)>0)throw new ServiceException("已有支付流水，请先在财务工作台作废该流水");if(!List.of("pending","paid","rejected").contains(text(v,"status")))throw new ServiceException("无效状态");v.put("id",id);v.put("version",WorkProjectService.number(v.get("version")));if(mapper.status(v)!=1)throw new ServiceException("记录已被修改，请刷新重试");}
 }

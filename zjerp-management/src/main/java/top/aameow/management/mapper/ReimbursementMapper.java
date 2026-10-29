@@ -13,8 +13,8 @@ public interface ReimbursementMapper {
  @Select("<script>select date_format(r.expense_date,'%Y-%m') label,count(*) records,cast(sum(r.amount) as char) amount from zj_reimbursement r "+F+" group by date_format(r.expense_date,'%Y-%m') order by label</script>") List<Map<String,Object>> months(Map<String,Object> q);
  @Select("<script>select coalesce(r.claimant_name,'历史人员待确认') label,count(*) records,cast(sum(r.amount) as char) amount from zj_reimbursement r "+F+" group by r.user_id,r.claimant_name order by sum(r.amount) desc</script>") List<Map<String,Object>> people(Map<String,Object> q);
  @Select("<script>select coalesce(p.project_name,'未关联项目') label,count(*) records,cast(sum(r.amount) as char) amount from zj_reimbursement r left join zj_work_project p on p.id=r.project_id "+F+" group by r.project_id,p.project_name order by sum(r.amount) desc</script>") List<Map<String,Object>> projectsSummary(Map<String,Object> q);
- @Select("select user_id id,nick_name name from sys_user where status='0' and del_flag='0' and nick_name like concat('%',#{name},'%') order by user_id limit 20") List<Map<String,Object>> users(String name);
+ @Select("select user_id id,nick_name name from sys_user where status='0' and del_flag='0' and user_id<>1 and lower(user_name)<>'admin' and (nick_name like concat('%',#{name},'%') or user_name like concat('%',#{name},'%')) order by nick_name,user_id limit 50") List<Map<String,Object>> users(String name);
  @Select("select id,project_name name,project_no code,project_type projectType from zj_work_project where project_name like concat('%',#{name},'%') or project_no like concat('%',#{name},'%') order by id desc limit 20") List<Map<String,Object>> projects(String name);
- @Select("select nick_name from sys_user where user_id=#{id} and status='0' and del_flag='0'") String userName(Long id);
+ @Select("select nick_name from sys_user where user_id=#{id} and user_id<>1 and lower(user_name)<>'admin' and status='0' and del_flag='0'") String userName(Long id);
  @Select("select id from zj_work_project where id=#{id}") Long project(Long id);
 }

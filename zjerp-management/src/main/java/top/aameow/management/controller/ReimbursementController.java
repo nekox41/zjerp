@@ -13,7 +13,7 @@ public class ReimbursementController extends BaseController {
  public AjaxResult mobile(@RequestParam Map<String,Object> v,@RequestParam(required=false) List<MultipartFile> invoices) throws Exception{return success(Map.of("receipt",service.submit(v,invoices,true)));}
  @GetMapping("/users") @PreAuthorize("@ss.hasPermi('zhongji:finance:add') or @ss.hasPermi('zhongji:finance:list')") public AjaxResult users(@RequestParam(defaultValue="") String name){return success(service.data().users(name));}
  @GetMapping("/projects") @PreAuthorize("@ss.hasPermi('zhongji:finance:add') or @ss.hasPermi('zhongji:finance:list')") public AjaxResult projects(@RequestParam(defaultValue="") String name){return success(service.data().projects(name));}
- @Anonymous @GetMapping("/public/users") public AjaxResult publicUsers(@RequestParam(defaultValue="") String name){return success(name.trim().length()<2?List.of():service.data().users(name.trim()));}
- @Anonymous @GetMapping("/public/projects") public AjaxResult publicProjects(@RequestParam(defaultValue="") String name){return success(name.trim().length()<2?List.of():service.data().projects(name.trim()));}
+ @Anonymous @GetMapping("/public/users") public AjaxResult publicUsers(@RequestParam(defaultValue="") String name){return success(service.data().users(name.trim()));}
+ @Anonymous @GetMapping("/public/projects") public AjaxResult publicProjects(@RequestParam(defaultValue="") String name){return success(service.data().projects(name.trim()));}
  @PutMapping("/reimbursements/{id}/status") @PreAuthorize("@ss.hasPermi('zhongji:finance:edit')") @Log(title="报账状态",businessType=BusinessType.UPDATE) public AjaxResult status(@PathVariable Long id,@RequestBody Map<String,Object> v){service.status(id,v);return success();}
 }
