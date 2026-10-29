@@ -27,3 +27,9 @@ bash scripts/dev-backend.sh
 5. 退出再登录以加载当前角色菜单，确认打开的是 8888 开发端口而不是旧静态预览。
 
 不要提交 `.env.dev`，也不要在日志或文档输出密码。
+
+## 2026-10-29 Codespaces 实际修复
+
+当前工作目录为 `/workspaces/codespaces-blank/zjerp`。两个子仓库已更新；原有 pom.xml、application.yml 的未提交修改和 ARCHITECTURE.md 均保留。现场没有原生 ERP 开发进程，只有旧后端容器，MySQL 的 server 库为空、sys_menu 不存在。现在已停止旧后端容器，在现有 MySQL 8 开发库初始化当前结构，使用 Java 17 全模块重新打包并原生运行，前端使用 Vite 的 8888 端口。
+
+开发配置在后端 `.env.dev`，文件权限 600。现有 MySQL/Redis 开发容器继续运行，原生应用通过它们的容器地址连接；重建依赖容器后地址可能变化，需要更新 `.env.dev`。后端与前端日志/PID 位于工作目录下 `.codex-local/`，不提交 Git。重启 Codespace 后分别执行 `bash scripts/dev-backend.sh` 与前端 `npm run dev`；启动前确认没有旧实例占用端口。
