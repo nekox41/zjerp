@@ -6,7 +6,7 @@
 
 ## 已有数据库升级
 
-应用停止写入并做好可恢复的整库、文件及配置备份后，执行 `sql/role_only_upgrade.sql`。它会移除：
+应用停止写入并做好可恢复的整库、文件及配置备份后，执行 `sql/upgrades/role_only_upgrade.sql`。它会移除：
 
 - `sys_dept`、`sys_post`、`sys_user_post`、`sys_role_dept`；
 - `sys_user.dept_id`，`sys_role.data_scope/dept_check_strictly`，`sys_oper_log.dept_name`；

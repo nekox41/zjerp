@@ -1,81 +1,31 @@
 # 众基 ERP 后端
 
-Java 17、Spring Boot 3、MyBatis、MySQL 8 和 Redis 组成的多模块后端。前端独立维护在 [zjerp_frontend](https://github.com/nekox41/zjerp_frontend)。
+Java 17、Spring Boot 3、MyBatis、MySQL 8+、Redis。前端仓库：[zjerp_frontend](https://github.com/nekox41/zjerp_frontend)。
 
-## 一起部署前后端、MySQL 和 Redis
+当前业务包括角色权限、统一附件、用户资料、中间人、五类合同和五类项目。首页菜单由数据库下发，单独更新 Java/Vue 源码不会更新旧数据库菜单。
 
-目录保持为相邻的两个仓库：
+## 开发（含 Codespaces，不使用 Docker 运行应用）
 
-```text
-zjerp/
-├── zjerp_backend/       # 在这里运行 Compose
-└── zjerp_frontend/
-```
+见 [开发指南](codex/DEVELOPMENT.md)。准备独立 MySQL 开发库与 Redis；首次用 `scripts/init-database.sh` 创建当前表和菜单，再用 `bash scripts/dev-backend.sh` 构建全部模块并启动。前端执行 `npm ci && npm run dev`，转发 8888 端口。
+
+## Compose 首次部署
+
+两个仓库相邻命名为 `zjerp_backend`、`zjerp_frontend`，在后端执行：
 
 ```bash
-git clone https://github.com/nekox41/zjerp_backend.git
-git clone https://github.com/nekox41/zjerp_frontend.git
-cd zjerp_backend
 python3 scripts/init-compose-env.py
-# 编辑 .env：将 PUBLIC_API_URL 改为真实访问地址，例如 https://erp.example.com/prod-api。
+# 编辑 .env 中的 PUBLIC_API_URL；目录不同则修改 FRONTEND_CONTEXT
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
 ```
 
-默认访问 `http://localhost:8088`。首次启动空 MySQL 数据卷时自动创建框架、业务和统一文件表；不会导入业务备份。框架初始管理员为 `admin / admin123`，登录后修改密码。Redis 是登录会话及配置缓存的必需依赖。
+默认访问 http://localhost:8088，初始管理员 `admin / admin123`，首次登录后修改密码。详见 [部署说明](DEPLOYMENT.md)。
 
-**已有数据库请先阅读 [容器部署说明](DEPLOYMENT.md) 的旧库导入流程，不能把全新初始化当作升级步骤。**
+## 项目资料
 
-## 生产环境跨机器迁移
+- [设计、代码规范、当前状态与后续计划](codex/README.md)
+- [合同模块](CONTRACT_MODULES_UPGRADE.md)、[项目模块](WORK_PROJECTS.md)、[用户资料](USER_MATERIALS.md)、[角色权限](ROLE_ONLY_UPGRADE.md)
+- 前端界面遵循前端仓库 `DESIGN_SYSTEM.md`。
 
-[机器 A → 机器 B 生产迁移方案](PRODUCTION_MIGRATION_A_TO_B.md) 适用于旧 Compose 部署迁往空机器并更换访问 IP，包含数据库、上传文件和维保卡模板备份恢复、带文件迁移、演练、正式切换、验收及回退步骤。
-
-## 文件系统迁移
-
-附件元数据和业务关联统一保存在 `sys_file`。新上传采用 `files/<哈希前两位>/<UUID>.<扩展名>`，原始文件名只作为元数据保存。
-
-[文件系统迁移步骤](FILE_MIGRATION.md) 包含备份、仅数据库迁移、带原文件的迁移、核对及回滚。缺少原文件时，哈希和大小保留为 NULL；不会伪造内容信息。已经仅迁移数据库的记录需要补回原文件后才能下载。
-
-[文件存储设计](FILE_STORAGE.md) 描述业务类型、接口兼容和删除策略。
-
-## 本地构建与运行
-
-先配置 `zjerp-admin/src/main/resources/application-dev.yml` 对应的测试 MySQL、Redis，或通过环境变量覆盖连接参数。
-
-```bash
-mvn -Dmaven.test.skip=true package
-bash scripts/verify-file-storage.sh
-java -jar zjerp-admin/target/zjerp-admin.jar --spring.profiles.active=dev
-```
-
-后端默认端口为 `8080`。普通 Maven 测试命令为 `mvn test`；文件服务额外检查由上面的独立脚本执行，不依赖数据库或 Redis。
-
-## 模块
-
-下表为现有 Maven 工程模块。后续业务开发拆分为 13 个逻辑模块，功能、依赖和验收清单见 [业务模块实施计划](MODULE_PLAN.md)。
-
-| 模块 | 用途 |
-| --- | --- |
-| zjerp-admin | 应用入口、系统和通用接口 |
-| zjerp-framework | 安全、数据源、配置与基础设施 |
-| zjerp-system | 系统管理、统一文件服务 |
-| zjerp-management | 合同、报告、维保卡等业务 |
-| zjerp-generator | 代码及维保卡文档生成 |
-| zjerp-common / zjerp-quartz | 公共工具与任务调度 |
-
-## 文档
-
-- [业务模块实施计划](MODULE_PLAN.md)
-- [系统设计方案](SYSTEM_DESIGN.md)
-
-- [机器 A → 机器 B 生产迁移方案](PRODUCTION_MIGRATION_A_TO_B.md)
-- [Docker 与 Compose 部署](DEPLOYMENT.md)
-- [文件系统迁移步骤](FILE_MIGRATION.md)
-- [统一文件存储设计](FILE_STORAGE.md)
-
-`.env`、上传文件、日志和数据库备份均不应提交到 Git。仓库已有的历史完整 SQL 备份不参与自动初始化，也不会进入 Docker 构建上下文。
-
-
-## Codex 交接资料
-[设计、规范、现状、计划及操作索引](codex/README.md)
+测试：`mvn test` 与 `bash scripts/verify-file-storage.sh`。上传文件、密钥、日志、数据库备份和历史生产操作工具不进入仓库。

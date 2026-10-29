@@ -21,7 +21,7 @@
 
 ## 升级
 
-先停应用并保存配套数据库、文件及配置备份。依次执行 `sql/zhongji_contract_upgrade.sql`、`sql/zhongji_contract_menus.sql`，部署前后端。脚本包含建表和重命名，只允许执行一次；不要对已升级库重复运行。全新部署由 MySQL 初始化脚本按顺序执行。
+旧版数据库升级需先停应用并保存配套备份，再审核执行 `sql/upgrades/zhongji_contract_upgrade.sql`、`sql/zhongji_contract_menus.sql`。脚本只允许执行一次，机器 B 已完成。全新部署通过 `scripts/init-database.sh` 直接使用 `zhongji_contract_schema.sql` 创建当前结构，不执行旧表重命名迁移。
 
 原合同菜单被移动为维护保养合同入口，保留 ID 和已有按钮权限。原合同角色被赋予新合同目录及五类页面，合同接口仍使用 `management:contract:*` 权限。中间人单独使用 `management:intermediary:list/edit`，管理员可在角色管理中授权。合同编辑者可通过受保护的 options 接口搜索中间人。
 

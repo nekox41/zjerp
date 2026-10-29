@@ -8,5 +8,6 @@
 - [后续计划](ROADMAP.md)
 - [运维与验证](OPERATIONS.md)
 - [资料与脚本索引](INVENTORY.md)
+- [原生开发与 Codespaces](DEVELOPMENT.md)
 
 业务源码保留在各Maven模块和前端src；SQL保留在后端sql；可复用的一次性业务迁移在scripts。前端视觉规范以其DESIGN_SYSTEM.md为准。本目录不替代这些实现。

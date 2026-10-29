@@ -4,7 +4,7 @@
 
 类型：string（文本）、png、jpg（兼容 jpeg）、pdf、file。每项文件限一个；需要多份时使用不同 key。同一个用户的 key 唯一，保存同名 key 会更新内容。删除资料解除业务文件关联，磁盘文件遵循现有保留策略。
 
-升级现有数据库需执行 `sql/user_material_upgrade.sql`，再部署前后端。全新安装主 SQL 已包含该表。2026-10-28 已在机器 B 部署。
+升级现有数据库需执行 `sql/upgrades/user_material_upgrade.sql`，再部署前后端。全新安装主 SQL 已包含该表。2026-10-28 已在机器 B 部署。
 
 接口（需登录）：
 

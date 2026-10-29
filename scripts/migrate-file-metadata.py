@@ -112,7 +112,7 @@ def main():
                        stdout=output, stderr=subprocess.PIPE, text=True, check=True)
     root = Path(__file__).resolve().parents[1]
     if "sys_file" in available_tables:
-        query((root / "sql/sys_file_metadata_only_upgrade.sql").read_text())
+        query((root / "sql/upgrades/sys_file_metadata_only_upgrade.sql").read_text())
     query((root / "sql/sys_file.sql").read_text())
     sql = "\n".join(statements)
     plan = backup_dir / "migration.sql"

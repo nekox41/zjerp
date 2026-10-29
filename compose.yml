@@ -15,13 +15,22 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./sql:/opt/zjerp/sql:ro
+      - ./scripts/init-database.sh:/opt/zjerp/scripts/init-database.sh:ro
       - ./deploy/mysql/10-init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
     healthcheck:
       test:
         - CMD-SHELL
         - >-
           MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1
-          -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -Nse 'SELECT 1' > /dev/null
+          -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -Nse
+          'SELECT user_id FROM sys_user LIMIT 1; SELECT id FROM zj_work_project LIMIT 1;
+          SELECT file_id FROM sys_file LIMIT 1; SELECT id FROM zj_contract_identity LIMIT 1;
+          SELECT menu_id FROM sys_menu WHERE component="zhongji/projects/maintenance" LIMIT 1'
+          > /dev/null
+          && { [ "$$BOOTSTRAP_DATABASE" != true ] ||
+          MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1
+          -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -Nse
+          'SELECT version FROM zjerp_schema_state' | grep -qx '20261029-current'; }
       interval: 10s
       timeout: 5s
       retries: 20
