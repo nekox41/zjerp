@@ -8,6 +8,7 @@
 - sql/：初始化所需结构和菜单，以及已明确命名的历史升级 SQL；只有 init-database.sh 列出的文件参与全新安装。
 - WORK_PROJECTS.md、CONTRACT_MODULES_UPGRADE.md、USER_MATERIALS.md、ROLE_ONLY_UPGRADE.md：模块接口及升级说明。
 - codex/PROJECT_FINANCE.md、sql/project_finance_schema.sql、sql/project_finance_menus.sql、scripts/migrate-project-finance.py：项目文件/维保资料面板、统一报账及历史报告迁移；迁移脚本仅供已备份的已有库升级，不属于日常启动。
+- codex/FINANCE_LEDGER.md、sql/finance_ledger.sql、sql/finance_ledger_menus.sql：统一财务工作台、账户流水、已开发票与报账支付；scripts/check-finance-ledger.py仅用于带专用标记的隔离库验证。
 - 前端 DESIGN_SYSTEM.md：所有新界面的设计规范。
 
 2026-10-29 清理 FILE_MIGRATION、FILE_STORAGE、PRODUCTION_MIGRATION_A_TO_B、旧总计划和 task 文档，以及完成迁移的一次性机器操作脚本。历史副本在工作区 local-archive/cleanup-20261029；不上传 GitHub。现网备份和上传原件继续保存在 B，不随源码清理。

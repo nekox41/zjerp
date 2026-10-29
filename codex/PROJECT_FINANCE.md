@@ -16,7 +16,7 @@
 
 `zj_reimbursement` 保存金额、用途、可空项目、报账人ID及姓名快照、日期、备注、发票、录入来源、录入账号、处理状态、版本和提交凭据。金额使用DECIMAL(18,2)，新报账必须大于0且最多两位小数；查询和合计返回字符串。汇总按完整筛选条件计算，不受列表分页影响。
 
-报账人可从有效用户中选取。登录录入时同时保存实际录入账号，代填不冒充报账人。免登录录入固定标记为public来源、public-reimbursement录入账号及待核验状态；所选报账人是填报声明，不是登录身份核验。待核验、已支付、不予报销由有财务维护权限的人员处理，状态修改采用版本校验并写操作日志。
+报账人可从有效用户中选取，排除admin开发账号。登录录入同时保存实际录入账号，代填不冒充报账人。免登录固定标记public来源、public-reimbursement录入账号及待核验状态；所选姓名是填报声明，不是身份核验。待核验和不予报销由有维护权限的人员处理；已支付改由资金支出流水更新，作废流水恢复待处理，不能直接修改以绕过账户。详见FINANCE_LEDGER.md。
 
 发票采用同一次multipart提交，最多5个PDF/JPG/PNG，每个10MB，验证文件头、扩展名和文件名边界。文件服务提供受控的报账上传方法，由服务端指定业务ID和录入来源；没有开放通用匿名上传或匿名文件绑定。记录、文件和关联共同回滚。
 
@@ -28,7 +28,7 @@
 - 维护保养资料：同项目下materials、material-options、card-options，查看/维护同项目权限，服务端限制WB类型。
 - 维保卡：`/wbcard/gen/next-number`、create、preview沿用management:wbcard:add；项目内生成还要求management:project:edit，传projectId和materialVersion。
 - 财务查询：GET `/finance/reimbursements`、`/{id}`、`/finance/analysis`要求zhongji:finance:list；登录报账POST multipart要求zhongji:finance:add；状态PUT `/{id}/status`要求zhongji:finance:edit。
-- 手机页面：`/reimbursement-mobile`；匿名POST `/finance/public/submit`只提交并返回随机凭据，不返回流水ID或发票链接。public/users、public/projects仅提供最小选择信息，至少2字搜索，每次最多20项。匿名没有报账列表、详情或分析接口权限。
+- 手机页面：`/reimbursement-mobile`；匿名POST `/finance/public/submit`只返回随机凭据，不返回流水ID或发票链接。public/users、public/projects提供有限选择信息；打开加载候选、支持单字搜索，用户最多50项、项目最多20项。admin从候选及提交资格中排除。匿名没有报账列表、详情或分析权限。
 
 旧报告查看角色保留对应项目的查看入口，不自动获得财务权限；旧财务查看/录入权限按原能力迁入。财务状态维护由管理员另行授权，不能仅因可查看就获得支付状态维护权限。
 
