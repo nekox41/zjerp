@@ -41,3 +41,7 @@ npm run build:prod
 ```
 
 GitHub Actions 对 PR 仅构建验证，分支推送按现有 Docker Hub 配置发布镜像。不要提交 `.env.local`、上传文件或本地构建产物。
+
+
+## Codex 交接资料
+[统一界面规范](DESIGN_SYSTEM.md)；架构、运维和后续计划集中维护在后端仓库的 codex/README.md。
