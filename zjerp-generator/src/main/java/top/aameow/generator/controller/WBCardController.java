@@ -20,7 +20,10 @@ import top.aameow.management.service.IzjWBCardService;
 @RestController @RequestMapping("/wbcard/gen")
 public class WBCardController extends BaseController {
     @Autowired private WBCardUtils renderer;
+    @Autowired private top.aameow.generator.service.WBCardGenerationService generation;
     @Autowired private IzjWBCardService cards;
+    @GetMapping("/next-number") @PreAuthorize("@ss.hasPermi('management:wbcard:add')")
+    public AjaxResult nextNumber(){return success(Map.of("code",generation.next()));}
     @PostMapping("/preview") @PreAuthorize("@ss.hasPermi('management:wbcard:add')")
     public ResponseEntity<byte[]> preview(@RequestBody WBCard card) throws IOException {
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).cacheControl(CacheControl.noStore())
@@ -29,15 +32,7 @@ public class WBCardController extends BaseController {
     @PostMapping("/create") @PreAuthorize("@ss.hasPermi('management:wbcard:add')")
     @Log(title="维保卡生成",businessType=BusinessType.INSERT)
     public AjaxResult create(@RequestBody WBCard card) throws IOException {
-        Path path=Paths.get(renderer.genWBCard(card)).toAbsolutePath().normalize();
-        Path base=Paths.get(RuoYiConfig.getProfile()).toAbsolutePath().normalize();
-        String url="/profile/"+base.relativize(path).toString().replace('\\','/');
-        zjWBCard record=new zjWBCard();record.setCode(card.getNo());record.setTitle(card.getName());record.setFile(url);
-        record.setPrintCheck("N");record.setSendCheck("N");record.setCreateBy(getUsername());record.setUpdateBy(getUsername());
-        try {cards.insertzjWBCard(record);} catch(RuntimeException ex){Files.deleteIfExists(path);throw ex;}
-        String canonical=cards.selectzjWBCardById(record.getId()).getFile();
-        // The unified file service has copied the PDF into its managed storage.
-        Files.deleteIfExists(path);
-        return success(Map.of("id",record.getId(),"file",canonical));
+        if(card.getProjectId()!=null && !top.aameow.common.utils.SecurityUtils.hasPermi("management:project:edit")) throw new top.aameow.common.exception.ServiceException("无权在项目中生成维保卡");
+        return success(generation.create(card));
     }
 }

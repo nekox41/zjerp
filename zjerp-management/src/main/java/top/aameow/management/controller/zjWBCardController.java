@@ -41,8 +41,9 @@ public class zjWBCardController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('management:wbcard:list')")
     @GetMapping("/list")
-    public TableDataInfo list(zjWBCard zjWBCard)
+    public TableDataInfo list(zjWBCard zjWBCard, @org.springframework.web.bind.annotation.RequestParam(defaultValue="created") String sort)
     {
+        zjWBCard.getParams().put("cardSort", "code".equals(sort)?"code":"created");
         startPage();
         List<zjWBCard> list = zjWBCardService.selectzjWBCardList(zjWBCard);
         return getDataTable(list);

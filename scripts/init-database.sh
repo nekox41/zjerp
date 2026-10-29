@@ -10,7 +10,7 @@ if [[ -n "${MYSQL_HOST:-}" ]]; then args+=(--protocol=TCP -h "$MYSQL_HOST" -P "$
 if [[ -n "${MYSQL_PASSWORD:-}" ]]; then export MYSQL_PWD="$MYSQL_PASSWORD"; fi
 count=$(mysql "${args[@]}" "$MYSQL_DATABASE" -Nse 'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()')
 [[ "$count" == 0 ]] || { echo 'Database is not empty. Refusing to overwrite tables; use a new development database or a reviewed upgrade.' >&2; exit 1; }
-for script in ry_20250417.sql quartz.sql business_schema.sql sys_file.sql zhongji_contract_schema.sql zhongji_contract_menus.sql work_projects_schema.sql work_projects_menus.sql wbcard_workspace.sql; do
+for script in ry_20250417.sql quartz.sql business_schema.sql sys_file.sql zhongji_contract_schema.sql zhongji_contract_menus.sql work_projects_schema.sql work_projects_menus.sql wbcard_workspace.sql project_finance_schema.sql project_finance_menus.sql; do
     echo "Initializing $script"
     mysql "${args[@]}" "$MYSQL_DATABASE" < "$ROOT/sql/$script"
 done

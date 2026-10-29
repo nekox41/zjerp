@@ -1,0 +1,13 @@
+package top.aameow.generator.service;
+import java.util.*;import java.nio.file.*;import java.io.IOException;import org.springframework.stereotype.Service;import org.springframework.beans.factory.annotation.Autowired;import org.springframework.transaction.annotation.Transactional;
+import top.aameow.generator.domain.WBCard;import top.aameow.generator.util.WBCardUtils;import top.aameow.management.domain.zjWBCard;import top.aameow.management.service.*;import top.aameow.management.mapper.ProjectResourcesMapper;import top.aameow.common.config.RuoYiConfig;import top.aameow.common.utils.SecurityUtils;import top.aameow.common.exception.ServiceException;
+@Service public class WBCardGenerationService {
+ @Autowired private WBCardUtils renderer;@Autowired private IzjWBCardService cards;@Autowired private ProjectResourcesMapper mapper;@Autowired private ProjectResourcesService resources;
+ public String next(){return String.format(java.util.Locale.ROOT,"%07d",mapper.maxCode()+1);}
+ @Transactional(rollbackFor=Exception.class) public Map<String,Object> create(WBCard card) throws IOException {
+  if(card.getProjectId()!=null){resources.maintenance(card.getProjectId());card.setName(resources.project(card.getProjectId()).get("projectName").toString());}
+  mapper.ensureSequence();long current=mapper.lockSequence();String code=card.getNo()==null?"":card.getNo().trim();if(code.isEmpty()){long n=Math.max(current,mapper.maxCode())+1;code=String.format(java.util.Locale.ROOT,"%07d",n);mapper.sequence(n);}else if(mapper.usedCode(code)>0)throw new ServiceException("此维保卡编号已使用");if(code.matches("[0-9]{1,18}"))mapper.sequence(Math.max(current,Long.parseLong(code)));card.setNo(code);
+  Path path=Paths.get(renderer.genWBCard(card)).toAbsolutePath().normalize(),base=Paths.get(RuoYiConfig.getProfile()).toAbsolutePath().normalize();String url="/profile/"+base.relativize(path).toString().replace('\\','/');zjWBCard record=new zjWBCard();record.setCode(code);record.setTitle(card.getName());record.setFile(url);record.setPrintCheck("N");record.setSendCheck("N");record.setCreateBy(SecurityUtils.getUsername());record.setUpdateBy(SecurityUtils.getUsername());
+  try{cards.insertzjWBCard(record);mapper.reserve(code,record.getId());if(card.getProjectId()!=null){Map<String,Object> old=mapper.materials(card.getProjectId());Map<String,Object> v=new HashMap<>();v.put("cardId",record.getId());v.put("materialId",old==null?null:old.get("materialId"));v.put("version",card.getMaterialVersion());resources.material(card.getProjectId(),v);}String file=cards.selectzjWBCardById(record.getId()).getFile();return Map.of("id",record.getId(),"file",file,"code",code);}finally{Files.deleteIfExists(path);}
+ }
+}

@@ -4,6 +4,8 @@ import lombok.Data;
 
 @Data
 public class WBCard {
+    private Long projectId;
+    private Long materialVersion;
     private String name;
     private String company;
     private String leader;

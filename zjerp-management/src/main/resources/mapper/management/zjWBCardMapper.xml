@@ -40,6 +40,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="printCheck != null  and printCheck != ''"> and print_check = #{printCheck}</if>
             <if test="sendCheck != null  and sendCheck != ''"> and send_check = #{sendCheck}</if>
         </where>
+        <choose><when test="params.cardSort == 'code'">ORDER BY CASE WHEN code REGEXP '^[0-9]+$' THEN CAST(code AS DECIMAL(30,0)) END DESC,code DESC,id DESC</when><otherwise>ORDER BY create_time DESC,id DESC</otherwise></choose>
     </select>
 
     <select id="getPhoneList" resultMap="WBCardPhoneResult" parameterType="WBCardPhone">

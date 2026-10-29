@@ -9,6 +9,8 @@ public interface ISysFilePlusService {
     /** 上传文件，返回带 fileId 的完整记录 */
     SysFilePlus upload(MultipartFile file, String bizType, Long bizId) throws Exception;
 
+    SysFilePlus uploadInvoice(MultipartFile file, Long reimbursementId, String creator) throws Exception;
+
     /** 按 fileId 查询 */
     SysFilePlus getById(Long fileId);
 

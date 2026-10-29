@@ -10,5 +10,6 @@
 - [资料与脚本索引](INVENTORY.md)
 - [原生开发与 Codespaces](DEVELOPMENT.md)
 - [维保卡工作台及 PDFBox 排版](../WBCARD_WORKSPACE.md)
+- [项目文件、资料与财务工作台](PROJECT_FINANCE.md)
 
 业务源码保留在各Maven模块和前端src；SQL保留在后端sql；可复用的一次性业务迁移在scripts。前端视觉规范以其DESIGN_SYSTEM.md为准。本目录不替代这些实现。

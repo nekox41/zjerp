@@ -12,6 +12,7 @@ import top.aameow.common.enums.BusinessType;
 @RestController @RequestMapping("/management/work-project")
 public class WorkProjectController extends BaseController {
  @Autowired private WorkProjectService service;
+ @Autowired private top.aameow.management.service.ReimbursementService finance;
  @GetMapping("/list") @PreAuthorize("@ss.hasPermi('management:project:list')")
  public TableDataInfo list(@RequestParam Map<String,Object> q){if(!WorkProjectService.text(q,"projectType").isEmpty())service.type(WorkProjectService.text(q,"projectType"));startPage();return getDataTable(service.data().list(q));}
  @GetMapping("/contracts") @PreAuthorize("@ss.hasPermi('management:project:add') or @ss.hasPermi('management:project:edit')")
@@ -35,5 +36,5 @@ public class WorkProjectController extends BaseController {
  public AjaxResult plan(@PathVariable Long id,@RequestBody Map<String,Object> v){service.plan(id,v);return success();}
  @DeleteMapping("/{id}/plans/{planId}") @PreAuthorize("@ss.hasPermi('management:project:edit')") @Log(title="项目计划",businessType=BusinessType.DELETE)
  public AjaxResult removePlan(@PathVariable Long id,@PathVariable Long planId){service.removePlan(id,planId);return success();}
- @GetMapping("/{id}/expenses") @PreAuthorize("@ss.hasPermi('management:project:expenses')") public AjaxResult expenses(@PathVariable Long id){service.get(id);startPage();TableDataInfo table=getDataTable(service.data().expenses(id));AjaxResult r=success();r.put("rows",table.getRows());r.put("total",table.getTotal());r.put("summary",service.data().expenseSummary(id));r.put("legacySummary",service.data().expenseLegacy(id));r.put("users",service.data().expenseUsers(id));return r;}
+ @GetMapping("/{id}/expenses") @PreAuthorize("@ss.hasPermi('management:project:expenses')") public AjaxResult expenses(@PathVariable Long id){service.get(id);Map<String,Object> q=new HashMap<>();q.put("projectId",id);startPage();TableDataInfo table=getDataTable(finance.data().list(q));AjaxResult r=success();r.put("rows",table.getRows());r.put("total",table.getTotal());r.put("summary",finance.data().summary(q));r.put("users",finance.data().people(q));r.put("legacySummary",service.data().expenseLegacy(id));return r;}
 }

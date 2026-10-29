@@ -43,7 +43,28 @@ public class SysFilePlusServiceImpl implements ISysFilePlusService
         return record;
     }
 
+    @Override
+    @Transactional(rollbackFor=Exception.class)
+    public SysFilePlus uploadInvoice(MultipartFile file,Long reimbursementId,String creator) throws Exception {
+        if(file==null||file.isEmpty()||file.getSize()>10L*1024*1024)throw new ServiceException("发票不能为空且不能超过10MB");
+        if(file.getOriginalFilename()==null||file.getOriginalFilename().isBlank()||file.getOriginalFilename().length()>512)throw new ServiceException("发票文件名不能为空或超过512字");
+        FileUploadUtils.assertAllowed(file,new String[]{"pdf","png","jpg","jpeg"});
+        String ext=FileUploadUtils.getExtension(file).toLowerCase(Locale.ROOT);
+        byte[] head;try(InputStream in=file.getInputStream()){head=in.readNBytes(8);}
+        boolean pdf=head.length>=5&&new String(head,0,5,java.nio.charset.StandardCharsets.US_ASCII).equals("%PDF-");
+        boolean png=head.length>=8&&head[0]==(byte)137&&head[1]==80&&head[2]==78&&head[3]==71;
+        boolean jpg=head.length>=3&&head[0]==(byte)255&&head[1]==(byte)216&&head[2]==(byte)255;
+        if(!((ext.equals("pdf")&&pdf)||(ext.equals("png")&&png)||((ext.equals("jpg")||ext.equals("jpeg"))&&jpg)))throw new ServiceException("发票内容与PDF/图片格式不符");
+        SysFilePlus record;try(InputStream in=file.getInputStream()){record=store(in,file.getOriginalFilename(),ext,pdf?"application/pdf":png?"image/png":"image/jpeg",creator);}
+        record.setBizType("reimbursement_invoice");record.setBizId(reimbursementId);mapper.insert(record);return record;
+    }
+
     private SysFilePlus store(InputStream in, String name, String ext, String type) throws Exception
+    {
+        return store(in,name,ext,type,SecurityUtils.getUsername());
+    }
+
+    private SysFilePlus store(InputStream in,String name,String ext,String type,String creator) throws Exception
     {
         Path directory = Paths.get(RuoYiConfig.getProfile(), "files").toAbsolutePath().normalize();
         Files.createDirectories(directory);
@@ -84,7 +105,7 @@ public class SysFilePlusServiceImpl implements ISysFilePlusService
             record.setFileType(type == null ? "application/octet-stream" : type);
             record.setDelFlag("0");
             record.setCreateTime(top.aameow.common.utils.DateUtils.getNowDate());
-            record.setCreateBy(SecurityUtils.getUsername());
+            record.setCreateBy(creator);
             return record;
         }
         finally { Files.deleteIfExists(temp); }

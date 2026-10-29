@@ -2,7 +2,7 @@
 
 Java 17、Spring Boot 3、MyBatis、MySQL 8+、Redis。前端仓库：[zjerp_frontend](https://github.com/nekox41/zjerp_frontend)。
 
-当前业务包括角色权限、统一附件、用户资料、中间人、五类合同和五类项目。首页菜单由数据库下发，单独更新 Java/Vue 源码不会更新旧数据库菜单。
+当前业务包括角色权限、统一附件、用户资料、中间人、五类合同和项目、项目文件/资料、维保卡及财务报账。首页菜单由数据库下发，单独更新 Java/Vue 源码不会更新旧数据库菜单。
 
 ## 开发（含 Codespaces，不使用 Docker 运行应用）
 
