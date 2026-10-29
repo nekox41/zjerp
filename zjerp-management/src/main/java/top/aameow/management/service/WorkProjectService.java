@@ -27,7 +27,8 @@ public class WorkProjectService {
  private void basic(Map<String,Object> v,Map<String,Object> old){
   required(v,"projectName",255);type(text(v,"projectType"));
   Long contractId=number(v.get("contractId"));
-  if(contractId==null && (old==null || old.get("contractId")!=null))throw new ServiceException("请选择所属合同");
+  if(contractId!=null && contractId==0L)contractId=null;
+  if(contractId==null && !"0".equals(text(v,"contractId")) && (old==null || old.get("contractId")!=null))throw new ServiceException("请选择所属合同");
   if(contractId!=null){Map<String,Object> c=mapper.contract(contractId);if(c==null||!text(c,"projectType").equals(text(v,"projectType")))throw new ServiceException("请选择本项目类型的合同");}
   v.put("contractId",contractId);user(v,"leaderUserId");user(v,"technicalUserId");dates(v,"startDate","endDate");
   limit(v,"clientName",255);limit(v,"siteAddress",500);limit(v,"contactName",100);limit(v,"contactPhone",50);
@@ -38,9 +39,9 @@ public class WorkProjectService {
   mapper.sequence(year,type,next);return code;
  }
  @Transactional(rollbackFor=Exception.class)
- public Map<String,Object> create(Map<String,Object> v){basic(v,null);v.remove("id");v.put("projectNo",allocate(text(v,"projectType")));v.put("actor",SecurityUtils.getUsername());mapper.add(v);mapper.reserve(text(v,"projectNo"),number(v.get("id")));return get(number(v.get("id")));}
+ public Map<String,Object> create(Map<String,Object> v){basic(v,null);v.remove("id");String code=text(v,"projectNo");if(code.isEmpty())code=allocate(text(v,"projectType"));else {if(code.length()>255||code.chars().anyMatch(Character::isISOControl))throw new ServiceException("项目编号不能超过255字且不能包含控制字符");if(mapper.reserved(code)>0)throw new ServiceException("项目编号已使用，请核对后重新输入");}v.put("projectNo",code);v.put("actor",SecurityUtils.getUsername());mapper.add(v);mapper.reserve(text(v,"projectNo"),number(v.get("id")));return get(number(v.get("id")));}
  @Transactional(rollbackFor=Exception.class)
- public Map<String,Object> applyNumber(Long id){Map<String,Object> old=get(id);if(!Boolean.TRUE.equals(old.get("numberPending")) && !"1".equals(text(old,"numberPending")))throw new ServiceException("该项目已有正式编号");if(old.get("contractId")==null)throw new ServiceException("请先关联合同再申请正式编号");String code=allocate(text(old,"projectType"));if(mapper.replaceNumber(id,number(old.get("version")),code,SecurityUtils.getUsername())!=1)throw new ServiceException("项目已修改，请刷新重试");mapper.reserve(code,id);return get(id);}
+ public Map<String,Object> applyNumber(Long id){Map<String,Object> old=get(id);if(!Boolean.TRUE.equals(old.get("numberPending")) && !"1".equals(text(old,"numberPending")))throw new ServiceException("该项目已有正式编号");String code=allocate(text(old,"projectType"));if(mapper.replaceNumber(id,number(old.get("version")),code,SecurityUtils.getUsername())!=1)throw new ServiceException("项目已修改，请刷新重试");mapper.reserve(code,id);return get(id);}
  @Transactional(rollbackFor=Exception.class)
  public void saveSection(Long id,String section,Map<String,Object> v){
   Map<String,Object> old=get(id);v.put("id",id);v.put("section",section);v.put("actor",SecurityUtils.getUsername());
