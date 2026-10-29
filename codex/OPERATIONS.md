@@ -17,3 +17,7 @@ MySQL旧FLOAT的普通dump存在取值舍入风险，必须同时保存精确浮
 机器专用部署与验收脚本仍在B迁移目录/本地local-archive，不是日常启动入口。测试容器与有专用角色标记的隔离库仅在生产验收通过后清理；生产不提交测试报账。原表和原件继续保留，不能将退休模块的菜单/接口删除等同于删除审计数据。
 
 2026-10-29 23:16财务工作台发布：镜像zjerp-backend:20261029-ledger-ffd10349e5a9、zjerp-frontend:20261029-ledger-58ed7f9fa868。停前后端后备份数据库、精确浮点补充、文件及配置，执行finance_ledger.sql与finance_ledger_menus.sql，逐行核对原61张表，仅新增菜单/授权关联；无旧账回写。Compose以--no-deps切换前后端，没有重建数据库容器。源码和后续构建上下文已更新到本次source目录。真实隔离API浏览器回归及生产只读验收通过；测试财务数据仅在带专用角色标记的隔离库，验收后清理库、账号、容器和临时凭据。
+
+2026-10-29 23:41前端修复：当前前端镜像zjerp-frontend:20261029-api-616169e7b073，后端保持ffd10349e5a9。原公开模式配置被一次性源码打包器过度过滤，B构建产物丢失/prod-api前缀；已补齐前端.env.production、.env.development、.env.staging并修正打包器与源文件核对范围。不要把这些已跟踪的公开配置同后端私密.env混为一谈。Vite在缺少VITE_APP_BASE_API时拒绝启动/构建，缺失配置的负例检查通过。
+
+api-fix/before.env保留切换前配置；deployed.json、browser-validation.json记录当前镜像、实际镜像产物浏览器路径检查及80/8088接口探测。不再只测本地dist或手工访问/prod-api/health；发布必须检查待部署镜像生成的JS实际发起的接口路径。索引仍为no-store，更新后旧标签页需刷新加载新JS。该次仅替换前端，无数据库变更。

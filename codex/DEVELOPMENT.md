@@ -28,6 +28,8 @@ bash scripts/dev-backend.sh
 
 不要提交 `.env.dev`，也不要在日志或文档输出密码。
 
+前端仓库已跟踪的.env.production、.env.development、.env.staging是公开构建配置，必须随源码保留，不能套用后端私密.env的过滤规则。Vite要求VITE_APP_BASE_API存在；生产应为/prod-api，否则拒绝构建。容器发布需从实际镜像提取页面检查浏览器请求前缀，本地dist通过不能替代镜像产物验证。
+
 ## 2026-10-29 Codespaces 实际修复
 
 当前工作目录为 `/workspaces/codespaces-blank/zjerp`。两个子仓库已更新；原有 pom.xml、application.yml 的未提交修改和 ARCHITECTURE.md 均保留。现场没有原生 ERP 开发进程，只有旧后端容器，MySQL 的 server 库为空、sys_menu 不存在。现在已停止旧后端容器，在现有 MySQL 8 开发库初始化当前结构，使用 Java 17 全模块重新打包并原生运行，前端使用 Vite 的 8888 端口。
