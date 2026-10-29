@@ -25,6 +25,7 @@ services:
           -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -Nse
           'SELECT user_id FROM sys_user LIMIT 1; SELECT id FROM zj_work_project LIMIT 1;
           SELECT file_id FROM sys_file LIMIT 1; SELECT id FROM zj_contract_identity LIMIT 1;
+          SELECT id FROM zj_wbcard_material LIMIT 1;
           SELECT menu_id FROM sys_menu WHERE component="zhongji/projects/maintenance" LIMIT 1'
           > /dev/null
           && { [ "$$BOOTSTRAP_DATABASE" != true ] ||

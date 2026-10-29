@@ -1,81 +1,40 @@
 package top.aameow.generator.controller;
 
-import lombok.extern.slf4j.Slf4j;
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import top.aameow.common.annotation.Anonymous;
-import top.aameow.common.annotation.Log;
-import top.aameow.common.config.RuoYiConfig;
+import org.springframework.http.*;
 import top.aameow.common.core.controller.BaseController;
 import top.aameow.common.core.domain.AjaxResult;
-import top.aameow.common.core.page.TableDataInfo;
+import top.aameow.common.config.RuoYiConfig;
+import top.aameow.common.annotation.Log;
 import top.aameow.common.enums.BusinessType;
-import top.aameow.common.utils.DateUtils;
-import top.aameow.generator.domain.Template;
 import top.aameow.generator.domain.WBCard;
-import top.aameow.generator.service.TemplateService;
 import top.aameow.generator.util.WBCardUtils;
 import top.aameow.management.domain.zjWBCard;
 import top.aameow.management.service.IzjWBCardService;
 
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-
-@Slf4j
-@RestController
-@RequestMapping("/wbcard/gen")
+@RestController @RequestMapping("/wbcard/gen")
 public class WBCardController extends BaseController {
-
-    @Autowired
-    private WBCardUtils wbCardUtils;
-
-    @Autowired
-    private IzjWBCardService zjWBCardService;
-
-    @Autowired
-    private TemplateService templateService;
-
-    @Anonymous
-    @Log(title = "WBCard", businessType = BusinessType.OTHER)
-    @PostMapping("/create")
-    public AjaxResult createWBCard(@RequestBody WBCard card) {
-        String cardPath;
-        String attachmentPath;
-        try {
-            cardPath = wbCardUtils.genWBCard(card);
-            attachmentPath = wbCardUtils.genAttachment(card.getName(), card.getLeader());
-        } catch (IOException e) {
-            log.error("生成维保卡失败", e);
-            return AjaxResult.error("生成维保卡失败");
-        }
-        zjWBCard card1 = new zjWBCard();
-        card1.setCode(card.getNo());
-        card1.setTitle(card.getName());
-        if (cardPath != null && attachmentPath != null) {
-            cardPath = cardPath.replace(RuoYiConfig.getProfile(), "/profile");
-            attachmentPath =attachmentPath.replace(RuoYiConfig.getProfile(), "/profile");
-        }
-        card1.setFile(cardPath + "," + attachmentPath);
-        card1.setPrintCheck("N");
-        card1.setSendCheck("N");
-        card1.setCreateTime(DateUtils.getNowDate());
-        card1.setUpdateTime(DateUtils.getNowDate());
-        card1.setCreateBy(getNickname());
-        card1.setUpdateBy(getNickname());
-        zjWBCardService.insertzjWBCard(card1);
-        return AjaxResult.success("已创建维保卡。");
+    @Autowired private WBCardUtils renderer;
+    @Autowired private IzjWBCardService cards;
+    @PostMapping("/preview") @PreAuthorize("@ss.hasPermi('management:wbcard:add')")
+    public ResponseEntity<byte[]> preview(@RequestBody WBCard card) throws IOException {
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).cacheControl(CacheControl.noStore())
+            .header(HttpHeaders.CONTENT_DISPOSITION,"inline; filename=maintenance-card.pdf").body(renderer.render(card));
     }
-
-    /**
-     * 获取所有的维保卡模板
-     */
-    @Anonymous
-    @GetMapping("/listtemplate")
-    public TableDataInfo getTemplateList(String name) {
-        startPage();
-        List<Template> templateList = templateService.getTemplateList(name);
-        return getDataTable(templateList);
+    @PostMapping("/create") @PreAuthorize("@ss.hasPermi('management:wbcard:add')")
+    @Log(title="维保卡生成",businessType=BusinessType.INSERT)
+    public AjaxResult create(@RequestBody WBCard card) throws IOException {
+        Path path=Paths.get(renderer.genWBCard(card)).toAbsolutePath().normalize();
+        Path base=Paths.get(RuoYiConfig.getProfile()).toAbsolutePath().normalize();
+        String url="/profile/"+base.relativize(path).toString().replace('\\','/');
+        zjWBCard record=new zjWBCard();record.setCode(card.getNo());record.setTitle(card.getName());record.setFile(url);
+        record.setPrintCheck("N");record.setSendCheck("N");record.setCreateBy(getUsername());record.setUpdateBy(getUsername());
+        try {cards.insertzjWBCard(record);} catch(RuntimeException ex){Files.deleteIfExists(path);throw ex;}
+        return success(Map.of("id",record.getId(),"file",url));
     }
 }

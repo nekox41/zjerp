@@ -1,155 +1,87 @@
 package top.aameow.generator.util;
 
-import com.itextpdf.forms.PdfAcroForm;
-import com.itextpdf.forms.fields.PdfFormField;
-import com.itextpdf.kernel.font.PdfFont;
-import com.itextpdf.kernel.font.PdfFontFactory;
-import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.kernel.pdf.PdfPage;
-import com.itextpdf.kernel.pdf.PdfReader;
-import com.itextpdf.kernel.pdf.PdfWriter;
-import com.itextpdf.layout.Document;
-import com.itextpdf.layout.element.Paragraph;
-import com.itextpdf.layout.properties.TextAlignment;
-import com.itextpdf.layout.properties.VerticalAlignment;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import org.apache.pdfbox.pdmodel.*;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.springframework.stereotype.Component;
 import top.aameow.common.config.RuoYiConfig;
-import top.aameow.common.constant.Constants;
-import top.aameow.common.utils.DateUtils;
-import top.aameow.generator.domain.Template;
+import top.aameow.common.exception.ServiceException;
 import top.aameow.generator.domain.WBCard;
-import top.aameow.generator.service.TemplateService;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-
+/** A4 landscape, measured Unicode text; no AcroForms or generated attachment. */
 @Component
 public class WBCardUtils {
-    @Autowired
-    private TemplateService templateService;
-
-    private static final String WB_CARD_ROOT_PATH = RuoYiConfig.getProfile() + "/wbcard/";
-    private static final String TEMPLATE = "./wbcard/templates/wbcard.pdf";
-    private static final String FONT_PATH = "./wbcard/font/SourceHanSerifSC-Medium.otf";
-
-    public String genWBCard(WBCard card) throws IOException {
-        // 创建维保卡并返回文件路径
-        String rootPath = WB_CARD_ROOT_PATH + card.getName();
-        Path path = Paths.get(rootPath);
-        if (!Files.exists(path)) {
-            Files.createDirectories(path);
-            System.out.println("文件夹创建成功: " + rootPath);
-        } else {
-            System.out.println("文件夹已存在: " + rootPath);
-        }
-        String filePath = rootPath + "/card_" + DateUtils.dateTimeNow() + ".pdf";
-        PdfDocument doc = new PdfDocument(new PdfReader(TEMPLATE),
-                new PdfWriter(filePath));
-
-        // 2. 填充表单
-        PdfAcroForm form = PdfAcroForm.getAcroForm(doc, false);
-        if (form == null) {
-            throw new IOException("表单不存在");
-        }
-
-        fill(card.getName(),
-                form.getField("name"),
-                TextAlignment.CENTER);
-
-        fill(card.getCompany(),
-                form.getField("company"),
-                TextAlignment.CENTER);
-
-        fill(card.getLeader(),
-                form.getField("leader"),
-                TextAlignment.CENTER);
-
-        fill(card.getPhone(),
-                form.getField("phone"),
-                TextAlignment.CENTER);
-
-        fill(card.getSystem1(),
-                form.getField("system1"),
-                TextAlignment.LEFT);
-
-        fill(card.getSystem2(),
-                form.getField("system2"),
-                TextAlignment.LEFT);
-
-        fill(card.getTime(),
-                form.getField("time"),
-                TextAlignment.CENTER);
-
-        fill(card.getNo(),
-                form.getField("no"),
-                TextAlignment.CENTER);
-
-        form.flattenFields();
-        doc.close();
-        return filePath;
-    }
-
-    public String genAttachment(String name, String leader) throws IOException {
-        String rootPath = WB_CARD_ROOT_PATH + name;
-        Path path = Paths.get(rootPath);
-        String filePath = rootPath + "/attachment.pdf";
-
-        if (!Files.exists(path)) {
-            Files.createDirectories(path);
-            System.out.println("文件夹创建成功: " + rootPath);
-        } else {
-            System.out.println("文件夹已存在: " + rootPath);
-            if (Files.exists(Paths.get(filePath))) {
-                System.out.println("文件已存在: " + filePath);
-                return filePath;
+    private static final float SCALE=841.89f/1888f, HEIGHT=595.28f;
+    private final Path templatePath,fontPath;
+    public WBCardUtils(){this(Paths.get("./wbcard/templates/card.png"),Paths.get("./wbcard/font/NotoSansSC-Regular.ttf"));}
+    public WBCardUtils(Path templatePath,Path fontPath){this.templatePath=templatePath;this.fontPath=fontPath;}
+    public byte[] render(WBCard card) throws IOException {
+        required(card.getName(),"项目名称",255);required(card.getCompany(),"维保机构",255);
+        required(card.getLeader(),"负责人",100);required(card.getPhone(),"联系电话",255);
+        required(card.getNo(),"维保卡编号",100);required(card.getTime(),"维保日期",200);
+        String systems=Objects.toString(card.getSystem1(),"")+ (card.getSystem2()==null?"":"\n"+card.getSystem2());
+        required(systems,"维护保养内容",4000);
+        try(PDDocument doc=new PDDocument(); ByteArrayOutputStream out=new ByteArrayOutputStream()) {
+            PDPage page=new PDPage(new PDRectangle(841.89f,HEIGHT));doc.addPage(page);
+            PDType0Font font=PDType0Font.load(doc,fontPath.toFile());
+            try(PDPageContentStream stream=new PDPageContentStream(doc,page)) {
+                stream.drawImage(PDImageXObject.createFromFile(templatePath.toString(),doc),0,0,841.89f,HEIGHT);
+                box(stream,font,card.getName(),390,385,390,100,"项目名称");
+                box(stream,font,card.getCompany(),1385,385,380,100,"维保机构");
+                box(stream,font,card.getLeader(),445,525,335,85,"负责人");
+                box(stream,font,card.getPhone(),1110,525,655,85,"联系电话");
+                // Each printed underline has its own box; wrap across these measured widths.
+                flow(stream,font,systems,new float[][]{{505,650,1260,90},{130,775,1635,90}},"维护保养内容");
+                box(stream,font,card.getTime(),505,900,1260,90,"维保日期");
+                box(stream,font,card.getNo(),1565,1195,205,45,"维保卡编号");
             }
-        }
-
-        // 根据 leader 决定读取哪个文件
-        Template template = templateService.getTemplateByName(leader);
-
-        PdfFont font = PdfFontFactory.createFont(FONT_PATH, "Identity-H", PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED);
-
-        // 读取文件并创建生成
-        PdfDocument doc = new PdfDocument(new PdfReader(template.getFile()), new PdfWriter(filePath));
-        Document document = new Document(doc);
-        PdfPage firstPage = doc.getFirstPage();
-        float width = firstPage.getPageSize().getWidth();
-        float height = firstPage.getPageSize().getHeight();
-
-
-        Paragraph paragraph = new Paragraph("仅限" + name + "项目使用  再次复印无效");
-        paragraph.setOpacity(0.3f);
-//        paragraph.setRotationAngle(-45.0f);
-        paragraph.setFont(font);
-        paragraph.setFontSize(32);
-        paragraph.setWidth(500);
-
-        for (int i = 1; i <= doc.getNumberOfPages(); i++) {
-            document.showTextAligned(paragraph,
-                    width / 2,
-                    height / 2,
-                    i,
-                    TextAlignment.CENTER,
-                    VerticalAlignment.MIDDLE,
-                    -45);
-        }
-        document.close();
-        doc.close();
-
-        return filePath;
+            doc.getDocumentInformation().setTitle(card.getName()+" - 消防维护保养公示卡");
+            doc.getDocumentInformation().setCreator("ZJERP / Apache PDFBox");doc.save(out);return out.toByteArray();
+        } catch(IllegalArgumentException ex) {throw new ServiceException("内容包含字体不支持的字符，请替换后重试");}
     }
-
-
-    private static void fill(String value, PdfFormField field, TextAlignment justification) throws IOException {
-        PdfFont font = PdfFontFactory.createFont(FONT_PATH, "Identity-H", PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED);
-        field.setFont(font);
-        field.setFontSize(14);
-        field.setJustification(justification);
-        field.setValue(value);
-        field.setReadOnly(true);
+    private static void required(String s,String label,int max) {
+        if(s==null||s.isBlank()||s.length()>max)throw new ServiceException(label+"不能为空且不能超过"+max+"字");
+        if(s.codePoints().anyMatch(c->Character.isISOControl(c)&&c!='\n'&&c!='\r'&&c!='\t'))throw new ServiceException(label+"包含无效控制字符");
+    }
+    static List<String> wrap(PDType0Font font,String text,float size,float width) throws IOException {
+        List<String> result=new ArrayList<>();StringBuilder line=new StringBuilder();
+        for(int cp:text.replace("\r","").replace('\t',' ').codePoints().toArray()) {
+            if(cp=='\n'){result.add(line.toString());line.setLength(0);continue;}
+            String next=new String(Character.toChars(cp));
+            if(font.getStringWidth(line+next)*size/1000f>width && line.length()>0){result.add(line.toString());line.setLength(0);}
+            if(font.getStringWidth(next)*size/1000f>width)throw new ServiceException("文字超出可打印区域");
+            line.append(next);
+        }
+        if(line.length()>0)result.add(line.toString());return result;
+    }
+    private static void box(PDPageContentStream s,PDType0Font f,String text,float x,float y,float w,float h,String label) throws IOException {
+        flow(s,f,text,new float[][]{{x,y,w,h}},label);
+    }
+    private static void flow(PDPageContentStream s,PDType0Font f,String text,float[][] regions,String label) throws IOException {
+        for(float size=14;size>=7;size-=0.5f){
+            String remaining=text.replace("\r","").strip();List<List<String>> all=new ArrayList<>();
+            for(float[] r:regions){
+                List<String> lines=wrap(f,remaining,size,r[2]*SCALE);int capacity=Math.max(1,(int)(r[3]*SCALE/(size*1.25f)));
+                int take=Math.min(capacity,lines.size());all.add(new ArrayList<>(lines.subList(0,take)));
+                remaining=String.join("\n",lines.subList(take,lines.size()));
+            }
+            if(!remaining.isEmpty())continue;
+            for(int i=0;i<regions.length;i++){
+                float[] r=regions[i];List<String> lines=all.get(i);float top=HEIGHT-r[1]*SCALE;
+                float baseline=top-r[3]*SCALE+size*0.22f+(lines.size()-1)*size*1.25f;
+                for(String line:lines){s.beginText();s.setFont(f,size);float width=f.getStringWidth(line)*size/1000f;
+                    s.newLineAtOffset(r[0]*SCALE+(r[2]*SCALE-width)/2,baseline);s.showText(line);s.endText();baseline-=size*1.25f;}
+            }
+            return;
+        }
+        throw new ServiceException(label+"过长，缩小至最小字号后仍无法完整排版，请精简内容；没有生成截断文件");
+    }
+    public String genWBCard(WBCard card) throws IOException {
+        byte[] pdf=render(card);Path directory=Paths.get(RuoYiConfig.getProfile(),"wbcard",java.time.LocalDate.now().toString());
+        Files.createDirectories(directory);Path target=directory.resolve(UUID.randomUUID()+".pdf");Files.write(target,pdf,StandardOpenOption.CREATE_NEW);return target.toString();
     }
 }
