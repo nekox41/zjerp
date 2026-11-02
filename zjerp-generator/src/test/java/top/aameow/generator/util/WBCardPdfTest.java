@@ -9,6 +9,7 @@ import javax.imageio.ImageIO;
 import top.aameow.generator.domain.WBCard;
 import top.aameow.common.exception.ServiceException;
 class WBCardPdfTest {
+ @Test void normalizesContactPhoneAndDates(){assertEquals("0371-53392119/13800138000",WBCardUtils.phone("13800138000"));assertEquals("0371-53392119/13800138000",WBCardUtils.phone("0371-53392119 / 13800138000"));assertEquals("2026年11月01日至2027年10月31日",WBCardUtils.dates("2026-11-01 至 2027-10-31"));}
  private final Path root=Paths.get("..").toAbsolutePath().normalize();
  private WBCardUtils renderer(){return new WBCardUtils(root.resolve("wbcard/templates/card.png"),root.resolve("wbcard/font/NotoSansSC-Regular.ttf"));}
  private WBCard sample(){WBCard c=new WBCard();c.setNo("202610290001");c.setName("郑州市高新技术产业开发区综合服务中心一号楼及地下停车场消防设施维护保养项目");c.setCompany("河南众基消防技术有限公司");c.setLeader("张三、李四");c.setPhone("0371-12345678 / 13800138000");c.setSystem1("火灾自动报警系统、火灾应急照明及疏散指示系统、消防电话系统、消防广播系统、消防电梯系统、消防供电设施、消防供水系统、自动喷水灭火系统、消火栓系统、机械排烟系统、机械加压送风系统、防火分隔设施、电气火灾监控系统、气体灭火系统、灭火器（检查）");c.setTime("2026年10月29日 至 2027年10月28日");return c;}

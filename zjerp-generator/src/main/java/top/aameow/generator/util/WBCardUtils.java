@@ -33,15 +33,25 @@ public class WBCardUtils {
                 box(stream,font,card.getName(),390,385,390,100,"项目名称");
                 box(stream,font,card.getCompany(),1385,385,380,100,"维保机构");
                 box(stream,font,card.getLeader(),445,525,335,85,"负责人");
-                box(stream,font,card.getPhone(),1110,525,655,85,"联系电话");
+                box(stream,font,phone(card.getPhone()),1110,525,655,85,"联系电话");
                 // Each printed underline has its own box; wrap across these measured widths.
                 flow(stream,font,systems,new float[][]{{505,650,1260,90},{130,775,1635,90}},"维护保养内容");
-                box(stream,font,card.getTime(),505,900,1260,90,"维保日期");
+                box(stream,font,dates(card.getTime()),505,900,1260,90,"维保日期");
                 box(stream,font,card.getNo(),1565,1195,205,45,"维保卡编号");
             }
             doc.getDocumentInformation().setTitle(card.getName()+" - 消防维护保养公示卡");
             doc.getDocumentInformation().setCreator("ZJERP / Apache PDFBox");doc.save(out);return out.toByteArray();
         } catch(IllegalArgumentException ex) {throw new ServiceException("内容包含字体不支持的字符，请替换后重试");}
+    }
+    static String phone(String value) {
+        String personal=value.strip().replaceFirst("^0371-53392119\\s*[/／]\\s*", "");
+        return personal.equals("0371-53392119")?personal:"0371-53392119/"+personal;
+    }
+    static String dates(String value) {
+        java.util.regex.Matcher m=java.util.regex.Pattern.compile("(\\d{4})[-年](\\d{1,2})[-月](\\d{1,2})日?").matcher(value);
+        java.util.List<String> parts=new java.util.ArrayList<>();
+        while(m.find()) {java.time.LocalDate day=java.time.LocalDate.of(Integer.parseInt(m.group(1)),Integer.parseInt(m.group(2)),Integer.parseInt(m.group(3)));parts.add(day.format(java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日")));}
+        return parts.size()==2?String.join("至",parts):value.replace(" 至 ","至");
     }
     private static void required(String s,String label,int max) {
         if(s==null||s.isBlank()||s.length()>max)throw new ServiceException(label+"不能为空且不能超过"+max+"字");
@@ -65,9 +75,9 @@ public class WBCardUtils {
         for(float size=14;size>=7;size-=0.5f){
             String remaining=text.replace("\r","").strip();List<List<String>> all=new ArrayList<>();
             for(float[] r:regions){
-                List<String> lines=wrap(f,remaining,size,r[2]*SCALE);int capacity=Math.max(1,(int)(r[3]*SCALE/(size*1.25f)));
+                List<String> lines=wrap(f,remaining,size,r[2]*SCALE);int capacity=regions.length>1?1:Math.max(1,(int)(r[3]*SCALE/(size*1.25f)));
                 int take=Math.min(capacity,lines.size());all.add(new ArrayList<>(lines.subList(0,take)));
-                remaining=String.join("\n",lines.subList(take,lines.size()));
+                remaining=String.join(regions.length>1?"":"\n",lines.subList(take,lines.size()));
             }
             if(!remaining.isEmpty())continue;
             for(int i=0;i<regions.length;i++){
