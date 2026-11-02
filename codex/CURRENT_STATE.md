@@ -29,3 +29,5 @@
 当前镜像：zjerp-backend:20261029-ledger-ffd10349e5a9、zjerp-frontend:20261029-ledger-58ed7f9fa868。当前源码 /vol2/zjerp-migration/finance-ledger-20261029/source；备份 post-migration-20261029-231524。原61张表的既有行逐行核对保留；没有编造历史账户、流水和开票。13组隔离接口检查、前后端构建和既有Maven测试、空库初始化、真实隔离API的390px手机选择/提交及六个财务标签页浏览器检查、最终Nginx转发和生产只读验收均通过。新维护权限zhongji:finance:ledger由管理员分配。详见FINANCE_LEDGER.md。
 
 2026-10-29 23:41前端热修复：用户报告zjxf.local出现405。日志证实GET /getInfo被当作静态页面，随后POST /logout返回405；B的源码打包遗漏前端公开的.env.production，导致构建缺少VITE_APP_BASE_API。已补回三份公开模式配置并重新构建；当前前端镜像改为zjerp-frontend:20261029-api-616169e7b073，后端和业务数据不变。Vite新增缺少接口前缀即拒绝构建的校验。此前接口/Nginx验收及本地产物浏览器测试没有覆盖B镜像JS运行路径，本次补充实际B镜像提取产物的浏览器路径检查，明确断言/prod-api/getInfo及财务、手机接口前缀。域名80及8088的页面和接口JSON检查通过，记录在finance-ledger-20261029/api-fix。
+
+2026-11-02补充：上述维保改动已于15:18部署机器B，前后端构建、PDF样张、隔离接口及生产验收通过。当前镜像、备份和验证边界见 [MAINTENANCE_RELEASE_20261102.md](MAINTENANCE_RELEASE_20261102.md)。
