@@ -8,7 +8,7 @@ public interface WorkProjectMapper {
  @Select("select "+COLUMNS+",p.details_json detailsJson,p.registration_json registrationJson,p.remark"+FROM+"where p.id=#{id}") Map<String,Object> get(Long id);
  @Select("select id,contract_type projectType from zj_contract_identity where id=#{id}") Map<String,Object> contract(Long id);
  @Select("select user_id from sys_user where user_id=#{id} and status='0' and del_flag='0'") Long user(Long id);
- @Select("select id,contract_id contractNo,contract_name contractName from zj_contract where contract_type=#{projectType} and (contract_name like concat('%',#{name},'%') or contract_id like concat('%',#{name},'%')) order by id desc") List<Map<String,Object>> contracts(Map<String,Object> q);
+ @Select("select id,contract_id contractNo,contract_name contractName,contract_file contractFile from zj_contract where contract_type=#{projectType} and (contract_name like concat('%',#{name},'%') or contract_id like concat('%',#{name},'%')) order by id desc") List<Map<String,Object>> contracts(Map<String,Object> q);
  @Select("select user_id id,nick_name name,user_name username from sys_user where status='0' and del_flag='0' and (nick_name like concat('%',#{name},'%') or user_name like concat('%',#{name},'%')) order by user_id") List<Map<String,Object>> users(String name);
  @Insert("insert into zj_work_project_sequence(number_year,project_type,sequence_value) values(#{year},#{type},0) on duplicate key update sequence_value=sequence_value") int ensureSequence(@Param("year") int year,@Param("type") String type);
  @Select("select sequence_value from zj_work_project_sequence where number_year=#{year} and project_type=#{type} for update") Long lockSequence(@Param("year") int year,@Param("type") String type);

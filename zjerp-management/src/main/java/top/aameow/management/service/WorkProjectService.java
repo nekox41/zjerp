@@ -30,6 +30,7 @@ public class WorkProjectService {
   if(contractId!=null && contractId==0L)contractId=null;
   if(contractId==null && !"0".equals(text(v,"contractId")) && (old==null || old.get("contractId")!=null))throw new ServiceException("请选择所属合同");
   if(contractId!=null){Map<String,Object> c=mapper.contract(contractId);if(c==null||!text(c,"projectType").equals(text(v,"projectType")))throw new ServiceException("请选择本项目类型的合同");}
+  if("WB".equals(text(v,"projectType"))&&Long.valueOf(1).equals(number(v.get("leaderUserId")))&&(old==null||!Objects.equals(number(old.get("leaderUserId")),number(v.get("leaderUserId")))))throw new ServiceException("开发账号不能作为维护保养项目负责人");
   v.put("contractId",contractId);user(v,"leaderUserId");user(v,"technicalUserId");dates(v,"startDate","endDate");
   limit(v,"clientName",255);limit(v,"siteAddress",500);limit(v,"contactName",100);limit(v,"contactPhone",50);
  }
@@ -56,7 +57,19 @@ public class WorkProjectService {
   else if("registration".equals(section)){
    if(!(v.get("registration") instanceof Map))throw new ServiceException("登记信息格式无效");
    @SuppressWarnings("unchecked") Map<String,Object> r=(Map<String,Object>)v.get("registration");
+   if("WB".equals(text(old,"projectType"))){
+    if(!(r.get("entries") instanceof List))throw new ServiceException("请填写登记记录列表");
+    List<?> entries=(List<?>)r.get("entries");if(entries.size()>300)throw new ServiceException("登记记录不能超过300条");Set<String> ids=new HashSet<>();
+    for(Object entry:entries){if(!(entry instanceof Map))throw new ServiceException("登记记录格式无效");
+     @SuppressWarnings("unchecked") Map<String,Object> row=(Map<String,Object>)entry;
+     required(row,"title",200);required(row,"id",64);if(!ids.add(text(row,"id")))throw new ServiceException("登记记录编号重复");
+     choice(row,"planType","monthly","quarterly","annual");try{java.time.YearMonth.parse(text(row,"period"));}catch(Exception e){throw new ServiceException("请选择登记月份");}
+     for(String flag:List.of("issued","reviewed","approved","filed","printed"))if(!(row.get(flag) instanceof Boolean))throw new ServiceException("登记状态必须为是或否");
+    }
+    String registrationPayload=object(r,60000);if(registrationPayload.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>60000)throw new ServiceException("登记内容过多，请精简记录名称");v.put("registrationJson",registrationPayload);
+   }else{
    choice(r,"visitStatus","unknown","not_started","visited","completed");choice(r,"reportStatus","unknown","not_started","in_progress","completed");date(r,"visitDate");date(r,"reportDate");limit(r,"reportNo",255);limit(r,"notes",5000);v.put("registrationJson",object(r,10000));
+   }
   } else if("notes".equals(section)) limit(v,"remark",10000);
   else throw new ServiceException("不支持的项目页面");
   if(mapper.section(v)!=1)throw new ServiceException("项目已被其他人修改，请刷新后重试");
