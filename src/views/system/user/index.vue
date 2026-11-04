@@ -69,7 +69,7 @@
               </el-table-column>
               <el-table-column label="操作" align="center" width="210" class-name="small-padding fixed-width">
                 <template #default="scope">
-                  <el-button link type="primary" v-hasPermi="['system:user:edit']" @click="materialsDialog.show(scope.row)">资料</el-button>
+                  
                   <el-tooltip content="修改" placement="top" v-if="scope.row.userId !== 1">
                     <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['system:user:edit']"></el-button>
                   </el-tooltip>
@@ -188,12 +188,10 @@
         </div>
       </template>
     </el-dialog>
-    <UserMaterials ref="materialsDialog" />
   </div>
 </template>
 
 <script setup name="User">
-import UserMaterials from "@/components/UserMaterials/index.vue";
 const materialsDialog=ref();
 import { getToken } from "@/utils/auth";
 import { changeUserStatus, listUser, resetUserPwd, delUser, getUser, updateUser, addUser } from "@/api/system/user";
