@@ -23,14 +23,13 @@ public class WorkProjectService {
  private void date(Map<String,Object> v,String key){String value=text(v,key);if(value.isEmpty()){v.put(key,null);return;}try{LocalDate.parse(value);}catch(Exception e){throw new ServiceException("日期格式应为YYYY-MM-DD");}}
  private void dates(Map<String,Object> v,String start,String end){date(v,start);date(v,end);if(v.get(start)!=null&&v.get(end)!=null&&text(v,end).compareTo(text(v,start))<0)throw new ServiceException("结束日期不能早于开始日期");}
  private void choice(Map<String,Object> v,String key,String... values){if(!Arrays.asList(values).contains(text(v,key)))throw new ServiceException("无效的"+key);}
- private void user(Map<String,Object> v,String key){Long id=number(v.get(key));if(id!=null&&mapper.user(id)==null)throw new ServiceException("所选用户不存在或已停用");v.put(key,id);}
+ private void user(Map<String,Object> v,String key){Long id=number(v.get(key));if(id!=null&&mapper.user(id)==null)throw new ServiceException("所选员工不存在或已停用");v.put(key,id);}
  private void basic(Map<String,Object> v,Map<String,Object> old){
   required(v,"projectName",255);type(text(v,"projectType"));
   Long contractId=number(v.get("contractId"));
   if(contractId!=null && contractId==0L)contractId=null;
   if(contractId==null && !"0".equals(text(v,"contractId")) && (old==null || old.get("contractId")!=null))throw new ServiceException("请选择所属合同");
   if(contractId!=null){Map<String,Object> c=mapper.contract(contractId);if(c==null||!text(c,"projectType").equals(text(v,"projectType")))throw new ServiceException("请选择本项目类型的合同");}
-  if("WB".equals(text(v,"projectType"))&&Long.valueOf(1).equals(number(v.get("leaderUserId")))&&(old==null||!Objects.equals(number(old.get("leaderUserId")),number(v.get("leaderUserId")))))throw new ServiceException("开发账号不能作为维护保养项目负责人");
   v.put("contractId",contractId);user(v,"leaderUserId");user(v,"technicalUserId");dates(v,"startDate","endDate");
   limit(v,"clientName",255);limit(v,"siteAddress",500);limit(v,"contactName",100);limit(v,"contactPhone",50);
  }

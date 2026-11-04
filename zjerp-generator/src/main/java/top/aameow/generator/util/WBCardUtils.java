@@ -84,7 +84,7 @@ public class WBCardUtils {
                 float[] r=regions[i];List<String> lines=all.get(i);float top=HEIGHT-r[1]*SCALE;
                 float baseline=top-r[3]*SCALE+size*0.22f+(lines.size()-1)*size*1.25f;
                 for(String line:lines){s.beginText();s.setFont(f,size);float width=f.getStringWidth(line)*size/1000f;
-                    s.newLineAtOffset(r[0]*SCALE+(r[2]*SCALE-width)/2,baseline);s.showText(line);s.endText();baseline-=size*1.25f;}
+                    s.newLineAtOffset(r[0]*SCALE+(regions.length>1?0:(r[2]*SCALE-width)/2),baseline);s.showText(line);s.endText();baseline-=size*1.25f;}
             }
             return;
         }

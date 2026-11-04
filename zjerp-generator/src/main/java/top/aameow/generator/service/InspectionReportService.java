@@ -34,9 +34,14 @@ public class InspectionReportService {
   Path base=Paths.get(RuoYiConfig.getProfile()).toRealPath(),p=base.resolve(f.getFilePath()).normalize().toRealPath();
   if(!p.startsWith(base)||Files.size(p)>30L*1024*1024)throw new ServiceException("附件路径无效或超过30MB");return p;
  }
+ @org.springframework.beans.factory.annotation.Autowired private top.aameow.management.mapper.EmployeeMapper employees;
+ private String employeeName(Object key){Long id=WorkProjectService.number(key);Map<String,Object> e=id==null?null:employees.get(id);if(e==null||!(Boolean.TRUE.equals(e.get("active"))||"1".equals(String.valueOf(e.get("active")))))throw new ServiceException("请选择有效员工");return String.valueOf(e.get("name"));}
  Map<String,Object> prepare(Map<String,Object> input) throws Exception {
   if(json.writeValueAsBytes(input).length>500000)throw new ServiceException("报告内容过多");
   Map<String,Object> v=new LinkedHashMap<>(input);Long id=WorkProjectService.number(v.get("projectId"));Map<String,Object> p=projects.get(id);
+  if(v.containsKey("employeeRoleIds")){
+   if(!(v.get("employeeRoleIds") instanceof Map<?,?> roles))throw new ServiceException("人员角色格式无效");Object inspectors=roles.get("inspectors");if(!(inspectors instanceof List<?> ids)||ids.size()>30)throw new ServiceException("检测人员格式无效");List<String> names=new ArrayList<>();for(Object key:ids)names.add(employeeName(key));v.put("inspectors",String.join("、",names));for(String role:List.of("reviewer","approver"))v.put(role,roles.get(role)==null?"":employeeName(roles.get(role)));
+  }
   if(!"JC".equals(p.get("projectType")))throw new ServiceException("请选择检测项目");v.put("project",p);
   if(text(v,"reportNo").isEmpty()||text(v,"reportNo").length()>100)throw new ServiceException("请填写报告编号（最多100字）");
   try{LocalDate.parse(text(v,"reportDate"));}catch(Exception e){throw new ServiceException("请填写有效报告日期");}

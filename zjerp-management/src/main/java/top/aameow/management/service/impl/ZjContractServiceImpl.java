@@ -64,6 +64,7 @@ public class ZjContractServiceImpl implements IZjContractService
     {
         validate(zjContract, false);
         zjContractMapper.allocateId(zjContract);
+        if(zjContract.getContractId()==null||zjContract.getContractId().isBlank()) zjContract.setContractId("ZJHT"+java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE)+zjContract.getContractType()+String.format(java.util.Locale.ROOT,"%06d",zjContract.getId()));
         int rows = zjContractMapper.insertZjContract(zjContract);
         if (rows > 0)
         {
@@ -152,8 +153,8 @@ public class ZjContractServiceImpl implements IZjContractService
             if(previous==null || previous.getAmount()==null || previous.getAmount().compareTo(c.getAmount())!=0) throw new top.aameow.common.exception.ServiceException("金额最多两位小数");
         }
         if(c.getRemark()!=null && c.getRemark().length()>5000) throw new top.aameow.common.exception.ServiceException("文本超出长度限制");
-        if(c.getContractName()==null || c.getContractName().isBlank() || c.getContractName().length()>255) throw new top.aameow.common.exception.ServiceException("请填写合同名称，最多255字符");
-        if(c.getContractId()==null || c.getContractId().isBlank() || c.getContractId().length()>255) throw new top.aameow.common.exception.ServiceException("请填写合同编号，最多255字符");
+        if(c.getContractName()!=null && c.getContractName().length()>255) throw new top.aameow.common.exception.ServiceException("合同名称最多255字符");
+        if((editing&&(c.getContractId()==null||c.getContractId().isBlank()))||(c.getContractId()!=null&&c.getContractId().length()>255)) throw new top.aameow.common.exception.ServiceException("合同编号不能清空且最多255字符");
         if(c.getAmount()!=null && (c.getAmount().signum()<0 || c.getAmount().precision()-c.getAmount().scale()>13)) throw new top.aameow.common.exception.ServiceException("合同金额超出范围");
         if(c.getStartTime()!=null && c.getEndTime()!=null && c.getEndTime().before(c.getStartTime())) throw new top.aameow.common.exception.ServiceException("结束日期不能早于开始日期");
         if(c.getOwnership()==null) c.setOwnership("pending");
