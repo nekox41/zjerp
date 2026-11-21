@@ -48,6 +48,10 @@ class DumpInspectorTest {
 
         assertEquals(3L, sample.get("rowCount"));
         assertEquals(0L, empty.get("rowCount"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) sample.get("columns");
+        assertEquals(false, columns.get(0).get("nullable"));
+        assertEquals(true, columns.get(1).get("nullable"));
         assertFalse(manifest.toString().contains("comma, parentheses"));
     }
 
