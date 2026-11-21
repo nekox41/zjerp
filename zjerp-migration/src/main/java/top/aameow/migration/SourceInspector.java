@@ -35,6 +35,10 @@ public final class SourceInspector {
     }
 
     public static void main(String[] args) {
+        if (args.length > 0 && "--preflight".equals(args[0])) {
+            ManifestPreflight.main(Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
         if (args.length > 0 && "--dump".equals(args[0])) {
             DumpInspector.main(Arrays.copyOfRange(args, 1, args.length));
             return;
@@ -271,7 +275,7 @@ public final class SourceInspector {
                 ZJERP migration source tools
 
                 Usage:
-                  java -jar zjerp-migration.jar --dump --file <mysqldump.sql> [--output <manifest.json>]
+                  java -jar zjerp-migration.jar --preflight --manifest <manifest.json> --baseline <baseline.json> [--output <report.json>]\n                  java -jar zjerp-migration.jar --dump --file <mysqldump.sql> [--output <manifest.json>]
                   java -jar zjerp-migration.jar --url <mysql-jdbc-url> --user <read-only-user>
                     [--password-env ZJERP_SOURCE_DB_PASSWORD]
                     [--database <database-name>]
