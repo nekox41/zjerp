@@ -1,6 +1,6 @@
 <template>
  <main class="zj-workspace">
-  <header class="zj-heading"><div><div class="zj-eyebrow">众基消防 / 合同管理</div><h1>{{title}}</h1><p>归集合同信息、付款安排与文件，让每一笔业务清晰可查。</p></div><div><el-button :loading="saving" @click="createBlank" v-hasPermi="['management:contract:add']">创建空白合同</el-button><el-button type="primary" icon="Plus" @click="create" v-hasPermi="['management:contract:add']">新建合同</el-button></div></header>
+  <ZjPageHeader eyebrow="众基消防 / 合同管理" :title="title" description="归集合同信息、付款安排与文件，让每一笔业务清晰可查。"><template #actions><el-button :loading="saving" @click="createBlank" v-hasPermi="['management:contract:add']">创建空白合同</el-button><el-button type="primary" icon="Plus" @click="create" v-hasPermi="['management:contract:add']">新建合同</el-button></template></ZjPageHeader>
   <section class="zj-card"><div class="zj-filters"><el-input v-model="query.contractName" aria-label="合同名称" placeholder="搜索合同名称" clearable @keyup.enter="search"/><el-input v-model="query.contractId" aria-label="合同编号" placeholder="合同编号" clearable @keyup.enter="search"/><el-select v-model="query.ownership" placeholder="全部归属" aria-label="合同归属" clearable><el-option label="待确认" value="pending"/><el-option label="公司" value="company"/><el-option label="中间人" value="intermediary"/></el-select><el-button type="primary" icon="Search" @click="search">查询</el-button><el-button @click="reset">清空</el-button><el-button icon="Refresh" aria-label="刷新列表" @click="load"/></div></section>
   <section class="zj-card"><div class="zj-summary"><span>共 {{total}} 份合同</span><span>金额单位：元</span></div><el-alert v-if="error" :title="error" type="error" :closable="false" show-icon/>
    <el-table v-loading="loading" :data="rows" empty-text="暂无符合条件的合同，请调整筛选或新建合同">
@@ -24,6 +24,7 @@
  </main>
 </template>
 <script setup>
+import ZjPageHeader from '@/components/Zj/PageHeader.vue';
 import {contracts,contract,saveContract,removeContract,intermediaryOptions} from '@/api/zhongji';
 import FileUpload from '@/components/FileUpload/index.vue';
 import '@/assets/styles/zhongji.scss';

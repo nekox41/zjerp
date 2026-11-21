@@ -17,6 +17,14 @@
     margin-bottom: var(--zj-space-6);
   }
 
+  .zj-page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--zj-space-2);
+    flex-wrap: wrap;
+  }
+
   .zj-eyebrow {
     font-size: var(--zj-font-size-caption);
     color: var(--zj-blue);
