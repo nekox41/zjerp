@@ -8,7 +8,7 @@ export default defineConfig(({ mode, command }) => {
   if (!env.VITE_APP_BASE_API?.trim()) {
     throw new Error('缺少 VITE_APP_BASE_API：请保留对应模式的 .env 配置文件后重新构建，避免将接口请求发送到静态页面。')
   }
-  const { VITE_APP_ENV } = env
+  const { VITE_APP_ENV, VITE_DEV_API_TARGET } = env
   return {
     // 部署生产环境和开发环境下的URL。
     // 默认情况下，vite 会假设你的应用是被部署在一个域名的根路径上
@@ -35,7 +35,7 @@ export default defineConfig(({ mode, command }) => {
       proxy: {
         // https://cn.vitejs.dev/config/#server-proxy
         '/dev-api': {
-          target: 'http://localhost:8080',
+          target: VITE_DEV_API_TARGET || 'http://localhost:8080',
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/dev-api/, '')
         }

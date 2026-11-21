@@ -15,9 +15,13 @@ npm ci
 npm run dev
 ```
 
-默认访问 `http://localhost:8888`，`/dev-api` 代理到 `http://localhost:8080`。修改后端地址时调整 `vite.config.js`。先启动后端及其 MySQL、Redis。
+默认访问 `http://localhost:8888`，`/dev-api` 代理到 `VITE_DEV_API_TARGET`（默认 `http://localhost:8080`）。修改后端地址时调整 `.env.development`，无需改动 Vite 配置。先启动后端及其 MySQL、Redis。
 
 Windows 用户也可运行 `bin/package.bat` 安装依赖、`bin/run-web.bat` 启动开发服务器、`bin/build.bat` 构建生产版本；这些脚本与 CI/Docker 使用相同的 npm 命令。
+
+预发布构建可执行 `npm run build:stage`；正式 Docker 镜像使用 `npm run build:prod`。两种构建模式分别使用 `/stage-api/` 和 `/prod-api/` API 前缀，Nginx 均已配置对应代理。
+
+环境变量和代理规则详见 [环境配置说明](docs/CONFIGURATION.md)。
 
 ## 构建镜像
 
