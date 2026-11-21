@@ -1,0 +1,347 @@
+{
+  "baselineVersion": 1,
+  "sourceSnapshot": "zjerp_server_20261121_155818.sql",
+  "expectedTableCount": 68,
+  "tables": [
+    {
+      "name": "zj_contract_identity",
+      "expectedRows": 397,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_contract_assessment",
+      "expectedRows": 2,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_contract_inspection",
+      "expectedRows": 49,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_contract_maintenance",
+      "expectedRows": 315,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_contract_other",
+      "expectedRows": 6,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_contract_rating",
+      "expectedRows": 25,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_contract_legacy_20261028",
+      "expectedRows": 380,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_intermediary",
+      "expectedRows": 31,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_work_project",
+      "expectedRows": 536,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_work_project_legacy",
+      "expectedRows": 552,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_project_code",
+      "expectedRows": 198,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_work_project_number",
+      "expectedRows": 537,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_work_project_sequence",
+      "expectedRows": 4,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_work_project_migration",
+      "expectedRows": 1,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_work_project_issue",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_work_project_plan",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_project_document",
+      "expectedRows": 497,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_report",
+      "expectedRows": 352,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_inspection_report",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_report_credential",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_employee",
+      "expectedRows": 19,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_employee_migration",
+      "expectedRows": 1,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_user",
+      "expectedRows": 18,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_user_role",
+      "expectedRows": 19,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_role",
+      "expectedRows": 5,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_menu",
+      "expectedRows": 136,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_role_menu",
+      "expectedRows": 74,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_file",
+      "expectedRows": 2193,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_wbcard",
+      "expectedRows": 304,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_wbcard_number",
+      "expectedRows": 303,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_wbcard_sequence",
+      "expectedRows": 1,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_wbcard_material",
+      "expectedRows": 4,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_project_material",
+      "expectedRows": 13,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zjerp_wbcard_phone",
+      "expectedRows": 13,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_reimbursement",
+      "expectedRows": 2,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_cost",
+      "expectedRows": 1,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_project_cost",
+      "expectedRows": 1,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_work_project_expense_link",
+      "expectedRows": 1,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_project_finance_migration",
+      "expectedRows": 1,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_finance_account",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_finance_transaction",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "zj_finance_invoice",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "categories",
+      "expectedRows": 2,
+      "requirePrimaryKey": false
+    },
+    {
+      "name": "todos",
+      "expectedRows": 4,
+      "requirePrimaryKey": false
+    },
+    {
+      "name": "templates",
+      "expectedRows": 5,
+      "requirePrimaryKey": false
+    },
+    {
+      "name": "zjerp_project_system",
+      "expectedRows": 1,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_user_material",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_config",
+      "expectedRows": 5,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_dict_type",
+      "expectedRows": 15,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_dict_data",
+      "expectedRows": 44,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_job",
+      "expectedRows": 3,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_job_log",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_logininfor",
+      "expectedRows": 1118,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_oper_log",
+      "expectedRows": 2743,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "sys_notice",
+      "expectedRows": 2,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_blob_triggers",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_calendars",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_cron_triggers",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_fired_triggers",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_job_details",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_locks",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_paused_trigger_grps",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_scheduler_state",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_simple_triggers",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_simprop_triggers",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "qrtz_triggers",
+      "expectedRows": 0,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "gen_table",
+      "expectedRows": 4,
+      "requirePrimaryKey": true
+    },
+    {
+      "name": "gen_table_column",
+      "expectedRows": 41,
+      "requirePrimaryKey": true
+    }
+  ]
+}
