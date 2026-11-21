@@ -202,6 +202,7 @@ public final class DumpInspector {
             count++;
             int depth = 1;
             char quote = 0;
+            index++; // The opening tuple parenthesis has already been consumed.
             while (index < sql.length() && depth > 0) {
                 char current = sql.charAt(index);
                 if (quote != 0) {
