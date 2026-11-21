@@ -200,6 +200,7 @@
         <module>zjerp-generator</module>
         <module>zjerp-common</module>
         <module>zjerp-management</module>
+        <module>zjerp-migration</module>
     </modules>
     <packaging>pom</packaging>
 
