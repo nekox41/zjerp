@@ -2,67 +2,61 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 env:
   REGISTRY: docker.io
   IMAGE_NAME: aliceresia/zjerp-backend
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
-    permissions: 
+    permissions:
       contents: read
-      packages: write
 
     steps:
-    # 1. check code
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    # 2. set java env
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: maven
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: maven
 
-    # 3. maven build
-    - name: Build with Maven
-      run: mvn -B clean package -DskipTests
+      # Run the full Maven reactor test suite before any image build/push.
+      - name: Build and test with Maven
+        run: mvn -B clean verify
 
-    # 4. 登录 Docker Hub（仅非 PR 触发时）
-    - name: Login to Docker Hub
-      if: github.event_name != 'pull_request'
-      uses: docker/login-action@v3
-      with:
-       username: ${{ secrets.DOCKERHUB_USERNAME }}
-       password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # This legacy file-storage check is a standalone main-based test,
+      # so Surefire does not discover it automatically.
+      - name: Verify file storage behavior
+        run: bash scripts/verify-file-storage.sh
 
-    # 5. 提取镜像标签
-    - name: Extract Docker metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-       images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-       tags: |
-        type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'master') }}
-        type=ref,event=tag
-        type=sha,prefix=sha-
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-       context: .
-       push: ${{ github.event_name != 'pull_request' }}
-       tags: ${{ steps.meta.outputs.tags }}
-       labels: ${{ steps.meta.outputs.labels }}
-#       cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
-#       cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'master') }}
+            type=ref,event=tag
+            type=sha,prefix=sha-
 
-
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
