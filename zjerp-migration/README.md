@@ -40,6 +40,17 @@ java -jar .\\zjerp-migration\\target\\zjerp-migration-3.8.9.jar `
 
 The password is read from the environment variable and is never accepted as a command-line argument. Do not put credentials in the JDBC URL.
 
+## Inspect an existing SQL dump
+
+```bash
+java -jar zjerp-migration/target/zjerp-migration-3.8.9.jar \
+  --dump \
+  --file './zjerp_server_20261121_155818.sql' \
+  --output './migration-source-manifest.json'
+```
+
+This mode parses MySQL DDL and INSERT tuple boundaries without executing SQL. It records table/column/key metadata and exact INSERT row counts; it does not decode or include business field values in the manifest. Keep the original dump local and protected because the source file itself may contain credentials and personal data.
+
 ## Output and safety boundary
 
 The manifest contains:
@@ -60,7 +71,7 @@ The manifest itself can reveal internal schema names and should be stored with m
 - [x] Exact table row counts
 - [x] Column, primary-key and foreign-key metadata
 - [x] JSON source manifest
-- [ ] SQL dump manifest import
+- [x] SQL dump schema/row-count manifest parser
 - [ ] Data-quality rule registry
 - [ ] Dry-run target mapping and reconciliation
 - [ ] Idempotent import runner
