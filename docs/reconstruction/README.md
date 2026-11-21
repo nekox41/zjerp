@@ -6,8 +6,10 @@
 
 ## 文档导航
 
-- [现状审计基线](CURRENT_STATE.md)：目前从代码、SQL 和项目文档确认的现状，以及尚待验证的事项。\n- [API 与权限盘点](API_PERMISSION_AUDIT.md)：现有 Controller 路由、服务端权限边界及待核对的契约问题。
-- [跨业务域交互模型](DOMAIN_INTERACTIONS.md)：模块职责、数据所有权、跨域命令与关键业务旅程。\n- [目标架构原则](TARGET_ARCHITECTURE.md)：新 ERP 的业务域、实体关系、生命周期和系统边界。
+- [现状审计基线](CURRENT_STATE.md)：目前从代码、SQL 和项目文档确认的现状，以及尚待验证的事项。
+- [API 与权限盘点](API_PERMISSION_AUDIT.md)：现有 Controller 路由、服务端权限边界及待核对的契约问题。
+- [跨业务域交互模型](DOMAIN_INTERACTIONS.md)：模块职责、数据所有权、跨域命令与关键业务旅程。
+- [目标架构原则](TARGET_ARCHITECTURE.md)：新 ERP 的业务域、实体关系、生命周期和系统边界。
 - [一键迁移设计](MIGRATION_DESIGN.md)：旧数据盘点、映射、预演、导入、校验、切换与回滚设计。
 
 ## 项目跟踪
