@@ -1,22 +1,17 @@
-import request from '@/utils/request'
-export const expenseList=params=>request({url:'/finance/reimbursements',params})
-export const expenseDetail=id=>request({url:'/finance/reimbursements/'+id})
-export const expenseAnalysis=params=>request({url:'/finance/analysis',params})
-export const expenseStatus=(id,data)=>request({url:`/finance/reimbursements/${id}/status`,method:'put',data})
-export const expenseOptions=(kind,name,publicMode=false)=>request({url:`/finance/${publicMode?'public/':''}${kind}`,params:{name},headers:{isToken:!publicMode}})
-export const submitExpense=(data,publicMode=false)=>request({url:publicMode?'/finance/public/submit':'/finance/reimbursements',method:'post',data,headers:{'Content-Type':'multipart/form-data',isToken:!publicMode,repeatSubmit:false},timeout:120000})
-export const projectDocuments=(id,params)=>request({url:`/management/work-project/${id}/documents`,params})
-export const saveProjectDocument=(id,data)=>request({url:`/management/work-project/${id}/documents`,method:'post',data})
-export const deleteProjectDocument=(project,id)=>request({url:`/management/work-project/${project}/documents/${id}`,method:'delete'})
-export const projectMaterial=id=>request({url:`/management/work-project/${id}/materials`})
-export const saveProjectMaterial=(id,data)=>request({url:`/management/work-project/${id}/materials`,method:'put',data})
-export const projectResourceOptions=(id,kind,name)=>request({url:`/management/work-project/${id}/${kind}-options`,params:{name}})
-export const nextCardNumber=()=>request({url:'/wbcard/gen/next-number'})
-export function money(value){const [whole,fraction='']=String(value??'0').split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+fraction.padEnd(2,'0').slice(0,2)}
-export const ledgerOverview=()=>request({url:'/finance/ledger/overview'})
-export const ledgerList=(kind,params)=>request({url:'/finance/ledger/'+kind,params})
-export const ledgerDetail=(kind,id)=>request({url:`/finance/ledger/${kind}/${id}`})
-export const ledgerSave=(kind,data)=>request({url:'/finance/ledger/'+kind,method:'post',data,headers:{repeatSubmit:false}})
-export const ledgerVoid=(kind,id,data)=>request({url:`/finance/ledger/${kind}/${id}/void`,method:'put',data})
-export const ledgerOptions=(kind,name)=>request({url:`/finance/ledger/options/${kind}`,params:{name}})
-export function financeToken(){const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;const h=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`}
+/**
+ * @deprecated Compatibility entry point.
+ *
+ * Prefer importing from the business-domain modules:
+ * - @/api/finance/reimbursements
+ * - @/api/finance/ledger
+ * - @/api/project/documents
+ * - @/api/wbcard
+ *
+ * This barrel remains during gradual migration so existing pages keep working.
+ */
+export * from './finance/reimbursements'
+export * from './finance/ledger'
+export * from './project/documents'
+export * from './wbcard'
+export { money } from '@/utils/money'
+export { financeToken } from '@/utils/financeToken'
