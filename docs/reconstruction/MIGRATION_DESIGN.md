@@ -149,11 +149,12 @@
 
 已在后端仓库新增独立 Maven 模块 `zjerp-migration`，第一条命令为只读 MySQL Source Inspector：
 
+- 支持离线解析 MySQL dump：提取 DDL、列、主键/外键和 INSERT 行数，不执行 dump SQL、不把业务字段值写入 manifest；
 - 通过专用只读账号连接旧库；
 - 设置 JDBC read-only 与 repeatable-read；
 - 只读取 schema 元数据、精确行数、列、主键和外键；
 - 输出不含业务行值的 JSON source manifest；
 - 密码只从环境变量读取，拒绝命令行密码和 JDBC URL 密码；
-- 不执行 DDL/DML，不读取密码散列、个人资料或附件内容。
+- 不执行 DDL/DML，不读取密码散列、个人资料或附件内容；离线 parser 只扫描 tuple 边界，不输出行值。
 
 当前模块还不是迁移器，不执行任何目标数据写入。后续按顺序实现 dump manifest 导入、数据质量规则、文件存储扫描、dry-run mapping、幂等导入和对账。正式导入能力必须在目标 schema 与业务模型冻结后实现。
