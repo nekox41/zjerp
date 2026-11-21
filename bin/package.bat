@@ -1,12 +1,13 @@
 @echo off
 echo.
-echo [ĞÅÏ¢] °²×°Web¹¤³Ì£¬Éú³Énode_modulesÎÄ¼ş¡£
+echo [ä¿¡æ¯] å®‰è£… Web å·¥ç¨‹ä¾èµ–ã€‚
 echo.
 
-%~d0
-cd %~dp0
-
-cd ..
-yarn --registry=https://registry.npmmirror.com
-
+cd /d "%~dp0.."
+call npm ci
+if errorlevel 1 (
+  echo [é”™è¯¯] ä¾èµ–å®‰è£…å¤±è´¥ã€‚
+  pause
+  exit /b 1
+)
 pause

@@ -1,12 +1,13 @@
 @echo off
 echo.
-echo [ĞÅÏ¢] ´ò°üWeb¹¤³Ì£¬Éú³ÉdistÎÄ¼ş¡£
+echo [ä¿¡æ¯] æ‰“åŒ… Web å·¥ç¨‹ï¼Œç”Ÿæˆ dist æ–‡ä»¶ã€‚
 echo.
 
-%~d0
-cd %~dp0
-
-cd ..
-yarn build:prod
-
+cd /d "%~dp0.."
+call npm run build:prod
+if errorlevel 1 (
+  echo [é”™è¯¯] æ„å»ºå¤±è´¥ã€‚
+  pause
+  exit /b 1
+)
 pause

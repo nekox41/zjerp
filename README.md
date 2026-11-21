@@ -2,6 +2,12 @@
 
 Vue 3、Element Plus、Pinia 和 Vite 管理端。后端及前后端、MySQL、Redis 的统一 Compose 配置维护在 [zjerp_backend](https://github.com/nekox41/zjerp_backend)。
 
+## 环境要求
+
+- Node.js 22.x
+- npm 10.x
+- npm 是本仓库唯一支持的包管理器，请勿使用 Yarn 或 pnpm 安装依赖。
+
 ## 本地开发
 
 ```bash
@@ -10,6 +16,8 @@ npm run dev
 ```
 
 默认访问 `http://localhost:8888`，`/dev-api` 代理到 `http://localhost:8080`。修改后端地址时调整 `vite.config.js`。先启动后端及其 MySQL、Redis。
+
+Windows 用户也可运行 `bin/package.bat` 安装依赖、`bin/run-web.bat` 启动开发服务器、`bin/build.bat` 构建生产版本；这些脚本与 CI/Docker 使用相同的 npm 命令。
 
 ## 构建镜像
 
