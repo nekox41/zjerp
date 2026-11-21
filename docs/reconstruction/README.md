@@ -11,7 +11,7 @@
 - [旧表到新业务域映射矩阵](LEGACY_MAPPING_MATRIX.md)：68 张源表的目标归属、迁移策略与待确认事项。
 - [API 与权限盘点](API_PERMISSION_AUDIT.md)：现有 Controller 路由、服务端权限边界及待核对的契约问题。
 - [跨业务域交互模型](DOMAIN_INTERACTIONS.md)：模块职责、数据所有权、跨域命令与关键业务旅程。
-- [目标架构原则](TARGET_ARCHITECTURE.md)：新 ERP 的业务域、实体关系、生命周期和系统边界。
+- [目标数据模型](TARGET_DATA_MODEL.md)：结合生产快照提出的规范化核心实体、关系、约束和迁移顺序。\n- [目标架构原则](TARGET_ARCHITECTURE.md)：新 ERP 的业务域、实体关系、生命周期和系统边界。
 - [一键迁移设计](MIGRATION_DESIGN.md)：旧数据盘点、映射、预演、导入、校验、切换与回滚设计。
 
 ## 项目跟踪
