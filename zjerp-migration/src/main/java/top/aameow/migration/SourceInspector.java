@@ -13,6 +13,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +35,10 @@ public final class SourceInspector {
     }
 
     public static void main(String[] args) {
+        if (args.length > 0 && "--dump".equals(args[0])) {
+            DumpInspector.main(Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
         try {
             Options options = parseArgs(args);
             if (options.help()) {
@@ -263,15 +268,16 @@ public final class SourceInspector {
 
     private static void printUsage() {
         System.out.println("""
-                ZJERP read-only source inspector
+                ZJERP migration source tools
 
                 Usage:
+                  java -jar zjerp-migration.jar --dump --file <mysqldump.sql> [--output <manifest.json>]
                   java -jar zjerp-migration.jar --url <mysql-jdbc-url> --user <read-only-user>
                     [--password-env ZJERP_SOURCE_DB_PASSWORD]
                     [--database <database-name>]
                     [--output <manifest.json>]
 
-                The password is read only from the named environment variable.
+                --dump parses DDL and INSERT tuple counts without executing SQL or reading row values.\n\n                The database-inspector password is read only from the named environment variable.
                 The tool reads schema metadata and exact table row counts only.
                 It does not read business row values or modify the source database.
                 Use a database account granted SELECT/SHOW VIEW only.
