@@ -51,6 +51,20 @@ java -jar zjerp-migration/target/zjerp-migration-3.8.9.jar \
 
 This mode parses MySQL DDL and INSERT tuple boundaries without executing SQL. It records table/column/key metadata and exact INSERT row counts; it does not decode or include business field values in the manifest. Keep the original dump local and protected because the source file itself may contain credentials and personal data.
 
+## Compare a source manifest with the reviewed production baseline
+
+After creating a manifest with `--dump` or the live read-only inspector, run:
+
+```bash
+java -jar zjerp-migration/target/zjerp-migration-3.8.9.jar \
+  --preflight \
+  --manifest './migration-source-manifest.json' \
+  --baseline './zjerp-migration/src/main/resources/baselines/production-2026-11-21.json' \
+  --output './migration-preflight.json'
+```
+
+The preflight checks the 68 reviewed table names, expected row counts and primary keys on business tables. Missing tables or required primary keys block the preflight; row-count drift and additional tables are reported for review. A successful result is still `review_required`, never an automatic migration approval. It does not inspect row values, infer relationships, or write to the source/target database.
+
 ## Output and safety boundary
 
 The manifest contains:
@@ -72,7 +86,7 @@ The manifest itself can reveal internal schema names and should be stored with m
 - [x] Column, primary-key and foreign-key metadata
 - [x] JSON source manifest
 - [x] SQL dump schema/row-count manifest parser
-- [ ] Data-quality rule registry
+- [x] Reviewed source-manifest structural preflight (table set, row-count drift, required PKs)\n- [ ] Row-level data-quality rule registry
 - [ ] Dry-run target mapping and reconciliation
 - [ ] Idempotent import runner
 - [ ] Attachment storage scanner and hash verification
