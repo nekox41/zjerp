@@ -146,7 +146,12 @@ public final class DumpInspector {
 
         Matcher columnMatcher = COLUMN.matcher(body);
         while (columnMatcher.find()) {
-            String line = columnMatcher.group();
+            int lineStart = body.lastIndexOf('\n', columnMatcher.start()) + 1;
+            int lineEnd = body.indexOf('\n', columnMatcher.end());
+            if (lineEnd < 0) {
+                lineEnd = body.length();
+            }
+            String line = body.substring(lineStart, lineEnd);
             Map<String, Object> column = new LinkedHashMap<>();
             column.put("name", columnMatcher.group(1));
             column.put("type", columnMatcher.group(2).trim());
