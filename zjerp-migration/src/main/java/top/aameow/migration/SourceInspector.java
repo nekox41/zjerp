@@ -277,7 +277,9 @@ public final class SourceInspector {
                     [--database <database-name>]
                     [--output <manifest.json>]
 
-                --dump parses DDL and INSERT tuple counts without executing SQL or reading row values.\n\n                The database-inspector password is read only from the named environment variable.
+                --dump parses DDL and INSERT tuple counts without executing SQL or exporting row values.
+
+                The database-inspector password is read only from the named environment variable.
                 The tool reads schema metadata and exact table row counts only.
                 It does not read business row values or modify the source database.
                 Use a database account granted SELECT/SHOW VIEW only.
