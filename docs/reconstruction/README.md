@@ -8,7 +8,7 @@
 
 - [现状审计基线](CURRENT_STATE.md)：从代码、SQL 和项目文档确认的现状，以及尚待验证的事项。
 - [生产数据快照审计](PRODUCTION_DATA_AUDIT.md)：本次用户提供的完整数据库导出统计、关系抽查、数据质量和附件限制。
-- [旧表到新业务域映射矩阵](LEGACY_MAPPING_MATRIX.md)：68 张源表的目标归属、迁移策略与待确认事项。
+- [核心字段级迁移映射](FIELD_MAPPING.md)：合同、项目、报告、文件、人员、财务和维保资源的列级转换规则。\n- [旧表到新业务域映射矩阵](LEGACY_MAPPING_MATRIX.md)：68 张源表的目标归属、迁移策略与待确认事项。
 - [API 与权限盘点](API_PERMISSION_AUDIT.md)：现有 Controller 路由、服务端权限边界及待核对的契约问题。
 - [跨业务域交互模型](DOMAIN_INTERACTIONS.md)：模块职责、数据所有权、跨域命令与关键业务旅程。
 - [目标数据模型](TARGET_DATA_MODEL.md)：结合生产快照提出的规范化核心实体、关系、约束和迁移顺序。\n- [目标架构原则](TARGET_ARCHITECTURE.md)：新 ERP 的业务域、实体关系、生命周期和系统边界。
