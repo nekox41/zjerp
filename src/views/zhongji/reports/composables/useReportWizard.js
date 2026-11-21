@@ -134,21 +134,51 @@ export function useReportWizard() {
     form.value.systems.splice(index, 1)
   }
 
+  function validateSystems() {
+    if (!form.value.systems.length) throw Error('请至少保留一个检测系统')
+    const systemNames = form.value.systems.map(system => system.name.trim())
+    if (systemNames.some(name => !name) || new Set(systemNames).size !== systemNames.length) {
+      throw Error('系统名称不能为空或重复，请检查系统列表')
+    }
+    for (const system of form.value.systems) {
+      if (system.name.length > 100 || (system.description || '').length > 10000) {
+        throw Error('系统名称最多100字，系统说明最多10000字')
+      }
+      if (!Object.prototype.hasOwnProperty.call(states, system.status)) {
+        throw Error(`请确认“${system.name}”是否存在以及是否已检测`)
+      }
+      for (const item of system.items) {
+        if (!(item.name || '').trim()) throw Error(`请填写“${system.name}”中的设备或检验项目名称`)
+        if ((item.name || '').length > 2000 || (item.requirement || '').length > 2000 ||
+          (item.location || '').length > 2000 || (item.result || '').length > 2000) {
+          throw Error('设备名称、标准要求、检测部位和检验结果均不能超过2000字')
+        }
+        if (!Object.prototype.hasOwnProperty.call(states, item.status)) {
+          throw Error(`请确认“${system.name} / ${item.name}”的检测状态`)
+        }
+        if (!Object.prototype.hasOwnProperty.call(verdicts, item.verdict)) {
+          throw Error(`请确认“${system.name} / ${item.name}”的检测判定`)
+        }
+        if (item.status !== 'tested' && ['pass', 'fail'].includes(item.verdict)) {
+          throw Error('未检测或不存在的设备不能判定为合格或不合格')
+        }
+      }
+    }
+  }
+
+  function validatePhotos() {
+    const invalid = form.value.photos.find(photo =>
+      !tested.value.some(system => system.name === photo.system) || !photo.date
+    )
+    if (invalid) throw Error('请为每张照片指定已检测的所属系统和实际拍摄日期')
+  }
+
   function validate() {
     if (!project.value || !form.value.reportNo.trim() || !form.value.reportDate) {
       throw Error('请选择项目并填写报告编号和日期')
     }
-    if (!form.value.systems.length ||
-      new Set(form.value.systems.map(system => system.name.trim())).size !== form.value.systems.length ||
-      form.value.systems.some(system => !system.name.trim())) {
-      throw Error('系统名称不能为空或重复')
-    }
-    if (form.value.systems.some(system => !system.status)) {
-      throw Error('请逐项确认所有系统状态')
-    }
-    if (form.value.photos.some(photo => !tested.value.some(system => system.name === photo.system) || !photo.date)) {
-      throw Error('请为所有照片指定已检测系统及拍摄日期')
-    }
+    validateSystems()
+    validatePhotos()
   }
 
   async function next() {
@@ -156,7 +186,8 @@ export function useReportWizard() {
       if (step.value === 0 && (!project.value || !form.value.reportNo.trim() || !form.value.reportDate)) {
         throw Error('请选择项目并填写报告编号和日期')
       }
-      if (step.value === 3) validate()
+      if (step.value === 2) validateSystems()
+      if (step.value === 3) validatePhotos()
       step.value++
     } catch (error) {
       proxy.$modal.msgError(error.message)
