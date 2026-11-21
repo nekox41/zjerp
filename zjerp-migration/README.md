@@ -1,6 +1,8 @@
-# ZJERP Migration Tool
+# ZJERP Migration Kernel (development prototype)
 
-This module is deliberately isolated from the legacy business application. The first command is a read-only source inspector; it does not import, transform, or modify production data.
+This module is an internal ERP migration kernel prototype. The SQL dump parser, source inspector and manifest preflight are developer/test utilities only; they are not the final operator workflow. The product requirement is an admin-only visual migration center embedded in the ERP Web UI (see [Issue #7](https://github.com/nekox41/zjerp_backend/issues/7)). The deployed ERP must own uploads, persistent jobs, scanning, mapping review, dry-run, execution, recovery and reconciliation. Operators must not be asked to run a separate Java command, SSH into the host or execute SQL manually.
+
+The examples below are for developers validating parser behavior in an isolated environment. They do not constitute a supported production migration procedure.
 
 ## Build
 
@@ -12,7 +14,7 @@ mvn -pl zjerp-migration -am clean package
 
 The executable archive is produced under `zjerp-migration/target/`.
 
-## Inspect a MySQL source
+## Developer-only: inspect a MySQL source
 
 Create a dedicated database account with only the minimum read privileges required to inspect schema and count rows (for example, SELECT and SHOW VIEW). Do not use root or an application account with write permissions.
 
@@ -40,7 +42,7 @@ java -jar .\\zjerp-migration\\target\\zjerp-migration-3.8.9.jar `
 
 The password is read from the environment variable and is never accepted as a command-line argument. Do not put credentials in the JDBC URL.
 
-## Inspect an existing SQL dump
+## Developer-only: inspect an existing SQL dump
 
 ```bash
 java -jar zjerp-migration/target/zjerp-migration-3.8.9.jar \
@@ -51,7 +53,7 @@ java -jar zjerp-migration/target/zjerp-migration-3.8.9.jar \
 
 This mode parses MySQL DDL and INSERT tuple boundaries without executing SQL. It records table/column/key metadata and exact INSERT row counts; it does not decode or include business field values in the manifest. Keep the original dump local and protected because the source file itself may contain credentials and personal data.
 
-## Compare a source manifest with the reviewed production baseline
+## Developer-only: compare a source manifest with the reviewed production baseline
 
 After creating a manifest with `--dump` or the live read-only inspector, run:
 
