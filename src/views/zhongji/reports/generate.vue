@@ -6,28 +6,17 @@
 <template v-if="step===4"><el-descriptions :column="2" border><el-descriptions-item label="项目">{{project?.projectName}}</el-descriptions-item><el-descriptions-item label="报告编号">{{form.reportNo}}</el-descriptions-item><el-descriptions-item label="资质">{{form.credentialIds.length}} 项</el-descriptions-item><el-descriptions-item label="照片">{{form.photos.length}} 张</el-descriptions-item></el-descriptions><el-table :data="form.systems"><el-table-column prop="name" label="系统"/><el-table-column label="状态"><template #default="{row}">{{states[row.status]}}</template></el-table-column><el-table-column label="设备 / 检验项目数"><template #default="{row}">{{row.items.length}}</template></el-table-column><el-table-column label="照片数"><template #default="{row}">{{form.photos.filter(p=>p.system===row.name).length}}</template></el-table-column></el-table><el-alert title="请预览核对。未检测、未判定内容不会自动标记合格；生成后仍须完成签字盖章。" type="warning" :closable="false"/><el-button :disabled="busy" @click="preview">预览 PDF</el-button><el-button type="primary" :disabled="busy" @click="generate">生成并归档</el-button><h3>本项目历史报告</h3><el-table :data="history"><el-table-column prop="reportNo" label="报告编号"/><el-table-column prop="createdAt" label="生成时间"/><el-table-column label="文件"><template #default="{row}"><el-button link @click="show(row.file)">预览 / 打印</el-button></template></el-table-column></el-table></template>
 </div><div style="display:flex;justify-content:space-between"><el-button :disabled="step===0||busy" @click="step--">上一步</el-button><el-button v-if="step<4" type="primary" :disabled="busy" @click="next">下一步</el-button></div></section><PdfPreview v-model="previewOpen" :url="previewUrl" title="检测报告预览"/></main></template>
 <script setup>
-import ZjPageHeader from '@/components/Zj/PageHeader.vue';
-import "@/assets/styles/zhongji.scss";
-import request from '@/utils/request';import {projectList,getProject} from '@/api/workProject';import PdfPreview from '../wbcard/components/PdfPreview.vue';
-const staff=reactive({inspectors:[],reviewer:null,approver:null}),employees=ref([]);async function findEmployees(name){employees.value=(await request({url:'/management/employees/options',params:{name}})).data}
-const {proxy}=getCurrentInstance(),router=useRouter();const step=ref(0),busy=ref(false),projects=ref([]),projectId=ref(),project=ref(),credentials=ref([]),history=ref([]),uploads=ref(''),batchSystem=ref(''),batchDate=ref(''),previewOpen=ref(false),previewUrl=ref('');let blob='',searchSeq=0;
-const states={tested:'存在且已检测',absent:'不存在',untested:'存在但未检测'},verdicts={pending:'未判定',pass:'合格',fail:'不合格',na:'不适用'};
-const names=['火灾自动报警系统','消防给水系统','消火栓系统','自动喷水灭火系统','防烟排烟系统','消防应急照明和疏散指示系统','防火分隔设施','电气火灾监控系统','消防电源监控系统','火灾警报和消防应急广播系统','消防电梯','消防专用电话系统','消防供配电设施','建筑灭火器'];
-const form=ref({reportNo:'',reportDate:'',inspectors:'',reviewer:'',approver:'',notes:'',credentialIds:[],systems:names.map(name=>({name,status:'',description:'',items:[]})),photos:[]});const tested=computed(()=>form.value.systems.filter(s=>s.status==='tested'&&s.name));
-function fileUrl(url){return url.startsWith('/profile/')?import.meta.env.VITE_APP_BASE_API+url:url;}
-async function find(name=''){const n=++searchSeq;const r=await projectList({projectType:'JC',name,pageNum:1,pageSize:30});if(n===searchSeq)projects.value=r.rows;}
-async function choose(id){busy.value=true;try{project.value=(await getProject(id)).data;form.value.reportNo=project.value.projectNo;history.value=(await request({url:'/inspection-reports/'+id})).data;}finally{busy.value=false;}}
-function editProject(){router.push('/zhongji-project/'+projectId.value);}
-watch(uploads,value=>{const urls=value.split(',').filter(Boolean);form.value.photos=urls.map(url=>form.value.photos.find(p=>p.url===url)||{url,system:'',caption:'',date:''});});
-function batch(){for(const p of form.value.photos){if(!p.system)p.system=batchSystem.value;if(!p.date)p.date=batchDate.value;}}
-async function removeSystem(i){await proxy.$modal.confirm('确认移除此系统？已关联照片需要重新归类。');form.value.systems.splice(i,1);}
-function validate(){if(!project.value||!form.value.reportNo.trim()||!form.value.reportDate)throw Error('请选择项目并填写报告编号和日期');if(!form.value.systems.length||new Set(form.value.systems.map(s=>s.name.trim())).size!==form.value.systems.length||form.value.systems.some(s=>!s.name.trim()))throw Error('系统名称不能为空或重复');if(form.value.systems.some(s=>!s.status))throw Error('请逐项确认所有系统状态');if(form.value.photos.some(p=>!tested.value.some(s=>s.name===p.system)||!p.date))throw Error('请为所有照片指定已检测系统及拍摄日期');}
-async function next(){try{if(step.value===0&&(!project.value||!form.value.reportNo.trim()||!form.value.reportDate))throw Error('请选择项目并填写报告编号和日期');if(step.value===3)validate();step.value++;}catch(e){proxy.$modal.msgError(e.message);}}
-function payload(){validate();return {...form.value,projectId:projectId.value,employeeRoleIds:{inspectors:staff.inspectors,reviewer:staff.reviewer,approver:staff.approver}};}
-function show(url){if(blob){URL.revokeObjectURL(blob);blob='';}previewUrl.value=fileUrl(url);previewOpen.value=true;}
-async function preview(){busy.value=true;try{const pdf=await request({url:'/inspection-reports/preview',method:'post',data:payload(),responseType:'blob',timeout:120000});if(pdf.type.includes('json'))throw Error(JSON.parse(await pdf.text()).msg||'生成失败');if(blob)URL.revokeObjectURL(blob);blob=URL.createObjectURL(pdf);previewUrl.value=blob;previewOpen.value=true;}catch(e){proxy.$modal.msgError(e.message||'预览失败');}finally{busy.value=false;}}
-async function generate(){busy.value=true;try{const r=await request({url:'/inspection-reports',method:'post',data:payload(),timeout:120000});show(r.data.file);history.value=(await request({url:'/inspection-reports/'+projectId.value})).data;proxy.$modal.msgSuccess('报告已生成并归档');}catch(e){proxy.$modal.msgError(e.message||'生成失败');}finally{busy.value=false;}}
-onMounted(async()=>{await find();credentials.value=(await request({url:'/management/report-credentials'})).data.filter(c=>c.valueType!=='string'&&c.files);});onBeforeUnmount(()=>{if(blob)URL.revokeObjectURL(blob);});onBeforeRouteLeave(async()=>{if(!project.value)return true;try{await proxy.$modal.confirm('离开会清除当前未生成的报告内容，确认离开？');return true;}catch{return false;}});
+import ZjPageHeader from '@/components/Zj/PageHeader.vue'
+import '@/assets/styles/zhongji.scss'
+import FileUpload from '@/components/FileUpload/index.vue'
+import PdfPreview from '../wbcard/components/PdfPreview.vue'
+import { useReportWizard } from './composables/useReportWizard'
+
+const {
+  staff, employees, step, busy, projects, projectId, project, credentials, history, uploads, batchSystem, batchDate,
+  previewOpen, previewUrl, states, verdicts, form, tested, fileUrl, findEmployees, find, choose, editProject,
+  batch, removeSystem, next, show, preview, generate
+} = useReportWizard()
 </script>
 
 <style scoped>.zj-workspace :deep(.el-form .el-select),.zj-workspace :deep(.el-form .el-date-editor){width:100%}.zj-grid>.el-select{width:100%}.zj-card>.el-steps{padding:8px 0}.zj-workspace :deep(.el-collapse-item__content){padding-top:16px}</style>
