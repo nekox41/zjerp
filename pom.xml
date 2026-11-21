@@ -189,6 +189,13 @@
                 <artifactId>Project</artifactId>
                 <version>${aameow.version}</version>
             </dependency>
+                    <!-- 内置数据迁移模块 -->
+            <dependency>
+                <groupId>top.aameow</groupId>
+                <artifactId>zjerp-migration</artifactId>
+                <version>${aameow.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
