@@ -2,7 +2,7 @@
 
 This module is an internal ERP migration kernel prototype. The SQL dump parser, source inspector and manifest preflight are developer/test utilities only; they are not the final operator workflow. The product requirement is an admin-only visual migration center embedded in the ERP Web UI (see [Issue #7](https://github.com/nekox41/zjerp_backend/issues/7)). The deployed ERP must own uploads, persistent jobs, scanning, mapping review, dry-run, execution, recovery and reconciliation. Operators must not be asked to run a separate Java command, SSH into the host or execute SQL manually.
 
-The examples below are for developers validating parser behavior in an isolated environment. They do not constitute a supported production migration procedure.
+The module is packaged as a normal library inside `zjerp-admin`; it is not a standalone executable JAR. Developer validation should use the module tests from the repository root:\n\n```bash\nmvn -pl zjerp-migration -am test\n```\n\nThe static command entry points are retained only for local IDE/debug use with the Maven runtime classpath. They are not supported operator commands and are not part of deployment documentation.
 
 ## Build
 
@@ -42,32 +42,7 @@ java -jar .\\zjerp-migration\\target\\zjerp-migration-3.8.9.jar `
 
 The password is read from the environment variable and is never accepted as a command-line argument. Do not put credentials in the JDBC URL.
 
-## Developer-only: inspect an existing SQL dump
-
-```bash
-java -jar zjerp-migration/target/zjerp-migration-3.8.9.jar \
-  --dump \
-  --file './zjerp_server_20261121_155818.sql' \
-  --output './migration-source-manifest.json'
-```
-
-This mode parses MySQL DDL and INSERT tuple boundaries without executing SQL. It records table/column/key metadata and exact INSERT row counts; it does not decode or include business field values in the manifest. Keep the original dump local and protected because the source file itself may contain credentials and personal data.
-
-## Developer-only: compare a source manifest with the reviewed production baseline
-
-After creating a manifest with `--dump` or the live read-only inspector, run:
-
-```bash
-java -jar zjerp-migration/target/zjerp-migration-3.8.9.jar \
-  --preflight \
-  --manifest './migration-source-manifest.json' \
-  --baseline './zjerp-migration/src/main/resources/baselines/production-2026-11-21.json' \
-  --output './migration-preflight.json'
-```
-
-The preflight checks the 68 reviewed table names, expected row counts and primary keys on business tables. Missing tables or required primary keys block the preflight; row-count drift and additional tables are reported for review. A successful result is still `review_required`, never an automatic migration approval. It does not inspect row values, infer relationships, or write to the source/target database.
-
-## Output and safety boundary
+## Developer-only inspection modes\n\nThe module retains offline dump parsing, read-only database inspection and manifest preflight entry points for unit tests and local diagnostics. They are not exposed as deployment commands. The embedded admin UI will orchestrate these capabilities through authenticated backend services.\n\n## Output and safety boundary
 
 The manifest contains:
 - database product/version and catalog name;
