@@ -200,7 +200,7 @@ public final class DumpInspector {
             while (index < sql.length() && depth > 0) {
                 char current = sql.charAt(index);
                 if (quote != 0) {
-                    if (current == '\\\\') {
+                    if (current == '\\') {
                         index += Math.min(2, sql.length() - index);
                         continue;
                     }
