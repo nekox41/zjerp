@@ -60,6 +60,12 @@
             <artifactId>zjerp-management</artifactId>
         </dependency>
 
+        <!-- 内置数据迁移模块（由 ERP 管理端提供可视化入口）-->
+        <dependency>
+            <groupId>top.aameow</groupId>
+            <artifactId>zjerp-migration</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
