@@ -18,6 +18,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Properties;
 
 /**
@@ -96,10 +97,11 @@ public final class SourceInspector {
         }
 
         Map<String, String> values = new LinkedHashMap<>();
+        Set<String> allowed = Set.of("--url", "--user", "--password-env", "--database", "--output");
         for (int i = 0; i < args.length; i++) {
             String key = args[i];
-            if (!key.startsWith("--")) {
-                throw new IllegalArgumentException("Unexpected argument: " + key);
+            if (!allowed.contains(key) && !"--password".equals(key) && !"--password-value".equals(key)) {
+                throw new IllegalArgumentException("Unknown option: " + key);
             }
             if ("--password".equals(key) || "--password-value".equals(key)) {
                 throw new IllegalArgumentException(
@@ -227,7 +229,7 @@ public final class SourceInspector {
                 primaryKey.add(key);
             }
         }
-        primaryKey.sort(Comparator.comparingInt(item -> (Integer) item.get("sequence")));
+        primaryKey.sort(Comparator.comparingInt(item -> ((Number) item.get("sequence")).intValue()));
         table.put("primaryKey", primaryKey);
 
         List<Map<String, Object>> foreignKeys = new ArrayList<>();
