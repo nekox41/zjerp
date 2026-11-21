@@ -31,17 +31,34 @@ export function useReportWizard() {
     '消防电源监控系统', '火灾警报和消防应急广播系统', '消防电梯', '消防专用电话系统',
     '消防供配电设施', '建筑灭火器'
   ]
-  const form = ref({
-    reportNo: '',
-    reportDate: '',
-    inspectors: '',
-    reviewer: '',
-    approver: '',
-    notes: '',
-    credentialIds: [],
-    systems: names.map(name => ({ name, status: '', description: '', items: [] })),
-    photos: []
-  })
+  function createForm() {
+    return {
+      reportNo: '',
+      reportDate: '',
+      inspectors: '',
+      reviewer: '',
+      approver: '',
+      notes: '',
+      credentialIds: [],
+      systems: names.map(name => ({ name, status: '', description: '', items: [] })),
+      photos: []
+    }
+  }
+  const form = ref(createForm())
+  let savedDraftSnapshot = ''
+  let selectedProjectId = null
+
+  function draftSnapshot() {
+    return JSON.stringify({ form: form.value, staff: { ...staff } })
+  }
+
+  function hasUnsavedDraft() {
+    return Boolean(savedDraftSnapshot) && draftSnapshot() !== savedDraftSnapshot
+  }
+
+  function markDraftSaved() {
+    savedDraftSnapshot = draftSnapshot()
+  }
   const tested = computed(() => form.value.systems.filter(system => system.status === 'tested' && system.name))
 
   function fileUrl(url) {
@@ -59,11 +76,33 @@ export function useReportWizard() {
   }
 
   async function choose(id) {
+    if (selectedProjectId && String(selectedProjectId) !== String(id)) {
+      if (hasUnsavedDraft()) {
+        try {
+          await proxy.$modal.confirm('切换项目会清除当前尚未生成的报告内容，是否继续？')
+        } catch {
+          projectId.value = selectedProjectId
+          return
+        }
+      }
+      form.value = createForm()
+      Object.assign(staff, { inspectors: [], reviewer: null, approver: null })
+      uploads.value = ''
+    }
     busy.value = true
     try {
       project.value = (await getProject(id)).data
       form.value.reportNo = project.value.projectNo
       history.value = (await request({ url: '/inspection-reports/' + id })).data
+      selectedProjectId = id
+      markDraftSaved()
+    } catch (error) {
+      project.value = null
+      history.value = []
+      selectedProjectId = null
+      projectId.value = null
+      savedDraftSnapshot = ''
+      proxy.$modal.msgError(error.message || '项目资料加载失败，请重试')
     } finally {
       busy.value = false
     }
@@ -174,6 +213,7 @@ export function useReportWizard() {
       const result = await request({ url: '/inspection-reports', method: 'post', data: payload(), timeout: 120000 })
       show(result.data.file)
       history.value = (await request({ url: '/inspection-reports/' + projectId.value })).data
+      markDraftSaved()
       proxy.$modal.msgSuccess('报告已生成并归档')
     } catch (error) {
       proxy.$modal.msgError(error.message || '生成失败')
@@ -193,9 +233,9 @@ export function useReportWizard() {
   })
 
   onBeforeRouteLeave(async () => {
-    if (!project.value) return true
+    if (!hasUnsavedDraft()) return true
     try {
-      await proxy.$modal.confirm('离开会清除当前未生成的报告内容，确认离开？')
+      await proxy.$modal.confirm('当前报告有尚未生成的修改，离开将丢失这些内容。确认离开？')
       return true
     } catch {
       return false
