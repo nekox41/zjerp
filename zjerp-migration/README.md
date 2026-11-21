@@ -1,0 +1,69 @@
+# ZJERP Migration Tool
+
+This module is deliberately isolated from the legacy business application. The first command is a read-only source inspector; it does not import, transform, or modify production data.
+
+## Build
+
+From the repository root:
+
+```bash
+mvn -pl zjerp-migration -am clean package
+```
+
+The executable archive is produced under `zjerp-migration/target/`.
+
+## Inspect a MySQL source
+
+Create a dedicated database account with only the minimum read privileges required to inspect schema and count rows (for example, SELECT and SHOW VIEW). Do not use root or an application account with write permissions.
+
+Linux/macOS:
+
+```bash
+export ZJERP_SOURCE_DB_PASSWORD='read-only-password'
+java -jar zjerp-migration/target/zjerp-migration-3.8.9.jar \
+  --url 'jdbc:mysql://127.0.0.1:3306/server?useSSL=true' \
+  --user 'zjerp_reader' \
+  --database 'server' \
+  --output './migration-source-manifest.json'
+```
+
+PowerShell:
+
+```powershell
+$env:ZJERP_SOURCE_DB_PASSWORD = 'read-only-password'
+java -jar .\\zjerp-migration\\target\\zjerp-migration-3.8.9.jar `
+  --url 'jdbc:mysql://127.0.0.1:3306/server?useSSL=true' `
+  --user 'zjerp_reader' `
+  --database 'server' `
+  --output '.\\migration-source-manifest.json'
+```
+
+The password is read from the environment variable and is never accepted as a command-line argument. Do not put credentials in the JDBC URL.
+
+## Output and safety boundary
+
+The manifest contains:
+- database product/version and catalog name;
+- table names and exact row counts;
+- column names, SQL types, lengths, scales and nullability;
+- primary-key and imported foreign-key metadata.
+
+It does **not** read business row values, password hashes, personal information, file contents or application secrets. It does not run DDL/DML, and it does not modify the source database.
+
+The tool sets the JDBC connection read-only and uses a repeatable-read transaction. This is defense in depth, not a replacement for a server-enforced read-only database account. The source account must have no INSERT, UPDATE, DELETE, CREATE, ALTER, DROP or administrative privileges.
+
+The manifest itself can reveal internal schema names and should be stored with migration artifacts under restricted access. Review and redact before sharing.
+
+## Current scope
+
+- [x] Read-only MySQL schema inspection
+- [x] Exact table row counts
+- [x] Column, primary-key and foreign-key metadata
+- [x] JSON source manifest
+- [ ] SQL dump manifest import
+- [ ] Data-quality rule registry
+- [ ] Dry-run target mapping and reconciliation
+- [ ] Idempotent import runner
+- [ ] Attachment storage scanner and hash verification
+
+This is the first safe foundation only. Do not use it as a data migration command.
