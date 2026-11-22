@@ -58,7 +58,7 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 5
-    networks: [erp-next-internal]
+    networks: [erp-next-internal, erp-next-published]
     restart: unless-stopped
 
   erp-next-web:
@@ -70,7 +70,7 @@ services:
     depends_on:
       erp-next-api:
         condition: service_healthy
-    networks: [erp-next-internal]
+    networks: [erp-next-internal, erp-next-published]
     restart: unless-stopped
 
 volumes:
@@ -80,3 +80,4 @@ volumes:
 networks:
   erp-next-internal:
     internal: true
+  erp-next-published: {}
