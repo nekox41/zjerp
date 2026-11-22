@@ -1,4 +1,16 @@
 <template><main class="zj-workspace" v-loading="loading"><el-alert v-if="error" title="项目加载失败，请刷新重试" type="error" :closable="false"/><template v-if="project"><header class="zj-heading"><div><div class="zj-eyebrow">众基消防 / {{projectTypes[project.projectType]}}</div><h1>{{project.projectName}}</h1><p>{{project.projectNo}} · {{project.contractName||'待关联合同'}}</p></div><div><el-button @click="back">返回列表</el-button><el-button icon="Refresh" aria-label="刷新项目" @click="refresh"/></div></header><el-alert v-if="!project.contractId||project.numberPending||project.classificationPending" title="此历史项目存在待确认信息，请核对所属合同、类型或编号；原始记录已保留。" type="warning" :closable="false"/>
+<section class="zj-card zj-project-overview" aria-label="项目业务概览">
+  <div class="zj-guidance-heading"><h2>业务概览</h2><span class="zj-sub">以下信息来自当前项目档案</span></div>
+  <dl class="zj-overview-grid">
+    <div v-for="item in overviewFields" :key="item.key" class="zj-overview-field">
+      <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
+    </div>
+  </dl>
+  <div class="zj-guidance-actions">
+    <el-button @click="openBasic">核对基本信息</el-button>
+    <el-button @click="openSection('registration')">查看现场与报告登记</el-button>
+  </div>
+</section>
 <section class="zj-card zj-project-guidance" aria-label="项目下一步操作">
   <div class="zj-guidance-heading"><h2>项目下一步</h2><span class="zj-sub">根据当前项目资料提供提示，不影响已有业务操作。</span></div>
   <template v-if="pendingGuidance.length">
@@ -33,6 +45,22 @@ import ProjectChildRecords from './components/ProjectChildRecords.vue';
 import ProjectFilesPanel from './components/ProjectFilesPanel.vue';import ProjectMaterialsPanel from './components/ProjectMaterialsPanel.vue';import ProjectExpensesPanel from './components/ProjectExpensesPanel.vue';
 import {onBeforeRouteLeave} from 'vue-router';import {getProject,saveProjectSection,applyProjectNumber,projectTypes} from '@/api/workProject';import ProjectBasicForm from './components/ProjectBasicForm.vue';import {fileUrl} from '@/utils/files';import auth from '@/plugins/auth';import '@/assets/styles/zhongji.scss';
 const route=useRoute(),router=useRouter(),{proxy}=getCurrentInstance();const id=computed(()=>route.params.id),project=ref(),basic=ref({}),basicRef=ref(),details=ref({}),registration=ref({}),notes=ref(''),active=ref('basic'),loading=ref(false),error=ref(false),saving=ref(false);const canEdit=computed(()=>auth.hasPermi('management:project:edit')),canExpenses=computed(()=>auth.hasPermi('management:project:expenses'));const childSaving=ref(false),issueRecords=ref(),planRecords=ref();let snapshots={};
+const overviewFields=computed(()=>{
+  if(!project.value)return [];
+  const p=project.value;
+  const reg=registration.value||{};
+  const text=value=>value===null||value===undefined||value===''?'未登记':String(value);
+  const visitLabels={unknown:'未登记',not_started:'尚未到场',visited:'已经到场',completed:'现场工作完成'};
+  const reportLabels={unknown:'未登记',not_started:'尚未制作',in_progress:'制作中',completed:'报告已完成'};
+  return [
+    {key:'contract',label:'关联合同',value:p.contractId?text(p.contractName):'未关联合同'},
+    {key:'leader',label:'项目负责人',value:text(p.leaderName)},
+    {key:'technical',label:'技术负责人',value:text(p.technicalName)},
+    {key:'number',label:'项目编号',value:p.numberPending?'待确认 · '+text(p.projectNo):text(p.projectNo)},
+    {key:'visit',label:'现场情况',value:visitLabels[reg.visitStatus]||'状态待核实'},
+    {key:'report',label:'报告情况',value:reportLabels[reg.reportStatus]||'状态待核实'}
+  ];
+});
 const pendingGuidance=computed(()=>{
   if(!project.value)return [];
   const items=[];
@@ -55,4 +83,4 @@ async function saveSection(){if(active.value==='basic'&&!await basicRef.value.va
 async function applyNumber(){if(!await allowLeave())return;await proxy.$modal.confirm('为此历史项目申请正式编号？原编号仍保留备查。');saving.value=true;try{await applyProjectNumber(id.value);await load();proxy.$modal.msgSuccess('已申请正式编号');}finally{saving.value=false;}}
 watch(()=>route.params.id,()=>{active.value='basic';load();});onMounted(load);
 </script>
-<style scoped>.zj-project-guidance{margin-top:16px}.zj-guidance-heading{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.zj-guidance-heading h2{font-size:18px;margin:0}.zj-guidance-intro{margin:12px 0!important}.zj-guidance-list{list-style:none;margin:0;padding:0}.zj-guidance-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--zj-color-border)}.zj-guidance-item>span{display:flex;flex-direction:column;gap:4px;min-width:0}.zj-guidance-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.zj-guidance-actions .el-button+.el-button{margin-left:0}@media(max-width:600px){.zj-guidance-item{align-items:flex-start}.zj-guidance-item .el-button{flex-shrink:0}.zj-guidance-actions .el-button{flex:1 1 auto}}.zj-project-save{display:flex;justify-content:space-between;align-items:center;gap:16px;border-top:1px solid #e5eaf2;padding-top:20px;margin-top:24px}.zj-workspace :deep(.el-form .el-select),.zj-workspace :deep(.el-form .el-date-editor){width:100%}.zj-workspace :deep(.el-tabs__item){height:48px}@media(max-width:900px){.zj-project-save{align-items:flex-start;flex-direction:column}}</style>
+<style scoped>.zj-project-overview{margin-top:16px}.zj-overview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 20px;margin:16px 0 0}.zj-overview-field{min-width:0;padding:12px 0;border-bottom:1px solid var(--zj-color-border)}.zj-overview-field dt{font-size:12px;color:var(--zj-color-muted);margin-bottom:6px}.zj-overview-field dd{margin:0;font-weight:600;overflow-wrap:anywhere}@media(max-width:900px){.zj-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.zj-overview-grid{grid-template-columns:1fr}}.zj-project-guidance{margin-top:16px}.zj-guidance-heading{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.zj-guidance-heading h2{font-size:18px;margin:0}.zj-guidance-intro{margin:12px 0!important}.zj-guidance-list{list-style:none;margin:0;padding:0}.zj-guidance-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--zj-color-border)}.zj-guidance-item>span{display:flex;flex-direction:column;gap:4px;min-width:0}.zj-guidance-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.zj-guidance-actions .el-button+.el-button{margin-left:0}@media(max-width:600px){.zj-guidance-item{align-items:flex-start}.zj-guidance-item .el-button{flex-shrink:0}.zj-guidance-actions .el-button{flex:1 1 auto}}.zj-project-save{display:flex;justify-content:space-between;align-items:center;gap:16px;border-top:1px solid #e5eaf2;padding-top:20px;margin-top:24px}.zj-workspace :deep(.el-form .el-select),.zj-workspace :deep(.el-form .el-date-editor){width:100%}.zj-workspace :deep(.el-tabs__item){height:48px}@media(max-width:900px){.zj-project-save{align-items:flex-start;flex-direction:column}}</style>
