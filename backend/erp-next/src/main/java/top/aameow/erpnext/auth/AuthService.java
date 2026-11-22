@@ -41,8 +41,8 @@ public class AuthService {
 
     @Transactional
     public void bootstrapAdmin(String username, String displayName, String password) {
-        if (isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT, "管理员已初始化");
         Long roleId = jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE", Long.class);
+        if (isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT, "管理员已初始化");
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'active')",
             username, passwords.encode(password), displayName);
         Long identityId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
@@ -50,7 +50,7 @@ public class AuthService {
         audit(identityId, "identity.bootstrap", "erp_identity", identityId.toString(), "管理员初始化");
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public LoginResult login(String username, String password) {
         List<Map<String,Object>> rows = jdbc.queryForList("""
             SELECT id, username, password_hash, display_name, organization_id, status,

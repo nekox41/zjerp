@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.core.Authentication;
+import top.aameow.erpnext.auth.CurrentUser;
 
 import java.util.List;
 import java.util.Map;
@@ -44,7 +46,7 @@ public class AdminController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('identity:write')")
     @Transactional
-    public Map<String,Object> createIdentity(@Valid @RequestBody CreateIdentity request) {
+    public Map<String,Object> createIdentity(@Valid @RequestBody CreateIdentity request, Authentication authentication) {
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,organization_id,status) VALUES(?,?,?,?, 'active')",
             request.username(), passwords.encode(request.password()), request.displayName(), request.organizationId());
         Long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
@@ -53,8 +55,9 @@ public class AdminController {
             if(exists==null||exists==0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"角色不存在: "+roleId);
             jdbc.update("INSERT INTO erp_identity_role(identity_id,role_id) VALUES(?,?)",id,roleId);
         }
+        CurrentUser actor=(CurrentUser)authentication.getPrincipal();
         jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('username',?))",
-            null,"identity.created","erp_identity",id.toString(),UUID.randomUUID().toString(),request.username());
+            actor.id(),"identity.created","erp_identity",id.toString(),UUID.randomUUID().toString(),request.username());
         return Map.of("id",id,"username",request.username(),"displayName",request.displayName());
     }
 
