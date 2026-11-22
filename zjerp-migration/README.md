@@ -42,7 +42,21 @@ java -jar .\\zjerp-migration\\target\\zjerp-migration-3.8.9.jar `
 
 The password is read from the environment variable and is never accepted as a command-line argument. Do not put credentials in the JDBC URL.
 
-## Developer-only inspection modes\n\nThe module retains offline dump parsing, read-only database inspection and manifest preflight entry points for unit tests and local diagnostics. They are not exposed as deployment commands. The embedded admin UI will orchestrate these capabilities through authenticated backend services.\n\n## Output and safety boundary
+## Developer-only inspection modes\n\nThe module retains offline dump parsing, read-only database inspection and manifest preflight entry points for unit tests and local diagnostics. They are not exposed as deployment commands. The embedded admin UI will orchestrate these capabilities through authenticated backend services.\n\n## Embedded ERP source staging
+
+The admin application exposes an authenticated source staging API at `POST /admin/migrations/sources` and a metadata-only listing at `GET /admin/migrations/sources`. The API is restricted server-side to super administrators.
+
+- Only non-empty, uncompressed `.sql` files are currently accepted.
+- The default limit is 1 GiB (`migration.max-source-bytes`).
+- Files are stored outside the public upload/profile directory at `~/.zjerp/private/migration-staging` by default; configure `migration.staging-directory` to use a persistent private volume.
+- Payload names are random UUIDs; the original filename is retained only as display metadata.
+- SHA-256 and byte size are calculated while streaming the upload.
+- POSIX directories/files are restricted to 0700/0600 where supported.
+- SQL is never executed. Scanning, dry-run and import are still disabled.
+
+The staging metadata is persisted as private JSON sidecars on the configured volume. This is a single-application-instance staging foundation, not yet the persistent migration-job/checkpoint database planned for the full migration center.
+
+## Output and safety boundary
 
 The manifest contains:
 - database product/version and catalog name;
