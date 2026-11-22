@@ -32,7 +32,8 @@ public class FileController {
     }
     @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('file:upload')")
-    @org.springframework.transaction.annotation.Transactional\n    public Map<String,Object> upload(@RequestPart("file") MultipartFile file,Authentication a){
+    @org.springframework.transaction.annotation.Transactional
+    public Map<String,Object> upload(@RequestPart("file") MultipartFile file,Authentication a){
         PrivateFileStorage.StoredFile stored=storage.store(file);
         try{
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,file_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",
