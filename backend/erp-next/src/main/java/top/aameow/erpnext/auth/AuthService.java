@@ -68,7 +68,7 @@ public class AuthService {
                 UPDATE erp_identity SET failed_login_count=failed_login_count+1,
                   locked_until=CASE WHEN failed_login_count >= ? THEN DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MINUTE) ELSE locked_until END
                 WHERE id=?
-                """, maxFailedLogins, lockMinutes, id);
+                """, Math.max(0, maxFailedLogins - 1), lockMinutes, id);
             audit(null, "auth.login.failed", "erp_identity", Long.toString(id), "登录失败");
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }
