@@ -9,6 +9,10 @@ const notice = ref('')
 const q = ref('')
 const organizations = ref([])
 const employees = ref([])
+const identities = ref([])
+const projectMembers = ref([])
+const projectLogs = ref([])
+const memberEmployeeId = ref('')
 const customers = ref([])
 const contracts = ref([])
 const projects = ref([])
@@ -35,14 +39,15 @@ const config = {
 async function load() {
   error.value=''; notice.value=''
   try {
-    const [o,e,c,ct,p] = await Promise.all([
+    const [o,e,c,ct,p,ids] = await Promise.all([
       api('/business/organizations').catch(()=>[]),
       api('/business/employees').catch(()=>[]),
       api('/business/customers').catch(()=>[]),
       api('/business/contracts').catch(()=>[]),
-      api('/business/projects').catch(()=>[])
+      api('/business/projects').catch(()=>[]),
+      api('/admin/identities').catch(()=>[])
     ])
-    organizations.value=o; employees.value=e; customers.value=c; contracts.value=ct; projects.value=p
+    organizations.value=o; employees.value=e; customers.value=c; contracts.value=ct; projects.value=p; identities.value=ids
     const cfg=config[section.value]
     rows.value=cfg ? await api('/business'+cfg.endpoint+'?q='+encodeURIComponent(q.value)).catch(()=>[]) : []
   } catch(e) { error.value=e.message }
@@ -66,7 +71,7 @@ async function openCustomer(id) {
 }
 const selectedProject=ref(null)
 async function openProject(id) {
-  try { selectedProject.value=projects.value.find(x=>x.id===id)||{id}; milestones.value=await api('/business/projects/'+id+'/milestones') }
+  try { selectedProject.value=projects.value.find(x=>x.id===id)||{id}; const [m,pm,pl]=await Promise.all([api('/business/projects/'+id+'/milestones'),api('/business/projects/'+id+'/members'),api('/business/projects/'+id+'/logs')]); milestones.value=m; projectMembers.value=pm; projectLogs.value=pl }
   catch(e){error.value=e.message}
 }
 async function completeMilestone(id) {
@@ -74,9 +79,9 @@ async function completeMilestone(id) {
   catch(e){error.value=e.message}
 }
 async function addMember(projectId) {
-  const employeeId=window.prompt('输入员工 ID')
+  const employeeId=memberEmployeeId.value
   if(!employeeId) return
-  try { await api('/business/projects/'+projectId+'/members',{method:'POST',body:JSON.stringify({employeeId,role:'项目成员'})}); notice.value='成员已分配' }
+  try { await api('/business/projects/'+projectId+'/members',{method:'POST',body:JSON.stringify({employeeId,role:'项目成员'})}); await openProject(projectId); notice.value='成员已分配'; memberEmployeeId.value='' }
   catch(e){error.value=e.message}
 }
 watch(section,()=>{q.value='';load()})
@@ -105,7 +110,7 @@ onMounted(load)
         <h3>新增组织</h3><form class="create-grid" @submit.prevent="submit('organization')"><label>部门名称<input v-model="forms.organization.value.name" required></label><label>上级部门<select v-model="forms.organization.value.parentId"><option value="">无</option><option v-for="x in organizations" :value="x.id">{{x.name}}</option></select></label><button class="primary-button">创建部门</button></form>
       </template>
       <template v-else-if="section==='employees'">
-        <h3>新增员工档案</h3><form class="create-grid" @submit.prevent="submit('employee')"><label>员工编号<input v-model="forms.employee.value.employeeCode"></label><label>姓名<input v-model="forms.employee.value.fullName" required></label><label>所属部门<select v-model="forms.employee.value.organizationId"><option value="">未分配</option><option v-for="x in organizations" :value="x.id">{{x.name}}</option></select></label><label>岗位<input v-model="forms.employee.value.positionName"></label><label>电话<input v-model="forms.employee.value.phone"></label><label>邮箱<input v-model="forms.employee.value.email" type="email"></label><button class="primary-button">创建员工</button></form>
+        <h3>新增员工档案</h3><form class="create-grid" @submit.prevent="submit('employee')"><label>员工编号<input v-model="forms.employee.value.employeeCode"></label><label>姓名<input v-model="forms.employee.value.fullName" required></label><label>所属部门<select v-model="forms.employee.value.organizationId"><option value="">未分配</option><option v-for="x in organizations" :value="x.id">{{x.name}}</option></select></label><label>岗位<input v-model="forms.employee.value.positionName"></label><label>电话<input v-model="forms.employee.value.phone"></label><label>邮箱<input v-model="forms.employee.value.email" type="email"></label><label>关联登录账号<select v-model="forms.employee.value.identityId"><option value="">暂不关联</option><option v-for="x in identities" :value="x.id">{{x.username}} · {{x.display_name}}</option></select></label><button class="primary-button">创建员工</button></form>
       </template>
       <template v-else-if="section==='customers'">
         <h3>新增客户</h3><form class="create-grid" @submit.prevent="submit('customer')"><label>客户编号<input v-model="forms.customer.value.customerCode" required></label><label>客户名称<input v-model="forms.customer.value.name" required></label><label>统一社会信用代码<input v-model="forms.customer.value.creditCode"></label><label>客户类型<select v-model="forms.customer.value.customerType"><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="individual">个人</option></select></label><label>行业<input v-model="forms.customer.value.industry"></label><label>负责人<select v-model="forms.customer.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><label>联系电话<input v-model="forms.customer.value.phone"></label><label>电子邮箱<input v-model="forms.customer.value.email"></label><label>地址<input v-model="forms.customer.value.address"></label><label>备注<input v-model="forms.customer.value.notes"></label><button class="primary-button">创建客户</button></form>
@@ -116,7 +121,7 @@ onMounted(load)
       </template>
       <template v-else>
         <h3>新增项目</h3><form class="create-grid" @submit.prevent="submit('project')"><label>项目编号<input v-model="forms.project.value.projectNo" required></label><label>项目名称<input v-model="forms.project.value.name" required></label><label>关联合同<select v-model="forms.project.value.contractId" required><option value="">请选择合同</option><option v-for="x in contracts" :value="x.id">{{x.contract_no}} · {{x.title}}</option></select></label><label>项目经理<select v-model="forms.project.value.managerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><label>计划开始<input v-model="forms.project.value.plannedStart" type="date"></label><label>计划结束<input v-model="forms.project.value.plannedEnd" type="date"></label><label>项目说明<input v-model="forms.project.value.description"></label><button class="primary-button">创建项目</button></form>
-        <div v-if="selectedProject" class="related-card"><h4>{{selectedProject.name}} · 里程碑</h4><div v-for="m in milestones" :key="m.id" class="milestone-row"><span>{{m.title}} · {{m.due_on||'未设期限'}}</span><button v-if="m.status==='pending'" class="secondary-button" @click="completeMilestone(m.id)">标记完成</button><b v-else>{{m.status}}</b></div><form class="create-grid compact" @submit.prevent="submit('milestone')"><label>里程碑名称<input v-model="forms.milestone.value.title" required></label><label>计划日期<input v-model="forms.milestone.value.dueOn" type="date"></label><label>说明<input v-model="forms.milestone.value.description"></label><button class="primary-button">添加里程碑</button></form><button class="secondary-button" @click="addMember(selectedProject.id)">分配项目成员（输入员工 ID）</button></div>
+        <div v-if="selectedProject" class="related-card"><h4>{{selectedProject.name}} · 里程碑</h4><div v-for="m in milestones" :key="m.id" class="milestone-row"><span>{{m.title}} · {{m.due_on||'未设期限'}}</span><button v-if="m.status==='pending'" class="secondary-button" @click="completeMilestone(m.id)">标记完成</button><b v-else>{{m.status}}</b></div><form class="create-grid compact" @submit.prevent="submit('milestone')"><label>里程碑名称<input v-model="forms.milestone.value.title" required></label><label>计划日期<input v-model="forms.milestone.value.dueOn" type="date"></label><label>说明<input v-model="forms.milestone.value.description"></label><button class="primary-button">添加里程碑</button></form><div class="member-assign"><select v-model="memberEmployeeId"><option value="">选择员工</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select><button class="secondary-button" @click="addMember(selectedProject.id)">分配成员</button></div><p v-for="x in projectMembers" :key="x.id" class="member-line">{{x.full_name}} · {{x.member_role||'项目成员'}}</p><h4>项目动态</h4><p v-for="x in projectLogs" :key="x.id" class="log-line">{{x.created_at}} · {{x.actor_name||'系统'}} · {{x.content}}</p></div>
       </template>
     </div>
   </div>
