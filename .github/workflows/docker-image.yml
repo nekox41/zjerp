@@ -45,5 +45,12 @@ jobs:
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
+      - name: Validate legacy Compose paths without production credentials
+        env:
+          MYSQL_PASSWORD: ci-only
+          MYSQL_ROOT_PASSWORD: ci-only
+          REDIS_PASSWORD: ci-only
+          TOKEN_SECRET: ci-only
+        run: docker compose -f backend/compose.yml config --quiet
       - name: Build backend container without publishing
         run: docker build -f backend/Dockerfile backend
