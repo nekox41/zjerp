@@ -70,13 +70,13 @@ public class MigrationController extends BaseController
     {
         Map<String, Object> capabilities = new LinkedHashMap<>();
         capabilities.put("embedded", true);
-        capabilities.put("status", "FOUNDATION_ONLY");
-        capabilities.put("sourceUploadEnabled", false);
+        capabilities.put("status", "SOURCE_STAGING_ENABLED");
+        capabilities.put("sourceUploadEnabled", true);
         capabilities.put("scanEnabled", false);
         capabilities.put("dryRunEnabled", false);
         capabilities.put("executeEnabled", false);
         capabilities.put("resumeEnabled", false);
-        capabilities.put("reason", "Migration execution is disabled until staging, persisted jobs, mapping, and reconciliation are verified.");
+        capabilities.put("reason", "SQL dumps can be staged privately. Scanning, dry-run, execution, and resume remain disabled until their safety controls are implemented.");
         return success(capabilities);
     }
 }
