@@ -35,6 +35,7 @@ CREATE TABLE erp_service_report_version (
  version_no INT NOT NULL,
  content_json LONGTEXT NOT NULL,
  content_sha256 CHAR(64) NOT NULL,
+ archive_manifest LONGTEXT NULL,
  created_by BIGINT NOT NULL,
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  PRIMARY KEY(report_id,version_no),
