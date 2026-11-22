@@ -43,6 +43,11 @@ jobs:
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 11
       - name: Build and start API and web
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d --build
+      - name: Collect container diagnostics
+        if: always()
+        run: |
+          docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml ps -a
+          docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml logs --no-color --tail=200 erp-next-api erp-next-schema erp-next-web || true
       - name: Verify API, web and administrator bootstrap
         run: |
           for i in $(seq 1 60); do
