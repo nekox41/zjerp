@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -43,6 +44,7 @@ public final class StagedSourceStore {
             throw new IllegalArgumentException("The staging directory must not be a symbolic link");
         }
         this.root = root.toRealPath();
+        restrictPermissions(this.root, true);
         this.maxBytes = maxBytes;
     }
 
@@ -60,6 +62,7 @@ public final class StagedSourceStore {
 
         String id = UUID.randomUUID().toString();
         Path temporary = Files.createTempFile(root, ".incoming-", ".tmp");
+        restrictPermissions(temporary, false);
         Path payload = resolve(id, ".sql");
         Path metadata = resolve(id, ".json");
         boolean payloadCommitted = false;
@@ -73,6 +76,7 @@ public final class StagedSourceStore {
                     digest.sha256(), Instant.now().toString());
 
             Path metadataTemp = Files.createTempFile(root, ".metadata-", ".tmp");
+            restrictPermissions(metadataTemp, false);
             try {
                 JSON.writeValue(metadataTemp.toFile(), source);
                 moveAtomically(metadataTemp, metadata);
@@ -184,6 +188,15 @@ public final class StagedSourceStore {
             throw new IllegalArgumentException("数据库备份文件名无效");
         }
         return baseName;
+    }
+
+    private static void restrictPermissions(Path path, boolean directory) throws IOException {
+        try {
+            Files.setPosixFilePermissions(path, PosixFilePermissions.fromString(
+                    directory ? "rwx------" : "rw-------"));
+        } catch (UnsupportedOperationException ignored) {
+            // Windows and non-POSIX filesystems rely on their configured ACLs.
+        }
     }
 
     private static void moveAtomically(Path source, Path target) throws IOException {
