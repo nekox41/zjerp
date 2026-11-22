@@ -139,6 +139,14 @@ public class BusinessController {
         long cid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"customer.contact.created","erp_customer_contact",cid,name);
         return one("SELECT * FROM erp_customer_contact WHERE id=?",cid);
     }
+    @PutMapping("/contacts/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
+    public Map<String,Object> updateContact(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
+        one("SELECT id FROM erp_customer_contact WHERE id=?",id);
+        jdbc.update("UPDATE erp_customer_contact SET name=COALESCE(?,name),position_name=COALESCE(?,position_name),phone=COALESCE(?,phone),email=COALESCE(?,email),notes=COALESCE(?,notes) WHERE id=?",
+          b.get("name"),b.get("positionName"),b.get("phone"),b.get("email"),b.get("notes"),id);
+        audit(a,"customer.contact.updated","erp_customer_contact",id,"联系人资料更新"); return one("SELECT * FROM erp_customer_contact WHERE id=?",id);
+    }
+
     @DeleteMapping("/contacts/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
     public void deleteContact(@PathVariable long id,Authentication a) {
         Map<String,Object> c=one("SELECT * FROM erp_customer_contact WHERE id=?",id);
@@ -170,8 +178,8 @@ public class BusinessController {
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> updateContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_contract WHERE id=?",id);
-        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
-            b.get("title"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
+        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
+            b.get("title"),b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
         audit(a,"contract.updated","erp_contract",id,"合同资料更新"); return one("SELECT * FROM erp_contract WHERE id=?",id);
     }
 
