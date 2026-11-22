@@ -25,8 +25,8 @@ public class FileController {
         return rows.get(0);
     }
     private void assertReadable(Map<String,Object> f,Authentication a){
-        long owner=((Number)f.get("uploaded_by")).longValue();
-        if(owner==actor(a))return;
+        Object ownerValue=f.get("uploaded_by");
+        if(ownerValue instanceof Number owner && owner.longValue()==actor(a))return;
         Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment a JOIN erp_service_report r ON r.id=a.report_id WHERE a.file_id=?",Integer.class,f.get("id"));
         if(linked==null||linked==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"文件不存在");
     }
