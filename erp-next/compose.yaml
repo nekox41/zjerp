@@ -1,6 +1,4 @@
-# Standalone, isolated next-generation ERP schema sandbox.
-# Requires ERP_NEXT_DB_ROOT_PASSWORD and ERP_NEXT_DB_PASSWORD in environment.
-# No host MySQL port is published and no legacy database is mounted.
+# Isolated new ERP stack. Never point this stack at the legacy server database.
 services:
   erp-next-mysql:
     image: mysql:8.4
@@ -26,7 +24,7 @@ services:
       erp-next-mysql:
         condition: service_healthy
     environment:
-      FLYWAY_URL: jdbc:mysql://erp-next-mysql:3306/erp_next
+      FLYWAY_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useSSL=false&allowPublicKeyRetrieval=true
       FLYWAY_USER: erp_next
       FLYWAY_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
       FLYWAY_CONNECT_RETRIES: "30"
@@ -39,6 +37,42 @@ services:
     networks: [erp-next-internal]
     restart: "no"
 
+  erp-next-api:
+    build:
+      context: ../backend/erp-next
+      dockerfile: Dockerfile
+    environment:
+      ERP_NEXT_PORT: "8090"
+      ERP_NEXT_DB_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      ERP_NEXT_DB_USER: erp_next
+      ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
+    ports:
+      - "127.0.0.1:${ERP_NEXT_API_PORT:-8090}:8090"
+    depends_on:
+      erp-next-schema:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    networks: [erp-next-internal, erp-next-published]
+    restart: unless-stopped
+
+  erp-next-web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.erp-next
+    ports:
+      - "${ERP_NEXT_WEB_PORT:-8089}:80"
+    depends_on:
+      erp-next-api:
+        condition: service_healthy
+    networks: [erp-next-internal, erp-next-published]
+    restart: unless-stopped
+
 volumes:
   erp_next_mysql_data:
     name: erp_next_mysql_data
@@ -46,3 +80,4 @@ volumes:
 networks:
   erp-next-internal:
     internal: true
+  erp-next-published: {}

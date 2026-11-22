@@ -57,6 +57,7 @@ zjerp-admin.jar
 .env.*
 !.env.compose.example
 !.env.dev.example
+!erp-next/.env.example
 backups/
 *.dump
 server_full_*.sql

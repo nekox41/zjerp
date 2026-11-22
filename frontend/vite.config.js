@@ -38,6 +38,19 @@ export default defineConfig(({ mode, command }) => {
           target: VITE_DEV_API_TARGET || 'http://localhost:8080',
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/dev-api/, '')
+        },
+        '/next-api': {
+          target: env.VITE_NEXT_DEV_API_TARGET || 'http://localhost:8090',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/next-api/, '')
+        }
+      }
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          next: path.resolve(__dirname, 'next.html')
         }
       }
     },
