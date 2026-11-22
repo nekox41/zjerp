@@ -7,7 +7,9 @@ RUN mvn -B -DskipTests package
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 app
+    && useradd --system --uid 10001 app \
+    && mkdir -p /var/lib/erp-next/files \
+    && chown -R app:app /var/lib/erp-next
 COPY --from=build /workspace/target/erp-next-api-0.1.0-SNAPSHOT.jar /app/app.jar
 USER 10001
 EXPOSE 8090
