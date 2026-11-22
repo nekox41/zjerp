@@ -67,6 +67,8 @@ public class ServiceDeliveryController {
     public Map<String,Object> approveAmendment(@PathVariable long id,Authentication a) {
         Map<String,Object> x=one("SELECT * FROM erp_contract_amendment WHERE id=?",id);
         if(!"draft".equals(x.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿变更可以审批");
+        Map<String,Object> current=one("SELECT amount,status FROM erp_contract WHERE id=?",x.get("contract_id"));
+        if(!Set.of("active","completed").contains(current.get("status").toString()) || ((BigDecimal)current.get("amount")).compareTo((BigDecimal)x.get("previous_amount"))!=0) throw new ResponseStatusException(HttpStatus.CONFLICT,"合同已变化，请重新登记变更");
         jdbc.update("UPDATE erp_contract_amendment SET status='approved' WHERE id=?",id);
         jdbc.update("UPDATE erp_contract SET amount=? WHERE id=?",x.get("revised_amount"),x.get("contract_id"));
         audit(a,"contract.amendment.approved","erp_contract_amendment",id,x.get("amendment_no").toString());
