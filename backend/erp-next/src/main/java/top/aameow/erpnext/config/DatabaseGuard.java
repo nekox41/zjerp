@@ -22,7 +22,7 @@ public class DatabaseGuard implements ApplicationRunner {
             throw new IllegalStateException("ERP Next must connect only to the isolated 'erp_next' database; actual database: " + database);
         }
         Integer versionTwo = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM flyway_schema_history WHERE version='2' AND success=1", Integer.class);
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version='5' AND success=1", Integer.class);
         if (versionTwo == null || versionTwo != 1) {
             throw new IllegalStateException("ERP Next database schema V2 is required before the API can start");
         }
