@@ -59,6 +59,6 @@ public class FileController {
         ContentDisposition disposition=ContentDisposition.attachment().filename(name,java.nio.charset.StandardCharsets.UTF_8).build();
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(f.get("media_type").toString()))
             .contentLength(((Number)f.get("file_size")).longValue()).header(HttpHeaders.CONTENT_DISPOSITION,disposition.toString())
-            .header("X-Content-Type-Options","nosniff").body(resource);
+            .header("X-Content-Type-Options","nosniff").header(HttpHeaders.CACHE_CONTROL,"private, no-store").body(resource);
     }
 }
