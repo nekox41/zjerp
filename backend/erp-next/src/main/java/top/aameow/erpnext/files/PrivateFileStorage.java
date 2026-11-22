@@ -24,7 +24,7 @@ public class PrivateFileStorage {
         String media=file.getContentType()==null?"application/octet-stream":file.getContentType().split(";")[0].trim().toLowerCase();
         if(!Set.of("application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document").contains(media))
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"仅支持 PDF、JPG、PNG、TXT、DOCX 文件");
-        String supplied=file.getOriginalFilename()==null?"upload":file.getOriginalFilename().replace('\\','/');
+        String supplied=file.getOriginalFilename()==null?"upload":file.getOriginalFilename().replace('\\','/').replaceAll("[\\p{Cntrl}]","_");
         String original=Paths.get(supplied).getFileName().toString().replaceAll("[\\p{Cntrl}]","_").trim();
         if(original.isBlank()) original="upload";
         if(original.length()>240) original=original.substring(original.length()-240);
