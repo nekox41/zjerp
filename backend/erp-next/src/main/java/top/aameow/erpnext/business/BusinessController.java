@@ -50,6 +50,23 @@ public class BusinessController {
         return one("SELECT id,name,parent_id,status FROM erp_organization WHERE id=?",id);
     }
 
+    @PutMapping("/organizations/{id}") @PreAuthorize("hasAuthority('organization:write')") @Transactional
+    public Map<String,Object> updateOrganization(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
+        one("SELECT id FROM erp_organization WHERE id=?",id);
+        Long parent=optionalLong(b,"parentId");
+        if(parent!=null) { if(parent==id) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"部门不能设为自身上级"); one("SELECT id FROM erp_organization WHERE id=?",parent); }
+        jdbc.update("UPDATE erp_organization SET name=COALESCE(?,name),parent_id=?,status=COALESCE(?,status) WHERE id=?",b.get("name"),parent,b.get("status"),id);
+        audit(a,"organization.updated","erp_organization",id,"组织资料更新"); return one("SELECT * FROM erp_organization WHERE id=?",id);
+    }
+
+    @PutMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
+    public Map<String,Object> updateEmployee(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
+        one("SELECT id FROM erp_employee WHERE id=?",id);
+        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),organization_id=COALESCE(?,organization_id),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
+          b.get("fullName"),optionalLong(b,"organizationId"),b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
+        audit(a,"employee.updated","erp_employee",id,"员工资料更新"); return one("SELECT * FROM erp_employee WHERE id=?",id);
+    }
+
     @GetMapping("/employees") @PreAuthorize("hasAuthority('employee:read')")
     public List<Map<String,Object>> employees(@RequestParam(defaultValue="") String q) {
         String term="%"+q.trim()+"%";
