@@ -30,12 +30,24 @@ curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/attachm
 # Author cannot review their own report; the state remains draft after rejection.
 SELF_REVIEW=$(curl -sS -o /tmp/erp-report-self-review.json -w '%{http_code}' -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/start-review" -H "Authorization: Bearer $TOKEN")
 test "$SELF_REVIEW" = "403"
+EARLY_ISSUE=$(curl -sS -o /tmp/erp-report-early-issue.json -w '%{http_code}' -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/issue" -H "Authorization: Bearer $ISSUE_TOKEN")
+test "$EARLY_ISSUE" = "409"
 
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/submit" -H "Authorization: Bearer $TOKEN" | grep -q '"status":"submitted"'
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/start-review" -H "Authorization: Bearer $REVIEW_TOKEN" | grep -q '"status":"reviewing"'
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/return" -H "Authorization: Bearer $REVIEW_TOKEN" -H 'Content-Type: application/json' -d '{"reason":"请补充设备型号"}' | grep -q '"status":"returned"'
+RETURNED=$(curl -fsS "http://127.0.0.1:8090/api/business/reports/$REPORT_ID" -H "Authorization: Bearer $TOKEN")
+RETURN_VERSION=$(python -c 'import json,sys; print(json.load(sys.stdin)["current_version_no"])' <<< "$RETURNED")
+UPDATED=$(curl -fsS -X PUT "http://127.0.0.1:8090/api/business/reports/$REPORT_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"expectedVersionNo\":$RETURN_VERSION,\"title\":\"CI 技术服务报告修订\",\"content\":{\"summary\":\"补充设备信息\",\"scope\":\"设备外观与运行检查\",\"methods\":\"目视与功能检查\",\"findings\":\"设备型号已补充\",\"conclusion\":\"满足服务要求\"}}")
+echo "$UPDATED" | grep -q '"status":"draft"'
+echo "$UPDATED" | grep -q '"current_version_no":2'
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/submit" -H "Authorization: Bearer $TOKEN" | grep -q '"status":"submitted"'
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/start-review" -H "Authorization: Bearer $REVIEW_TOKEN" | grep -q '"status":"reviewing"'
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/approve" -H "Authorization: Bearer $REVIEW_TOKEN" | grep -q '"status":"approved"'
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/issue" -H "Authorization: Bearer $ISSUE_TOKEN" | grep -q '"status":"issued"'
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/archive" -H "Authorization: Bearer $ISSUE_TOKEN" | grep -q '"status":"archived"'
+ARCHIVE_EDIT=$(curl -sS -o /tmp/erp-report-archive-edit.json -w '%{http_code}' -X PUT "http://127.0.0.1:8090/api/business/reports/$REPORT_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"expectedVersionNo":2,"content":{"summary":"不允许修改","conclusion":"不允许修改"}}')
+test "$ARCHIVE_EDIT" = "409"
 
 curl -fsS "http://127.0.0.1:8090/api/files/$FILE_ID/download" -H "Authorization: Bearer $REVIEW_TOKEN" -o /tmp/erp-report-downloaded.txt
 cmp /tmp/erp-report-ci.txt /tmp/erp-report-downloaded.txt
