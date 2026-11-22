@@ -84,6 +84,13 @@ jobs:
           PROJECT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$PROJECT")
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"title":"CI 里程碑"}' >/dev/null
           curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 里程碑'
+          MILESTONE_ID=$(curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
+          curl -fsS -X PUT "http://127.0.0.1:8090/api/business/milestones/$MILESTONE_ID/complete" -H "Authorization: Bearer $TOKEN" | grep -q 'completed'
+          curl -fsS "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 合同'
+          curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 项目'
+          curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeId\":$EMP_ID,\"role\":\"负责人\"}" >/dev/null
+          curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 员工'
+          if curl -fsS "http://127.0.0.1:8090/api/business/customers" >/dev/null; then echo 'Unauthenticated business request unexpectedly succeeded'; exit 1; fi
       - name: Stop isolated stack and remove CI-only volume
         if: always()
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml down -v --remove-orphans
