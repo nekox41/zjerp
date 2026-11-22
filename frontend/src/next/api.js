@@ -15,7 +15,7 @@ export async function api(path, options = {}) {
   }
   return payload
 }
-export async function downloadFile(id) {
+export async function downloadFile(id,name='') {
   const token=sessionStorage.getItem('erp-next-token')
   const response=await fetch(`${API_BASE}/api/files/${id}/download`,{headers:token?{Authorization:`Bearer ${token}`}:{}});
   if(!response.ok){const payload=await response.json().catch(()=>({}));throw new Error(payload.detail||payload.message||'文件下载失败')}
