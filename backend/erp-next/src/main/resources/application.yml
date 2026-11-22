@@ -30,6 +30,8 @@ management:
 erp:
   bootstrap:
     token: ${ERP_BOOTSTRAP_TOKEN:}
+  files:
+    root: ${ERP_FILES_ROOT:/var/lib/erp-next/files}
   auth:
     session-hours: 12
     max-failed-logins: 5
