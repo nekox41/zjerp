@@ -27,6 +27,7 @@ CREATE TABLE erp_service_report (
  reviewer_id BIGINT NULL,
  issuer_id BIGINT NULL,
  return_reason TEXT NULL,
+ archive_manifest LONGTEXT NULL,
  issued_at DATETIME(3) NULL,
  archived_at DATETIME(3) NULL,
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
