@@ -79,6 +79,8 @@ services:
 volumes:
   erp_next_mysql_data:
     name: erp_next_mysql_data
+  erp_next_private_files:
+    name: erp_next_private_files
 
 networks:
   erp-next-internal:
