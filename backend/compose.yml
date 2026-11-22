@@ -83,7 +83,7 @@ services:
   frontend:
     image: ${FRONTEND_IMAGE:-zjerp-frontend:local}
     build:
-      context: ${FRONTEND_CONTEXT:-../zjerp_frontend}
+      context: ${FRONTEND_CONTEXT:-../frontend}
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
