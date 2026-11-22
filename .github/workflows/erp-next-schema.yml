@@ -12,6 +12,7 @@ on:
       - 'erp-next/**'
       - 'backend/erp-next/**'
       - 'frontend/**'
+      - 'scripts/erp-next-*.sh'
       - '.github/workflows/erp-next-schema.yml'
 concurrency:
   group: erp-next-smoke-${{ github.head_ref || github.ref_name }}
