@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from './api'
+import BusinessModule from './BusinessModule.vue'
 
 const loading = ref(true)
 const submitting = ref(false)
@@ -136,13 +137,15 @@ onMounted(refresh)
       <div class="brand"><span class="brand-mark">众</span><span>众基 ERP</span></div>
       <div class="side-caption">工作空间</div>
       <button :class="{active:tab==='overview'}" @click="tab='overview'"><span>⌂</span>工作台</button>
+      <div class="side-caption">业务管理</div>
+      <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务全生命周期</button>
       <div class="side-caption">系统管理</div>
       <button v-if="can('identity:read')" :class="{active:tab==='identities'}" @click="tab='identities'"><span>♙</span>账号与角色</button>
       <button v-if="can('audit:read')" :class="{active:tab==='audit'}" @click="tab='audit'"><span>◷</span>操作审计</button>
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':'操作审计' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
       <div class="content">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
@@ -157,9 +160,10 @@ onMounted(refresh)
           <section class="panel create-panel"><h3>新建账号</h3><form class="create-grid" @submit.prevent="createIdentity"><label>登录账号<input v-model="createForm.username" required maxlength="100"></label><label>显示名称<input v-model="createForm.displayName" required maxlength="200"></label><label>初始密码<input v-model="createForm.password" type="password" required minlength="12" maxlength="128"></label><label>分配角色<select v-model="createForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><button class="primary-button" :disabled="submitting">创建账号</button></form></section>
           <section class="panel"><h3>已有账号 <span>{{ identities.length }}</span></h3><div class="table-wrap"><table><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>状态</th></tr></thead><tbody><tr v-for="item in identities" :key="item.id"><td>{{ item.username }}</td><td>{{ item.display_name }}</td><td>{{ item.roles || '未分配' }}</td><td><span class="status-pill"><i></i>{{ item.status }}</span></td></tr></tbody></table><p v-if="!identities.length" class="empty">暂无账号数据</p></div></section>
         </template>
-        <template v-else>
+        <template v-else-if="tab==='audit'">
           <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
         </template>
+        <BusinessModule v-else />
       </div>
     </section>
   </main>
