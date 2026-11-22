@@ -9,7 +9,6 @@ RUN npm run build:prod
 
 FROM nginx:stable-alpine
 COPY --from=build /src/dist/ /usr/share/nginx/html/
-COPY erp-next.conf /etc/nginx/conf.d/erp-next.conf
 COPY zjerp.conf /etc/nginx/conf.d/default.conf
 RUN chmod -R a+rX /usr/share/nginx/html
 EXPOSE 80
