@@ -24,7 +24,7 @@ services:
       erp-next-mysql:
         condition: service_healthy
     environment:
-      FLYWAY_URL: jdbc:mysql://erp-next-mysql:3306/erp_next
+      FLYWAY_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useSSL=false&allowPublicKeyRetrieval=true
       FLYWAY_USER: erp_next
       FLYWAY_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
       FLYWAY_CONNECT_RETRIES: "30"
@@ -43,7 +43,7 @@ services:
       dockerfile: Dockerfile
     environment:
       ERP_NEXT_PORT: "8090"
-      ERP_NEXT_DB_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      ERP_NEXT_DB_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       ERP_NEXT_DB_USER: erp_next
       ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
       ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
