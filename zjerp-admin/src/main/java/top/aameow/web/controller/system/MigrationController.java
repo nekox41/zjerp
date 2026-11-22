@@ -54,7 +54,7 @@ public class MigrationController extends BaseController
         try
         {
             StagedSource source = stagedSourceStore.stage(file);
-            return success("数据库备份已安全暂存，尚未执行或导入", source);
+            return AjaxResult.success("数据库备份已安全暂存，尚未执行或导入", source);
         }
         catch (IllegalArgumentException e)
         {
