@@ -55,8 +55,13 @@ jobs:
             sleep 2
           done
           curl -fsS http://127.0.0.1:8090/actuator/health
-          curl -fsS http://127.0.0.1:8089/next.html | grep -q 'next-app'
-          curl -fsS http://127.0.0.1:8089/next-api/bootstrap/status | grep -q '"initialized":false'
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8089/next.html -o /tmp/erp-next-page.html && grep -q 'next-app' /tmp/erp-next-page.html && break
+            sleep 2
+          done
+          grep -q 'next-app' /tmp/erp-next-page.html || { echo 'New frontend entry missing:'; head -c 1000 /tmp/erp-next-page.html; exit 1; }
+          curl -fsS http://127.0.0.1:8089/next-api/bootstrap/status -o /tmp/erp-next-bootstrap.json
+          grep -q '"initialized":false' /tmp/erp-next-bootstrap.json || { cat /tmp/erp-next-bootstrap.json; exit 1; }
           curl -fsS -X POST http://127.0.0.1:8089/next-api/bootstrap/admin \
             -H 'Content-Type: application/json' -H "X-Bootstrap-Token: $ERP_BOOTSTRAP_TOKEN" \
             -d '{"username":"admin","displayName":"CI Admin","password":"ci-only-password-123"}' >/dev/null
