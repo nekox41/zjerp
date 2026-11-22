@@ -148,7 +148,7 @@ public class ServiceReportController {
     public Map<String,Object> archive(@PathVariable long id,Authentication a){
         Map<String,Object> r=report(id);if(!"issued".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已签发报告可以归档");
         Map<String,Object> v=content(id,r);
-        List<Map<String,Object>> files=jdbc.queryForList("SELECT f.id,f.original_name,f.media_type,f.file_size,f.sha256 FROM erp_service_report_attachment a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? AND a.version_no=? ORDER BY f.id",id,r.get("current_version_no"));
+        List<Map<String,Object>> files=jdbc.queryForList("SELECT f.id,f.original_name,f.media_type,f.byte_size file_size,f.sha256 FROM erp_service_report_attachment a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? AND a.version_no=? ORDER BY f.id",id,r.get("current_version_no"));
         Map<String,Object> manifest=new LinkedHashMap<>();manifest.put("reportId",id);manifest.put("reportNo",r.get("report_no"));manifest.put("revisionNo",r.get("revision_no"));manifest.put("versionNo",r.get("current_version_no"));manifest.put("contentSha256",v.get("content_sha256"));manifest.put("attachments",files);manifest.put("issuedAt",r.get("issued_at"));
         jdbc.update("UPDATE erp_service_report SET status='archived',archived_at=CURRENT_TIMESTAMP(3),archive_manifest=? WHERE id=?",json(manifest),id);
         event(id,"issued","archived",actor(a),"归档快照已固定");return detail(id);
