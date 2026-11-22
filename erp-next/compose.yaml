@@ -53,6 +53,8 @@ services:
     depends_on:
       erp-next-schema:
         condition: service_completed_successfully
+    volumes:
+      - erp_next_private_files:/var/lib/erp-next/files
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/actuator/health"]
       interval: 15s
