@@ -1,0 +1,59 @@
+name: Import frontend history into monorepo
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Integration branch to create (must not already exist)'
+        required: true
+        default: 'integration/monorepo-full-history'
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source access
+        env:
+          FRONTEND_READ_TOKEN: ${{ secrets.FRONTEND_READ_TOKEN }}
+        run: |
+          test -n "$FRONTEND_READ_TOKEN" || { echo 'Set FRONTEND_READ_TOKEN as a repository secret with read-only access to nekox41/zjerp_frontend'; exit 1; }
+          git -c credential.helper= ls-remote "https://x-access-token:${FRONTEND_READ_TOKEN}@github.com/nekox41/zjerp_frontend.git" HEAD >/dev/null
+      - name: Import full frontend Git history
+        env:
+          FRONTEND_READ_TOKEN: ${{ secrets.FRONTEND_READ_TOKEN }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$TARGET_BRANCH"
+          git remote add frontend "https://x-access-token:${FRONTEND_READ_TOKEN}@github.com/nekox41/zjerp_frontend.git"
+          git fetch --no-tags frontend master
+          git remote set-url frontend https://github.com/nekox41/zjerp_frontend.git
+          git merge -s ours --no-commit --allow-unrelated-histories frontend/master
+          git commit -m "chore(repo): connect complete frontend history"
+          git read-tree --prefix=frontend/ -u frontend/master
+          git commit -m "chore(repo): import frontend source under frontend/"
+          test -f frontend/package.json
+          test -f pom.xml
+          git log --format='%P' -1 HEAD~1 | awk 'NF==2 {ok=1} END {exit !ok}'
+          git remote remove frontend
+      - name: Push integration branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${TARGET_BRANCH}"
+      - name: Open integration PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          gh pr create --base master --head "$TARGET_BRANCH" \
+            --title "repo: import complete frontend Git history into monorepo" \
+            --body "Closes #14 (import phase). Preserves unrelated frontend Git history and imports frontend/ without modifying legacy backend files. Follow-up #15 relocates backend/, updates CI, Compose and deploy paths."
