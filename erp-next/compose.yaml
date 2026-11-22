@@ -48,7 +48,7 @@ services:
       ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
       ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
     ports:
-      - "${ERP_NEXT_API_PORT:-8090}:8090"
+      - "127.0.0.1:${ERP_NEXT_API_PORT:-8090}:8090"
     depends_on:
       erp-next-schema:
         condition: service_completed_successfully

@@ -158,7 +158,7 @@ onMounted(refresh)
           <section class="panel"><h3>已有账号 <span>{{ identities.length }}</span></h3><div class="table-wrap"><table><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>状态</th></tr></thead><tbody><tr v-for="item in identities" :key="item.id"><td>{{ item.username }}</td><td>{{ item.display_name }}</td><td>{{ item.roles || '未分配' }}</td><td><span class="status-pill"><i></i>{{ item.status }}</span></td></tr></tbody></table><p v-if="!identities.length" class="empty">暂无账号数据</p></div></section>
         </template>
         <template v-else>
-          <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ item.summary_json }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
+          <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
         </template>
       </div>
     </section>
