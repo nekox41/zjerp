@@ -12,6 +12,9 @@ on:
       - 'backend/erp-next/**'
       - 'frontend/**'
       - '.github/workflows/erp-next-schema.yml'
+concurrency:
+  group: erp-next-smoke-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   schema-and-smoke:
     runs-on: ubuntu-latest
