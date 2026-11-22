@@ -1,0 +1,38 @@
+name: ERP Next Schema V1
+on:
+  push:
+    paths:
+      - 'erp-next/**'
+      - '.github/workflows/erp-next-schema.yml'
+  pull_request:
+    paths:
+      - 'erp-next/**'
+      - '.github/workflows/erp-next-schema.yml'
+
+jobs:
+  schema:
+    runs-on: ubuntu-latest
+    env:
+      ERP_NEXT_DB_ROOT_PASSWORD: ci_ephemeral_root_only
+      ERP_NEXT_DB_PASSWORD: ci_ephemeral_user_only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose -f erp-next/compose.yaml config --quiet
+      - name: Start isolated database
+        run: docker compose -f erp-next/compose.yaml up -d erp-next-mysql
+      - name: Apply V1 migration
+        run: docker compose -f erp-next/compose.yaml run --rm erp-next-schema
+      - name: Re-run migration idempotently
+        run: docker compose -f erp-next/compose.yaml run --rm erp-next-schema
+      - name: Verify version and platform tables
+        run: |
+          docker compose -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
+            mysql -u erp_next -D erp_next -N -e \
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '1' AND success = 1" | grep -qx 1
+          docker compose -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
+            mysql -u erp_next -D erp_next -N -e \
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 8
+      - name: Stop isolated database
+        if: always()
+        run: docker compose -f erp-next/compose.yaml down -v --remove-orphans
