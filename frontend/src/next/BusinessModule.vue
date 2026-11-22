@@ -27,7 +27,7 @@ const contacts = ref([])
 const milestones = ref([])
 const forms = {
   organization: ref({name:'',parentId:''}),
-  employee: ref({employeeCode:'',fullName:'',organizationId:'',positionName:'',phone:'',email:''}),
+  employee: ref({employeeCode:'',fullName:'',organizationId:'',identityId:'',positionName:'',phone:'',email:''}),
   customer: ref({customerCode:'',name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',notes:''}),
   contact: ref({name:'',positionName:'',phone:'',email:'',isPrimary:false}),
   contract: ref({contractNo:'',title:'',customerId:'',contractType:'',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',notes:''}),
