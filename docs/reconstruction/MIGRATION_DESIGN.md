@@ -160,4 +160,4 @@
 - 密码只从环境变量读取，拒绝命令行密码和 JDBC URL 密码；
 - 不执行 DDL/DML，不读取密码散列、个人资料或附件内容；离线 parser 只扫描 tuple 边界，不输出行值。
 
-当前模块不具备业务数据导入能力。下一步按 Issue #7 将其转为 ERP 内部可复用模块，接入 admin-only API、任务持久化和 Web 迁移中心。命令行入口只保留为开发期诊断方式；最终用户不需要运行脚本。正式导入能力必须在目标 schema 与业务模型冻结后实现。
+当前模块不具备业务数据导入能力。已开始接入 admin-only API 与私有来源暂存：只接受未压缩 `.sql`，流式计算 SHA-256、限制大小、随机 ID 存储、私有目录权限（POSIX 700/600），元数据 JSON 持久化；上传 SQL 只作为不可信字节保存，绝不执行。当前默认目录为 `${user.home}/.zjerp/private/migration-staging`，可通过 `migration.staging-directory` 和 `migration.max-source-bytes` 配置。列表 API 只返回元数据，不暴露服务器路径。下一步是只读扫描任务和持久化状态机。命令行入口只保留为开发期诊断方式；最终用户不需要运行脚本。正式导入能力必须在目标 schema 与业务模型冻结后实现。
