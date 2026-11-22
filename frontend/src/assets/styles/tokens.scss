@@ -1,0 +1,42 @@
+/* 众基 ERP Design Tokens
+ * 业务页面与共享组件的视觉变量唯一来源。
+ * 取值以 DESIGN_SYSTEM.md 为准，避免页面内重复硬编码。
+ */
+:root {
+  --zj-color-brand: #2458d3;
+  --zj-color-brand-hover: #1f4db8;
+  --zj-color-brand-active: #193f98;
+  --zj-color-accent: #ed7043;
+
+  --zj-color-ink: #17243b;
+  --zj-color-muted: #65748b;
+  --zj-color-subtle: #8793a5;
+  --zj-color-canvas: #f4f6fa;
+  --zj-color-surface: #ffffff;
+  --zj-color-border: #e5eaf2;
+  --zj-color-table-header: #f7f9fc;
+  --zj-color-table-header-text: #52627b;
+
+  --zj-color-success: #2f855a;
+  --zj-color-warning: #b7791f;
+  --zj-color-danger: #c73e3e;
+  --zj-color-info: #52627b;
+
+  --zj-font-size-caption: 12px;
+  --zj-font-size-body: 14px;
+  --zj-font-size-section: 16px;
+  --zj-font-size-page-title: 24px;
+  --zj-line-height-body: 1.7;
+
+  --zj-space-1: 4px;
+  --zj-space-2: 8px;
+  --zj-space-3: 12px;
+  --zj-space-4: 16px;
+  --zj-space-6: 24px;
+  --zj-space-8: 32px;
+
+  --zj-radius-control: 6px;
+  --zj-radius-card: 12px;
+  --zj-focus-ring: 0 0 0 3px rgb(36 88 211 / 16%);
+  --zj-transition-fast: 150ms ease;
+}

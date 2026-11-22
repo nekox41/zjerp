@@ -1,0 +1,1 @@
+<template><ProjectWorkspace project-type="PG"/></template><script setup name="WorkProjectAssessment">import ProjectWorkspace from './components/ProjectWorkspace.vue';</script>
