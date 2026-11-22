@@ -25,7 +25,7 @@ public class ServiceReportController {
     private Map<String,Object> one(String sql,Object...args){List<Map<String,Object>> r=jdbc.queryForList(sql,args);if(r.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"记录不存在");return r.get(0);}
     private String json(Object v){try{return mapper.writeValueAsString(v);}catch(Exception e){throw new IllegalStateException(e);}}
     private String sha(String s){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
-    private Map<String,Object> report(long id){return one("SELECT * FROM erp_service_report WHERE id=?",id);}
+    private Map<String,Object> report(long id){return one("SELECT * FROM erp_service_report WHERE id=? FOR UPDATE",id);}
     private Map<String,Object> version(long id,int no){return one("SELECT * FROM erp_service_report_version WHERE report_id=? AND version_no=?",id,no);}
     private Map<String,Object> content(long id,Map<String,Object> report){return one("SELECT * FROM erp_service_report_version WHERE report_id=? AND version_no=?",id,report.get("current_version_no"));}
     private void event(long id,String from,String to,long who,String reason){
