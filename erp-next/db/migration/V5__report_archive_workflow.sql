@@ -1,18 +1,5 @@
 -- V5: private files and immutable technical-service report versions/workflow.
-CREATE TABLE erp_file_object (
- id BIGINT NOT NULL AUTO_INCREMENT,
- storage_key CHAR(36) NOT NULL,
- original_name VARCHAR(255) NOT NULL,
- media_type VARCHAR(120) NOT NULL,
- file_size BIGINT NOT NULL,
- sha256 CHAR(64) NOT NULL,
- uploaded_by BIGINT NOT NULL,
- created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
- PRIMARY KEY(id), UNIQUE KEY uk_erp_file_storage_key(storage_key),
- KEY idx_erp_file_uploader(uploaded_by,created_at),
- CONSTRAINT fk_erp_file_uploader FOREIGN KEY(uploaded_by) REFERENCES erp_identity(id) ON DELETE RESTRICT,
- CONSTRAINT ck_erp_file_size CHECK(file_size>0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- Reuse the shared private file metadata table from V1 (erp_file_object).
 
 CREATE TABLE erp_service_report (
  id BIGINT NOT NULL AUTO_INCREMENT,
