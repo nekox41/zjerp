@@ -64,7 +64,7 @@ services:
   erp-next-web:
     build:
       context: ../frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.erp-next
     ports:
       - "${ERP_NEXT_WEB_PORT:-8089}:80"
     depends_on:
