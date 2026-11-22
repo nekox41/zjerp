@@ -55,6 +55,7 @@ public class ServiceReportController {
         r.put("content",mapper.convertValue(parse(v.get("content_json").toString()),new TypeReference<Map<String,Object>>(){}));
         r.put("contentSha256",v.get("content_sha256"));
         r.put("versionCreatedBy",v.get("created_by"));
+        r.put("versions",jdbc.queryForList("SELECT version_no,content_sha256,archive_manifest,created_by,created_at FROM erp_service_report_version WHERE report_id=? ORDER BY version_no DESC",id));
         r.put("attachments",jdbc.queryForList("SELECT a.id attachment_id,f.id file_id,f.original_name,f.media_type,f.byte_size file_size,f.sha256,a.version_no FROM erp_service_report_attachment a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? AND a.version_no=? ORDER BY a.id",id,r.get("current_version_no")));
         r.put("events",jdbc.queryForList("SELECT e.*,i.display_name actor_name FROM erp_service_report_event e JOIN erp_identity i ON i.id=e.actor_identity_id WHERE e.report_id=? ORDER BY e.id",id));
         return r;
@@ -151,6 +152,7 @@ public class ServiceReportController {
         Map<String,Object> v=content(id,r);
         List<Map<String,Object>> files=jdbc.queryForList("SELECT f.id,f.original_name,f.media_type,f.byte_size file_size,f.sha256 FROM erp_service_report_attachment a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? AND a.version_no=? ORDER BY f.id",id,r.get("current_version_no"));
         Map<String,Object> manifest=new LinkedHashMap<>();manifest.put("reportId",id);manifest.put("reportNo",r.get("report_no"));manifest.put("revisionNo",r.get("revision_no"));manifest.put("versionNo",r.get("current_version_no"));manifest.put("contentSha256",v.get("content_sha256"));manifest.put("attachments",files);manifest.put("issuedAt",r.get("issued_at"));
+        jdbc.update("UPDATE erp_service_report_version SET archive_manifest=? WHERE report_id=? AND version_no=?",json(manifest),id,r.get("current_version_no"));
         jdbc.update("UPDATE erp_service_report SET status='archived',archived_at=CURRENT_TIMESTAMP(3),archive_manifest=? WHERE id=?",json(manifest),id);
         event(id,"issued","archived",actor(a),"归档快照已固定");return detail(id);
     }
