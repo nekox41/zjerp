@@ -1,0 +1,1 @@
+<template><ProjectWorkspace project-type="JC"/></template><script setup name="WorkProjectInspection">import ProjectWorkspace from './components/ProjectWorkspace.vue';</script>

@@ -1,0 +1,59 @@
+# 众基 ERP 前端
+
+Vue 3、Element Plus、Pinia 和 Vite 管理端。后端及前后端、MySQL、Redis 的统一 Compose 配置维护在 [zjerp_backend](https://github.com/nekox41/zjerp_backend)。
+
+## 环境要求
+
+- Node.js 22.x
+- npm 10.x
+- npm 是本仓库唯一支持的包管理器，请勿使用 Yarn 或 pnpm 安装依赖。
+
+## 本地开发
+
+```bash
+npm ci
+npm run dev
+```
+
+默认访问 `http://localhost:8888`，`/dev-api` 代理到 `VITE_DEV_API_TARGET`（默认 `http://localhost:8080`）。修改后端地址时调整 `.env.development`，无需改动 Vite 配置。先启动后端及其 MySQL、Redis。
+
+Windows 用户也可运行 `bin/package.bat` 安装依赖、`bin/run-web.bat` 启动开发服务器、`bin/build.bat` 构建生产版本；这些脚本与 CI/Docker 使用相同的 npm 命令。
+
+预发布构建可执行 `npm run build:stage`；正式 Docker 镜像使用 `npm run build:prod`。两种构建模式分别使用 `/stage-api/` 和 `/prod-api/` API 前缀，Nginx 均已配置对应代理。
+
+环境变量和代理规则详见 [环境配置说明](docs/CONFIGURATION.md)。
+
+## 构建镜像
+
+```bash
+docker build -t zjerp-frontend:local .
+```
+
+Dockerfile 自行执行 `npm ci` 和 `npm run build:prod`，无需事先生成 `dist`。运行阶段使用 Nginx，支持 History 路由回退、`/prod-api/` 代理和历史 `/profile/` 资源。Nginx 的后端服务名为 `backend:8080`；单独运行镜像时也需要可解析的同名后端服务。
+
+## 一起部署
+
+两个仓库放在同一父目录，在后端仓库运行：
+
+```bash
+cd ../zjerp_backend
+python3 scripts/init-compose-env.py
+# 编辑 .env，将 PUBLIC_API_URL 改为实际访问地址。
+docker compose up -d --build
+```
+
+默认访问 `http://localhost:8088`。详见后端的 [部署说明](https://github.com/nekox41/zjerp_backend/blob/master/DEPLOYMENT.md) 和 [Codespaces 开发指南](https://github.com/nekox41/zjerp_backend/blob/master/codex/DEVELOPMENT.md)。
+
+文件管理页面为 `/system/file`，动态路由及权限由后端菜单下发。旧数据仅迁移数据库时，列表可显示元数据，但下载仍需原文件；未知大小显示“未核实”。
+
+## 验证
+
+```bash
+npm run build:prod
+```
+
+GitHub Actions 对 PR 仅构建验证，分支推送按现有 Docker Hub 配置发布镜像。不要提交 `.env.local`、上传文件或本地构建产物。
+
+
+## Codex 交接资料
+[统一界面规范](DESIGN_SYSTEM.md)；架构、运维和后续计划集中维护在后端仓库的 codex/README.md。

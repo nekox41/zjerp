@@ -1,0 +1,1 @@
+<template><ProjectWorkspace project-type="WB"/></template><script setup name="WorkProjectMaintenance">import ProjectWorkspace from './components/ProjectWorkspace.vue';</script>

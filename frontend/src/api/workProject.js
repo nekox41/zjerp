@@ -1,0 +1,13 @@
+import request from '@/utils/request';
+const base='/management/work-project';
+export const projectList=params=>request({url:base+'/list',params});
+export const getProject=id=>request({url:base+'/'+id});
+export const createProject=data=>request({url:base,method:'post',data});
+export const saveProjectSection=(id,section,data)=>request({url:`${base}/${id}/section/${section}`,method:'put',data});
+export const applyProjectNumber=id=>request({url:`${base}/${id}/apply-number`,method:'post'});
+export const projectContracts=params=>request({url:base+'/contracts',params});
+export const projectUsers=params=>request({url:base+'/users',params});
+export const projectChildren=(id,kind,params)=>request({url:`${base}/${id}/${kind}`,params});
+export const saveProjectChild=(id,kind,data)=>request({url:`${base}/${id}/${kind}`,method:'post',data});
+export const deleteProjectChild=(id,kind,child)=>request({url:`${base}/${id}/${kind}/${child}`,method:'delete'});
+export const projectTypes={WB:'维护保养项目',JC:'检测项目',PD:'评定项目',PG:'评估项目',QT:'其他技术服务项目'};
