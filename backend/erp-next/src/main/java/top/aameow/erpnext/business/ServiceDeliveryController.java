@@ -89,10 +89,10 @@ public class ServiceDeliveryController {
     }
     @PutMapping("/issues/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> updateIssue(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_project_issue WHERE id=?",id); String status=val(b,"status","open");
-        if(!Set.of("open","in_progress","resolved","closed").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效整改状态");
-        if(Set.of("resolved","closed").contains(status)&&(b.get("resolution")==null||b.get("resolution").toString().isBlank())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"关闭整改项必须填写处理结果");
-        jdbc.update("UPDATE erp_project_issue SET title=COALESCE(?,title),description=COALESCE(?,description),severity=COALESCE(?,severity),owner_employee_id=COALESCE(?,owner_employee_id),due_on=COALESCE(?,due_on),status=?,resolution=COALESCE(?,resolution),closed_at=CASE WHEN ? IN ('resolved','closed') THEN CURRENT_TIMESTAMP(3) ELSE NULL END WHERE id=?",b.get("title"),b.get("description"),b.get("severity"),opt(b,"ownerEmployeeId"),b.get("dueOn"),status,b.get("resolution"),status,id);
+        one("SELECT id FROM erp_project_issue WHERE id=?",id); String status=b.get("status")==null?null:b.get("status").toString();
+        if(status!=null&&!Set.of("open","in_progress","resolved","closed").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效整改状态");
+        if(status!=null&&Set.of("resolved","closed").contains(status)&&(b.get("resolution")==null||b.get("resolution").toString().isBlank())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"关闭整改项必须填写处理结果");
+        jdbc.update("UPDATE erp_project_issue SET title=COALESCE(?,title),description=COALESCE(?,description),severity=COALESCE(?,severity),owner_employee_id=COALESCE(?,owner_employee_id),due_on=COALESCE(?,due_on),status=COALESCE(?,status),resolution=COALESCE(?,resolution),closed_at=CASE WHEN COALESCE(?,status) IN ('resolved','closed') THEN COALESCE(closed_at,CURRENT_TIMESTAMP(3)) WHEN ? IS NOT NULL THEN NULL ELSE closed_at END WHERE id=?",b.get("title"),b.get("description"),b.get("severity"),opt(b,"ownerEmployeeId"),b.get("dueOn"),status,b.get("resolution"),status,status,id);
         audit(a,"project.issue.updated","erp_project_issue",id,status); return one("SELECT * FROM erp_project_issue WHERE id=?",id);
     }
 
@@ -111,11 +111,11 @@ public class ServiceDeliveryController {
     }
     @PutMapping("/work-packages/{id}") @PreAuthorize("hasAuthority('service:write')") @Transactional
     public Map<String,Object> updateWorkPackage(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_service_work_package WHERE id=?",id); String status=val(b,"status","planned");
-        if(!Set.of("planned","in_progress","blocked","completed","cancelled").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效工作包状态");
+        one("SELECT id FROM erp_service_work_package WHERE id=?",id); String status=b.get("status")==null?null:b.get("status").toString();
+        if(status!=null&&!Set.of("planned","in_progress","blocked","completed","cancelled").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效工作包状态");
         BigDecimal progress=b.get("progress")==null?null:new BigDecimal(b.get("progress").toString());
         if(progress!=null&&(progress.signum()<0||progress.compareTo(BigDecimal.valueOf(100))>0)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"进度必须在 0 到 100 之间");
-        jdbc.update("UPDATE erp_service_work_package SET title=COALESCE(?,title),description=COALESCE(?,description),assignee_employee_id=COALESCE(?,assignee_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),status=?,progress=COALESCE(?,progress) WHERE id=?",b.get("title"),b.get("description"),opt(b,"assigneeEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),status,progress,id);
+        jdbc.update("UPDATE erp_service_work_package SET title=COALESCE(?,title),description=COALESCE(?,description),assignee_employee_id=COALESCE(?,assignee_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),status=COALESCE(?,status),progress=COALESCE(?,progress) WHERE id=?",b.get("title"),b.get("description"),opt(b,"assigneeEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),status,progress,id);
         audit(a,"service.work_package.updated","erp_service_work_package",id,status); return one("SELECT * FROM erp_service_work_package WHERE id=?",id);
     }
     @GetMapping("/work-packages/{id}/records") @PreAuthorize("hasAuthority('service:read')")
