@@ -37,10 +37,10 @@ jobs:
         run: |
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2') AND success = 1" | grep -qx 2
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2','3') AND success = 1" | grep -qx 2
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 11
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 18
       - name: Build and start API and web
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d --build
       - name: Collect container diagnostics
@@ -70,6 +70,20 @@ jobs:
           TOKEN=$(python -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<< "$LOGIN")
           test -n "$TOKEN"
           curl -fsS http://127.0.0.1:8089/next-api/auth/me -H "Authorization: Bearer $TOKEN" | grep -q 'CI Admin'
+
+          ORG=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/organizations -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 业务部"}')
+          ORG_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$ORG")
+          EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeCode\":\"CI-001\",\"fullName\":\"CI 员工\",\"organizationId\":$ORG_ID}")
+          EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$EMP")
+          CUSTOMER=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"customerCode\":\"CI-C-001\",\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
+          CUSTOMER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CUSTOMER")
+          curl -fsS -X POST "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 联系人","phone":"123456"}' >/dev/null
+          CONTRACT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/contracts -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractNo\":\"CI-CT-001\",\"title\":\"CI 合同\",\"customerId\":$CUSTOMER_ID,\"amount\":1000}")
+          CONTRACT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CONTRACT")
+          PROJECT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectNo\":\"CI-P-001\",\"name\":\"CI 项目\",\"contractId\":$CONTRACT_ID,\"managerEmployeeId\":$EMP_ID}")
+          PROJECT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$PROJECT")
+          curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"title":"CI 里程碑"}' >/dev/null
+          curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 里程碑'
       - name: Stop isolated stack and remove CI-only volume
         if: always()
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml down -v --remove-orphans
