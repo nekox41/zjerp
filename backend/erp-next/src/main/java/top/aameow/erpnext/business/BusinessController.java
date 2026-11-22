@@ -217,6 +217,44 @@ public class BusinessController {
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'updated',?)",id,actor(a),val(b,"log","项目资料更新"));
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
+    @GetMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:read')")
+    public Map<String,Object> contract(@PathVariable long id) {
+        return one("SELECT ct.*,c.name customer_name,e.full_name owner_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id WHERE ct.id=?",id);
+    }
+
+    @GetMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:read')")
+    public Map<String,Object> project(@PathVariable long id) {
+        Map<String,Object> result=new LinkedHashMap<>(one("SELECT p.*,c.name customer_name,ct.contract_no,ct.title contract_title,e.full_name manager_name FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id JOIN erp_contract ct ON ct.id=p.contract_id LEFT JOIN erp_employee e ON e.id=p.manager_employee_id WHERE p.id=?",id));
+        result.put("members",members(id)); result.put("milestones",milestones(id)); result.put("logs",logs(id)); return result;
+    }
+
+    @PutMapping("/projects/{id}/members/{employeeId}") @PreAuthorize("hasAuthority('project:write')") @Transactional
+    public void updateMember(@PathVariable long id,@PathVariable long employeeId,@RequestBody Map<String,Object>b,Authentication a) {
+        int changed=jdbc.update("UPDATE erp_project_member SET member_role=? WHERE project_id=? AND employee_id=?",b.get("role"),id,employeeId);
+        if(changed==0) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"项目成员不存在");
+        audit(a,"project.member.updated","erp_project",id,"更新成员 "+employeeId);
+    }
+    @DeleteMapping("/projects/{id}/members/{employeeId}") @PreAuthorize("hasAuthority('project:write')") @Transactional
+    public void removeMember(@PathVariable long id,@PathVariable long employeeId,Authentication a) {
+        int changed=jdbc.update("DELETE FROM erp_project_member WHERE project_id=? AND employee_id=?",id,employeeId);
+        if(changed==0) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"项目成员不存在");
+        audit(a,"project.member.removed","erp_project",id,"移除成员 "+employeeId);
+    }
+    @PutMapping("/milestones/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
+    public Map<String,Object> updateMilestone(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
+        one("SELECT id FROM erp_project_milestone WHERE id=?",id);
+        jdbc.update("UPDATE erp_project_milestone SET title=COALESCE(?,title),description=COALESCE(?,description),due_on=COALESCE(?,due_on),sort_order=COALESCE(?,sort_order) WHERE id=?",
+            b.get("title"),b.get("description"),b.get("dueOn"),b.get("sortOrder"),id);
+        audit(a,"project.milestone.updated","erp_project_milestone",id,"更新里程碑"); return one("SELECT * FROM erp_project_milestone WHERE id=?",id);
+    }
+    @PutMapping("/milestones/{id}/skip") @PreAuthorize("hasAuthority('project:write')") @Transactional
+    public Map<String,Object> skipMilestone(@PathVariable long id,Authentication a) {
+        Map<String,Object> m=one("SELECT * FROM erp_project_milestone WHERE id=?",id);
+        jdbc.update("UPDATE erp_project_milestone SET status='skipped' WHERE id=?",id);
+        audit(a,"project.milestone.skipped","erp_project_milestone",id,m.get("title").toString());
+        return one("SELECT * FROM erp_project_milestone WHERE id=?",id);
+    }
+
     @PostMapping("/projects/{id}/members") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public void addMember(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_project WHERE id=?",id); long employee=Long.parseLong(required(b,"employeeId")); one("SELECT id FROM erp_employee WHERE id=?",employee);
