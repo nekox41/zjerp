@@ -24,7 +24,7 @@ public class DatabaseGuard implements ApplicationRunner {
         Integer versionTwo = jdbc.queryForObject(
             "SELECT COUNT(*) FROM flyway_schema_history WHERE version='5' AND success=1", Integer.class);
         if (versionTwo == null || versionTwo != 1) {
-            throw new IllegalStateException("ERP Next database schema V2 is required before the API can start");
+            throw new IllegalStateException("ERP Next database schema V5 is required before the API can start");
         }
     }
 }
