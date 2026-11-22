@@ -30,6 +30,7 @@ curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/attachm
 # Author cannot review their own report; the state remains draft after rejection.
 SELF_REVIEW=$(curl -sS -o /tmp/erp-report-self-review.json -w '%{http_code}' -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/start-review" -H "Authorization: Bearer $TOKEN")
 test "$SELF_REVIEW" = "403"
+curl -fsS http://127.0.0.1:8090/api/auth/me -H "Authorization: Bearer $ISSUE_TOKEN" | tee /tmp/erp-report-issuer-me.json | grep -q 'report:issue'
 EARLY_ISSUE=$(curl -sS -o /tmp/erp-report-early-issue.json -w '%{http_code}' -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_ID/issue" -H "Authorization: Bearer $ISSUE_TOKEN")
 if [ "$EARLY_ISSUE" != "409" ]; then cat /tmp/erp-report-early-issue.json; exit 1; fi
 
