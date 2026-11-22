@@ -66,7 +66,7 @@ public class AuthService {
         if (!"active".equals(row.get("status")) || !passwords.matches(password, (String) row.get("password_hash"))) {
             jdbc.update("""
                 UPDATE erp_identity SET failed_login_count=failed_login_count+1,
-                  locked_until=CASE WHEN failed_login_count+1 >= ? THEN DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MINUTE) ELSE locked_until END
+                  locked_until=CASE WHEN failed_login_count >= ? THEN DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MINUTE) ELSE locked_until END
                 WHERE id=?
                 """, maxFailedLogins, lockMinutes, id);
             audit(null, "auth.login.failed", "erp_identity", Long.toString(id), "登录失败");
