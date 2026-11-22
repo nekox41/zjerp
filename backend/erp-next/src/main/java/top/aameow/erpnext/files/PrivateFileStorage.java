@@ -23,7 +23,7 @@ public class PrivateFileStorage {
         String media=file.getContentType()==null?"application/octet-stream":file.getContentType().split(";")[0].trim().toLowerCase();
         if(!java.util.Set.of("application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document").contains(media))
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"仅支持 PDF、JPG、PNG、TXT、DOCX 文件");
-        String original=file.getOriginalFilename()==null?"upload":Paths.get(file.getOriginalFilename()).getFileName().toString();
+        String supplied=file.getOriginalFilename()==null?"upload":file.getOriginalFilename().replace('\\\\','/');\n        String original=Paths.get(supplied).getFileName().toString();
         original=original.replaceAll("[\\p{Cntrl}]","_").trim();
         if(original.isBlank()) original="upload";
         if(original.length()>240) original=original.substring(original.length()-240);
@@ -42,7 +42,7 @@ public class PrivateFileStorage {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"文件保存失败",e);
         }
     }
-    public Path resolve(String key) {
+    private boolean starts(byte[] b,int... values){if(b.length<values.length)return false;for(int i=0;i<values.length;i++)if((b[i]&255)!=values[i])return false;return true;}\n    private boolean containsZero(byte[] b){for(byte x:b)if(x==0)return true;return false;}\n    public Path resolve(String key) {
         try {
             UUID.fromString(key);
             Path p=root.resolve(key).normalize();
