@@ -1,6 +1,4 @@
-# Standalone, isolated next-generation ERP schema sandbox.
-# Requires ERP_NEXT_DB_ROOT_PASSWORD and ERP_NEXT_DB_PASSWORD in environment.
-# No host MySQL port is published and no legacy database is mounted.
+# Isolated new ERP stack. Never point this stack at the legacy server database.
 services:
   erp-next-mysql:
     image: mysql:8.4
@@ -38,6 +36,24 @@ services:
     command: ["migrate"]
     networks: [erp-next-internal]
     restart: "no"
+
+  erp-next-api:
+    build:
+      context: ../backend/erp-next
+      dockerfile: Dockerfile
+    environment:
+      ERP_NEXT_PORT: "8090"
+      ERP_NEXT_DB_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      ERP_NEXT_DB_USER: erp_next
+      ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
+    ports:
+      - "${ERP_NEXT_API_PORT:-8090}:8090"
+    depends_on:
+      erp-next-schema:
+        condition: service_completed_successfully
+    networks: [erp-next-internal]
+    restart: unless-stopped
 
 volumes:
   erp_next_mysql_data:
