@@ -1,31 +1,28 @@
-# 众基 ERP 后端
+# 众基 ERP · Monorepo
 
-Java 17、Spring Boot 3、MyBatis、MySQL 8+、Redis。前端仓库：[zjerp_frontend](https://github.com/nekox41/zjerp_frontend)。
+统一开发仓库，后端使用 Spring Boot 3 / Java 17，前端使用 Vue 3 / Vite。前后端共享 Git 历史、Issue、Pull Request 和版本规划，但保持独立构建。
 
-当前业务包括角色权限、统一附件、用户资料、中间人、五类合同和项目、项目文件/资料、维保卡及财务报账。首页菜单由数据库下发，单独更新 Java/Vue 源码不会更新旧数据库菜单。
+## 目录
 
-## 开发（含 Codespaces，不使用 Docker 运行应用）
+- [backend/](backend/) — 原后端 Maven 多模块工程，包含 `pom.xml`、SQL、Dockerfile、Compose 与旧版部署脚本
+- [frontend/](frontend/) — 原前端 Vue 工程，包含 `package.json`、页面和静态资源
+- [docs/](docs/) — 统一仓库合并记录与产品文档
+- [.github/workflows/](.github/workflows/) — 前后端构建验证
 
-见 [开发指南](codex/DEVELOPMENT.md)。准备独立 MySQL 开发库与 Redis；首次用 `scripts/init-database.sh` 创建当前表和菜单，再用 `bash scripts/dev-backend.sh` 构建全部模块并启动。前端执行 `npm ci && npm run dev`，转发 8888 端口。
-
-## Compose 首次部署
-
-两个仓库相邻命名为 `zjerp_backend`、`zjerp_frontend`，在后端执行：
+## 本地构建
 
 ```bash
-python3 scripts/init-compose-env.py
-# 编辑 .env 中的 PUBLIC_API_URL；目录不同则修改 FRONTEND_CONTEXT
-docker compose config --quiet
-docker compose up -d --build
-docker compose ps
+cd backend && mvn clean verify
+cd ../frontend && npm ci && npm run build:prod
 ```
 
-默认访问 http://localhost:8088，初始管理员 `admin / admin123`，首次登录后修改密码。详见 [部署说明](DEPLOYMENT.md)。
+旧版部署配置暂时仍位于 `backend/`；不要从仓库根目录直接运行原 Compose，也不要将其当作新版 ERP 的生产部署。路径和端到端启动验证由 #18 跟进。
 
-## 项目资料
+## 迁移说明
 
-- [设计、代码规范、当前状态与后续计划](codex/README.md)
-- [合同模块](CONTRACT_MODULES_UPGRADE.md)、[项目模块](WORK_PROJECTS.md)、[用户资料](USER_MATERIALS.md)、[角色权限](ROLE_ONLY_UPGRADE.md)
-- 前端界面遵循前端仓库 `DESIGN_SYSTEM.md`。
+- 本仓库由原 `nekox41/zjerp_backend` 重命名而来，前端 `nekox41/zjerp_frontend` 的完整 Git 历史通过双父提交接入。
+- 旧前端仓库保留作历史参考；今后新业务开发统一提交本仓库的 Issue/PR。
+- 旧仓库未合并 PR 和旧数据库迁移工作仍需逐项处理，不会因合并代码而自动完成。
+- 新版 ERP 尚在开发中，**不要将目录合并等同于 V1 已可用**。
 
-测试：`mvn test` 与 `bash scripts/verify-file-storage.sh`。上传文件、密钥、日志、数据库备份和历史生产操作工具不进入仓库。
+参见 [仓库合并执行记录](docs/monorepo-import.md)。
