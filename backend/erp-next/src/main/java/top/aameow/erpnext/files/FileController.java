@@ -27,12 +27,12 @@ public class FileController {
     private void assertReadable(Map<String,Object> f,Authentication a){
         long owner=((Number)f.get("uploaded_by")).longValue();
         if(owner==actor(a))return;
-        Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment a JOIN erp_service_report r ON r.id=a.report_id WHERE a.file_id=? AND a.version_no=r.current_version_no",Integer.class,f.get("id"));
+        Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment a JOIN erp_service_report r ON r.id=a.report_id WHERE a.file_id=?",Integer.class,f.get("id"));
         if(linked==null||linked==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"文件不存在");
     }
     @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('file:upload')")
-    public Map<String,Object> upload(@RequestPart("file") MultipartFile file,Authentication a){
+    @org.springframework.transaction.annotation.Transactional\n    public Map<String,Object> upload(@RequestPart("file") MultipartFile file,Authentication a){
         PrivateFileStorage.StoredFile stored=storage.store(file);
         try{
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,file_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",
@@ -40,7 +40,7 @@ public class FileController {
             long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
             jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('name',?,'size',?,'sha256',?))",
                 actor(a),"file.uploaded","erp_file_object",Long.toString(id),UUID.randomUUID().toString(),stored.originalName(),stored.size(),stored.sha256());
-            return one(id);
+            Map<String,Object> result=one(id);result.remove("storage_key");return result;
         }catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }
     @GetMapping("/{id}")
