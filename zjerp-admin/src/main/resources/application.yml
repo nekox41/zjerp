@@ -122,3 +122,9 @@ alist:
 upload:
   directory: "/upload"
   cron: "0 0 2 * * ?"
+
+
+# 内置数据迁移：私有暂存目录必须位于普通附件/静态资源目录之外
+migration:
+  staging-directory: ${user.home}/.zjerp/private/migration-staging
+  max-source-bytes: 1073741824
