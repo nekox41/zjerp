@@ -18,6 +18,8 @@ const editForm = ref({})
 const contactEditId = ref(null)
 const selectedProjectId = ref(null)
 const qualifications = ref([])
+const amendments = ref([])
+const amendmentForm = ref({amendmentNo:'',title:'',changeSummary:'',revisedAmount:'',effectiveOn:''})
 const contactForm = ref({ name:'', positionName:'', phone:'', email:'', isPrimary:false, notes:'' })
 const qualificationForm = ref({ qualificationName:'', certificateNo:'', issuingAuthority:'', issuedOn:'', expiresOn:'', notes:'' })
 const attachmentForm = ref({ attachmentType:'signed_contract', title:'' })
@@ -114,6 +116,7 @@ async function openDetail(id) {
     }[section.value]
     selected.value=await api(endpoint+id)
     if(section.value==='employees') qualifications.value=await api('/business/employees/'+id+'/qualifications')
+    if(section.value==='contracts') amendments.value=await api('/business/contracts/'+id+'/amendments')
   } catch(e) { error.value=e.message }
 }
 async function addContact() {
@@ -174,6 +177,18 @@ async function addQualification() {
     await api('/business/employees/'+selected.value.id+'/qualifications',{method:'POST',body:JSON.stringify(qualificationForm.value)})
     qualificationForm.value={qualificationName:'',certificateNo:'',issuingAuthority:'',issuedOn:'',expiresOn:'',notes:''}
     qualifications.value=await api('/business/employees/'+selected.value.id+'/qualifications')
+  } catch(e) { error.value=e.message }
+  finally { busy.value=false }
+}
+async function addAmendment() {
+  busy.value=true; error.value=''
+  try {
+    await api('/business/contracts/'+selected.value.id+'/amendments',{method:'POST',body:JSON.stringify(amendmentForm.value)})
+    amendmentForm.value={amendmentNo:'',title:'',changeSummary:'',revisedAmount:'',effectiveOn:''}
+    selected.value=await api('/business/contracts/'+selected.value.id)
+    amendments.value=await api('/business/contracts/'+selected.value.id+'/amendments')
+    notice.value='合同变更已登记，合同金额已更新。'
+    await loadRows()
   } catch(e) { error.value=e.message }
   finally { busy.value=false }
 }
@@ -334,6 +349,13 @@ onMounted(load)
         <template v-else-if="section==='contracts'">
           <div class="bw-detail-grid"><div><small>客户</small><b>{{ selected.customer_name }}</b></div><div><small>签约方式</small><b>{{ selected.signing_mode==='intermediary'?'中间人签约':'直接签约' }}</b></div><div><small>中间人</small><b>{{ selected.intermediary_name || '—' }}</b></div><div><small>分成比例</small><b>{{ selected.intermediary_share_percent ?? '—' }}{{ selected.intermediary_share_percent!=null?'%':'' }}</b></div><div><small>金额</small><b>{{ selected.currency }} {{ selected.amount }}</b></div><div><small>期限</small><b>{{ selected.starts_on || '—' }} 至 {{ selected.ends_on || '—' }}</b></div></div>
           <h4>关联合同项目</h4><div class="bw-mini-list"><div v-for="p in selected.projects || []" :key="p.id"><b>{{ p.project_no }} · {{ p.name }}</b><span>{{ p.relation_type }} · {{ p.is_current?'当前合同':'历史合同' }}</span></div></div>
+          <h4>合同变更记录</h4>
+          <div class="bw-mini-list"><div v-for="a in amendments" :key="a.id"><b>{{ a.amendment_no }} · {{ a.title }}</b><span>{{ a.previous_amount }} → {{ a.revised_amount }} · {{ a.effective_on || '未填写生效日' }}</span><small>{{ a.change_summary }}</small></div></div>
+          <form v-if="can('contract:write') && ['active','completed'].includes(selected.status)" class="bw-form compact" @submit.prevent="addAmendment">
+            <label>变更编号<input v-model="amendmentForm.amendmentNo" required></label><label>变更名称<input v-model="amendmentForm.title" required></label>
+            <label>变更后金额<input v-model="amendmentForm.revisedAmount" type="number" min="0" step="0.01" required></label><label>生效日期<input v-model="amendmentForm.effectiveOn" type="date"></label>
+            <label class="wide">变更说明<textarea v-model="amendmentForm.changeSummary" rows="2" required></textarea></label><button class="bw-primary" :disabled="busy">登记合同变更</button>
+          </form>
           <h4>合同附件 / 公示卡</h4><div class="bw-mini-list"><div v-for="a in selected.attachments || []" :key="a.attachment_id"><b>{{ a.title || a.original_name }}</b><span>{{ a.attachment_type }} · {{ a.original_name }}</span><button @click="downloadFile(a.file_id,a.original_name)">下载</button></div></div>
           <div class="bw-attach-row"><select v-model="attachmentForm.attachmentType"><option value="signed_contract">签署合同</option><option value="amendment">合同补充协议</option><option value="maintenance_card">维护公示卡</option><option value="other">其他</option></select><input v-model="attachmentForm.title" placeholder="附件名称（可选）"><label class="bw-upload">上传附件<input type="file" hidden accept=".docx,.pdf,.jpg,.jpeg,.png,.txt" @change="uploadContractAttachment"></label></div>
         </template>
