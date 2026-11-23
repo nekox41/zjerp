@@ -169,6 +169,8 @@ public class ServiceWorkflowController {
         Map<String,Object>b=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",id);
         if(!"submitted".equals(b.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已提交的照片批次可以审核");
         if(((Number)b.get("created_by")).longValue()==actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片整理人不能审核自己的批次");
+        Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e JOIN erp_employee_qualification q ON q.employee_id=e.id WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)",Integer.class,actor(a));
+        if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片批次审核必须由具有有效工程师资格的员工完成");
         jdbc.update("UPDATE erp_report_photo_batch SET status='reviewed',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP(3) WHERE id=?",actor(a),id);
         audit(actor(a),"report.photo_batch.reviewed","erp_report_photo_batch",id,"reviewed");
         return batchDetail(id);
