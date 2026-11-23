@@ -96,7 +96,7 @@ public class PartnerMaintenanceController {
         Map<String,Object> p=one("SELECT * FROM erp_project WHERE id=?",id);
         Map<String,Object> state=jdbc.queryForList("SELECT m.*,c.contract_no current_contract_no,c.starts_on current_starts_on,c.ends_on current_ends_on FROM erp_maintenance_project m LEFT JOIN erp_contract c ON c.id=m.current_contract_id WHERE m.project_id=?",id).stream().findFirst().orElse(Map.of("project_id",id));
         state=new LinkedHashMap<>(state);
-        state.put("visits",jdbc.queryForList("SELECT v.*,c.contract_no FROM erp_maintenance_visit v LEFT JOIN erp_contract c ON c.id=v.contract_id WHERE v.project_id=? ORDER BY v.visit_date DESC",id));
+        state.put("visits",jdbc.queryForList("SELECT v.*,c.contract_no,(SELECT GROUP_CONCAT(e.full_name ORDER BY e.full_name SEPARATOR '、') FROM erp_maintenance_visit_staff vs JOIN erp_employee e ON e.id=vs.employee_id WHERE vs.visit_id=v.id) staff_names FROM erp_maintenance_visit v LEFT JOIN erp_contract c ON c.id=v.contract_id WHERE v.project_id=? ORDER BY v.visit_date DESC",id));
         state.put("contractHistory",jdbc.queryForList("SELECT c.id,c.contract_no,c.title,c.starts_on,c.ends_on,c.status,cf.file_id,cf.file_type,f.original_name FROM erp_contract_project cp JOIN erp_contract c ON c.id=cp.contract_id LEFT JOIN erp_contract_file cf ON cf.contract_id=c.id LEFT JOIN erp_file_object f ON f.id=cf.file_id WHERE cp.project_id=? AND c.service_type='maintenance' ORDER BY c.signed_on DESC,c.id DESC",id));
         return state;
     }
