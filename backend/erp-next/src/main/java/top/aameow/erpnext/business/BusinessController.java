@@ -217,8 +217,12 @@ public class BusinessController {
     }
     @PutMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> updateProject(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_project WHERE id=?",id);
-        Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) requireEngineer(manager);
+        Map<String,Object> existingProject=one("SELECT id,technical_lead_employee_id FROM erp_project WHERE id=?",id);
+        Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) {
+            requireEngineer(manager);
+            if(existingProject.get("technical_lead_employee_id")!=null&&((Number)existingProject.get("technical_lead_employee_id")).longValue()==manager)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是不同人员");
+        }
         BigDecimal progress=b.get("progress")==null?null:new BigDecimal(b.get("progress").toString());
         if(progress!=null && (progress.compareTo(BigDecimal.ZERO)<0||progress.compareTo(BigDecimal.valueOf(100))>0)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"进度必须在 0 到 100 之间");
         jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=COALESCE(?,manager_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),progress=COALESCE(?,progress),status=COALESCE(?,status) WHERE id=?",
