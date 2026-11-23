@@ -4,7 +4,7 @@ import { api, downloadFile } from './api'
 
 const props=defineProps({permissions:{type:Array,default:()=>[]},userId:{type:Number,required:true}})
 const can=(p)=>props.permissions.includes(p)
-const items=ref([]),selected=ref(null),error=ref(''),notice=ref(''),busy=ref(false),filter=ref('')
+const projectOptions=ref([]),items=ref([]),selected=ref(null),error=ref(''),notice=ref(''),busy=ref(false),filter=ref('')
 const form=ref({claimNo:'',title:'',projectId:'',lines:[{description:'',category:'travel',incurredOn:new Date().toISOString().slice(0,10),amount:''}]})
 const reason=ref(''),payment=ref({paymentReference:'',paidAmount:''})
 const own=computed(()=>selected.value?.applicant_identity_id===props.userId)
@@ -17,7 +17,7 @@ function reset(){selected.value=null;form.value={claimNo:'',title:'',projectId:'
 async function save(){busy.value=true;error.value='';try{const f=form.value,body={title:f.title,lines:f.lines.map(x=>({...x,amount:String(x.amount)}))};if(selected.value){body.expectedVersionNo=selected.value.version_no;await api('/finance/expenses/'+selected.value.id,{method:'PUT',body:JSON.stringify(body)});await open(selected.value.id)}else{body.claimNo=f.claimNo;if(f.projectId)body.projectId=Number(f.projectId);const result=await api('/finance/expenses',{method:'POST',body:JSON.stringify(body)});await open(result.id)}await refresh();notice.value='报账单已保存'}catch(e){error.value=e.message}finally{busy.value=false}}
 async function action(name){if(!selected.value)return;busy.value=true;error.value='';try{const id=selected.value.id,body=name==='return'?{reason:reason.value}:name==='pay'?{paymentReference:payment.value.paymentReference,paidAmount:payment.value.paidAmount}:{};await api('/finance/expenses/'+id+'/'+name,{method:'POST',body:JSON.stringify(body)});await open(id);await refresh();reason.value='';notice.value='状态更新成功'}catch(e){error.value=e.message}finally{busy.value=false}}
 async function upload(e){const file=e.target.files?.[0];if(!file||!selected.value)return;busy.value=true;try{const data=new FormData();data.append('file',file);const f=await api('/files',{method:'POST',body:data});await api('/finance/expenses/'+selected.value.id+'/attachments',{method:'POST',body:JSON.stringify({fileId:f.id})});await open(selected.value.id);notice.value='附件已关联'}catch(x){error.value=x.message}finally{busy.value=false;e.target.value=''}}
-onMounted(refresh)
+onMounted(async()=>{await refresh();try{projectOptions.value=(await api('/finance/options')).projects}catch(e){error.value=e.message}})
 </script>
 <template>
 <section class="panel finance-panel">
@@ -30,7 +30,7 @@ onMounted(refresh)
   <h3>{{selected?selected.claim_no+' · '+selected.status:'创建费用报账单'}}</h3>
   <p v-if="selected">总额：{{money(selected.total_amount)}} {{selected.currency}} · 版本：{{selected.version_no}}</p>
   <form v-if="!selected || editable" class="form-stack" @submit.prevent="save">
-    <div class="create-grid compact"><label v-if="!selected">报账编号<input v-model="form.claimNo" required maxlength="80"></label><label>标题<input v-model="form.title" required maxlength="240"></label><label v-if="!selected">项目 ID（可选）<input v-model="form.projectId" type="number" min="1"></label></div>
+    <div class="create-grid compact"><label v-if="!selected">报账编号<input v-model="form.claimNo" required maxlength="80"></label><label>标题<input v-model="form.title" required maxlength="240"></label><label v-if="!selected">所属项目（可选）<select v-model="form.projectId"><option value="">不关联项目</option><option v-for="p in projectOptions" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label></div>
     <h4>费用明细</h4><div v-for="(line,i) in form.lines" :key="i" class="create-grid compact"><label>费用说明<input v-model="line.description" required maxlength="500"></label><label>类别<select v-model="line.category"><option value="travel">差旅</option><option value="transport">交通</option><option value="materials">材料</option><option value="other">其他</option></select></label><label>发生日期<input v-model="line.incurredOn" type="date" required></label><label>金额<input v-model="line.amount" type="number" min="0.01" step="0.01" required></label><button type="button" class="secondary-button" :disabled="form.lines.length===1" @click="form.lines.splice(i,1)">删除明细</button></div>
     <div class="report-actions"><button type="button" class="secondary-button" @click="addLine">添加明细</button><button class="primary-button" :disabled="busy">保存报账</button></div>
   </form>
