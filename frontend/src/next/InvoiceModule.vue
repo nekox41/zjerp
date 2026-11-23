@@ -15,7 +15,7 @@ async function action(name){busy.value=true;error.value='';try{const id=selected
 onMounted(async()=>{await Promise.all([refresh(),api('/finance/options').then(v=>{options.value=v}).catch(e=>{error.value=e.message})])})
 </script>
 <template>
-<section class="panel"><div class="section-heading"><div><h2>发票与应收应付</h2><p>销项/进项发票、待收待付余额与分次核销</p></div><button v-if="can('invoice:write')" class="primary-button" @click="reset">登记发票</button></div>
+<section class="panel"><div class="section-heading"><div><h2>财务台账</h2><p>销项/进项发票、待收待付余额与分次核销</p></div><button v-if="can('invoice:write')" class="primary-button" @click="reset">登记发票</button></div>
 <p v-if="error" class="message error" role="alert">{{error}}</p><p v-if="notice" class="message success" role="status">{{notice}}</p>
 <div class="stat-grid"><article v-for="s in summary" :key="s.direction+s.currency" class="stat-card"><span>{{s.direction==='receivable'?'应收':'应付'}} · {{s.currency}}</span><b>{{s.outstanding_amount}}</b><small>已核销 {{s.settled_amount}} / 总额 {{s.total_amount}}</small></article></div>
 <div class="finance-toolbar"><select v-model="filter" @change="refresh"><option value="">全部类型</option><option value="receivable">应收</option><option value="payable">应付</option></select><button class="secondary-button" @click="refresh">刷新</button></div>
