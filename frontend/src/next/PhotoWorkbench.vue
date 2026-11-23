@@ -160,17 +160,23 @@ async function uploadPhotos(event) {
   if (photos.value.length + files.length > 300) { error.value='一个批次最多 300 张照片'; return }
   busy.value = true; error.value=''; notice.value=''
   try {
-    const form = new FormData()
-    for (let i=0;i<files.length;i++) {
-      progress.value = '正在处理照片 ' + (i+1) + '/' + files.length
-      form.append('photos',await compressPhoto(files[i]))
+    for (let start=0;start<files.length;start+=20) {
+      const form = new FormData()
+      const end=Math.min(start+20,files.length)
+      for (let i=start;i<end;i++) {
+        progress.value = '正在处理照片 ' + (i+1) + '/' + files.length
+        form.append('photos',await compressPhoto(files[i]))
+      }
+      progress.value = '正在上传第 ' + (start+1) + '–' + end + ' 张…'
+      batch.value = await api('/report-photos/batches/' + batchId.value + '/photos',{method:'POST',body:form})
     }
-    progress.value = '正在上传照片…'
-    batch.value = await api('/report-photos/batches/' + batchId.value + '/photos',{method:'POST',body:form})
     photos.value = (batch.value.photos || []).map(p=>({...p,previewUrl:'',selected:false}))
     await loadPreviews()
     notice.value = '已导入 ' + files.length + ' 张照片。请逐张确认系统分类。'
-  } catch(e) { error.value = e.message }
+  } catch(e) {
+    error.value = e.message
+    if(batchId.value) { try { batch.value=await api('/report-photos/batches/'+batchId.value); photos.value=(batch.value.photos||[]).map(p=>({...p,previewUrl:'',selected:false})); await loadPreviews() } catch {} }
+  }
   finally { busy.value=false; progress.value='' }
 }
 function selectVisible(value) {
