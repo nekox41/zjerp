@@ -23,7 +23,7 @@ public class ReportDocxPhotoInserter {
         "电气火灾监控系统", "消防电源监控系统", "火灾警报和消防应急广播系统",
         "消防专用电话系统", "消防电梯", "消防供配电设施", "建筑灭火器"
     );
-    private static final Pattern PREFIX = Pattern.compile("^[一二三四五六七八九十百]+[、.．]\\s*");
+    private static final Pattern PREFIX = Pattern.compile("^(?:[（(]\\s*[一二三四五六七八九十百]+\\s*[）)]|[一二三四五六七八九十百]+[、.．])\\s*");
     public record Photo(String system, byte[] bytes, String filename, String takenOn, String caption) { }
     private record Block(int headingIndex, int tableIndex, int noteIndex, XWPFTable table) { }
 
