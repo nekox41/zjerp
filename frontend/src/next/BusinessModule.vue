@@ -192,6 +192,15 @@ async function addAmendment() {
   } catch(e) { error.value=e.message }
   finally { busy.value=false }
 }
+async function removeContractAttachment(item) {
+  if(!confirm('确定移除这个合同附件关联吗？文件本身不会被删除。')) return
+  busy.value=true; error.value=''
+  try {
+    await api('/business/contracts/'+selected.value.id+'/attachments/'+item.attachment_id,{method:'DELETE'})
+    selected.value=await api('/business/contracts/'+selected.value.id)
+  } catch(e) { error.value=e.message }
+  finally { busy.value=false }
+}
 async function uploadContractAttachment(event) {
   const file=event.target.files?.[0]; event.target.value=''
   if(!file) return
@@ -356,7 +365,7 @@ onMounted(load)
             <label>变更后金额<input v-model="amendmentForm.revisedAmount" type="number" min="0" step="0.01" required></label><label>生效日期<input v-model="amendmentForm.effectiveOn" type="date"></label>
             <label class="wide">变更说明<textarea v-model="amendmentForm.changeSummary" rows="2" required></textarea></label><button class="bw-primary" :disabled="busy">登记合同变更</button>
           </form>
-          <h4>合同附件 / 公示卡</h4><div class="bw-mini-list"><div v-for="a in selected.attachments || []" :key="a.attachment_id"><b>{{ a.title || a.original_name }}</b><span>{{ a.attachment_type }} · {{ a.original_name }}</span><button @click="downloadFile(a.file_id,a.original_name)">下载</button></div></div>
+          <h4>合同附件 / 公示卡</h4><div class="bw-mini-list"><div v-for="a in selected.attachments || []" :key="a.attachment_id"><b>{{ a.title || a.original_name }}</b><span>{{ a.attachment_type }} · {{ a.original_name }}</span><button @click="downloadFile(a.file_id,a.original_name)">下载</button><button v-if="can('contract:write')" @click="removeContractAttachment(a)">移除关联</button></div></div>
           <div class="bw-attach-row"><select v-model="attachmentForm.attachmentType"><option value="signed_contract">签署合同</option><option value="amendment">合同补充协议</option><option value="maintenance_card">维护公示卡</option><option value="other">其他</option></select><input v-model="attachmentForm.title" placeholder="附件名称（可选）"><label class="bw-upload">上传附件<input type="file" hidden accept=".docx,.pdf,.jpg,.jpeg,.png,.txt" @change="uploadContractAttachment"></label></div>
         </template>
       </section>
