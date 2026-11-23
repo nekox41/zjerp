@@ -21,9 +21,10 @@ public class PrivateFileStorage {
     public PrivateFileStorage(@Value("${erp.files.root:/var/lib/erp-next/files}") String root) {
         this.root=Paths.get(root).toAbsolutePath().normalize();
     }
-    public StoredFile store(MultipartFile file) {
+    public StoredFile store(MultipartFile file) { return store(file,25L*1024*1024); }
+    private StoredFile store(MultipartFile file,long maxBytes) {
         if(file==null||file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择非空文件");
-        if(file.getSize()>25L*1024*1024) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"单个文件不能超过 25 MB");
+        if(file.getSize()>maxBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"文件超过允许大小");
         String media=file.getContentType()==null?"application/octet-stream":file.getContentType().split(";")[0].trim().toLowerCase();
         if(!Set.of("application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document").contains(media))
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"仅支持 PDF、JPG、PNG、TXT、DOCX 文件");
@@ -58,7 +59,7 @@ public class PrivateFileStorage {
     }
     public StoredFile storeBytes(byte[] bytes,String originalName,String mediaType) {
         if(bytes==null||bytes.length==0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"生成文件为空");
-        return store(new MemoryMultipartFile(bytes,originalName,mediaType));
+        return store(new MemoryMultipartFile(bytes,originalName,mediaType),250L*1024*1024);
     }
     private static final class MemoryMultipartFile implements MultipartFile {
         private final byte[] bytes;
