@@ -65,7 +65,7 @@ async function loadAll() {
       safe(api('/business/projects/' + id + '/issues')),
       safe(api('/business/projects/' + id + '/reports'))
     ])
-    project.value = { ...p, contracts:pc }; employees.value = e; contracts.value = c; scopeUnits.value = s
+    project.value = { ...p, contracts:pc, contract_no:pc.find(x=>x.is_current)?.contract_no || null }; employees.value = e; contracts.value = c; scopeUnits.value = s
     maintenanceVisits.value = m; serviceVisits.value = v; issues.value = i; reports.value = r
     projectForm.value = {
       name:p.name, description:p.description || '', managerEmployeeId:p.manager_employee_id || '',
@@ -237,7 +237,7 @@ onMounted(loadAll)
       <button type="button" class="pw-back" @click="$emit('back')">← 返回项目列表</button>
       <div v-if="project" class="pw-project-title">
         <div><span class="eyebrow">PROJECT / {{ project.project_no }}</span><h2>{{ project.name }}</h2><p>{{ project.customer_name }} · {{ project.status }}</p></div>
-        <span class="pw-current-contract">{{ project.contract_no || '尚未关联当前合同' }}</span>
+        <span class="pw-current-contract">{{ project.contract_id ? (project.contract_no || '已关联合同') : '尚未关联当前合同' }}</span>
       </div>
     </header>
     <p v-if="error" class="pw-message error" role="alert">{{ error }}</p>
