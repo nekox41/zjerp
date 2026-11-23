@@ -1,6 +1,16 @@
 set -euo pipefail
 
 # Partner, contract-project scope, project leadership and maintenance acceptance checks.
+# Draft contracts may be staged; activation requires at least one real project.
+UNLINKED_DRAFT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/contracts \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"contractNo\":\"CI-UNLINKED-DRAFT\",\"title\":\"CI 待分配项目的合同草稿\",\"customerId\":$CUSTOMER_ID}")
+UNLINKED_DRAFT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$UNLINKED_DRAFT")
+NO_PROJECT_ACTIVE=$(curl -sS -o /tmp/erp-contract-no-project.json -w '%{http_code}' -X PUT "http://127.0.0.1:8090/api/business/contracts/$UNLINKED_DRAFT_ID" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"status":"active"}')
+test "$NO_PROJECT_ACTIVE" = "400"
+
 PARTNER=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/partners \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"partnerCode":"CI-PARTNER-001","name":"CI 介绍合作方","partnerType":"introducer","contactName":"CI 联系人"}')
