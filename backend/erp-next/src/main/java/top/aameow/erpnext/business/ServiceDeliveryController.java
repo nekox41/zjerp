@@ -86,16 +86,40 @@ public class ServiceDeliveryController {
         String title=req(b,"title"),severity=val(b,"severity","medium");
         if(!Set.of("low","medium","high","critical").contains(severity)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效严重级别");
         jdbc.update("INSERT INTO erp_project_issue(project_id,title,description,severity,owner_employee_id,due_on) VALUES(?,?,?,?,?,?)",id,title,b.get("description"),severity,owner,b.get("dueOn"));
-        long issueId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.issue.created","erp_project_issue",issueId,title);
-        return one("SELECT * FROM erp_project_issue WHERE id=?",issueId);
+        long issueId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        jdbc.update("INSERT INTO erp_project_issue_event(issue_id,from_status,to_status,note,actor_identity_id) VALUES(?,NULL,'open',?,?)",issueId,"建立问题清单",actor(a));
+        audit(a,"project.issue.created","erp_project_issue",issueId,title);
+        return issue(issueId);
     }
     @PutMapping("/issues/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> updateIssue(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_project_issue WHERE id=?",id); String status=b.get("status")==null?null:b.get("status").toString();
+        Map<String,Object> before=issue(id); String oldStatus=before.get("status").toString();
+        String status=b.get("status")==null?null:b.get("status").toString();
         if(status!=null&&!Set.of("open","in_progress","resolved","closed").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效整改状态");
-        if(status!=null&&Set.of("resolved","closed").contains(status)&&(b.get("resolution")==null||b.get("resolution").toString().isBlank())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"关闭整改项必须填写处理结果");
+        if(status!=null&&Set.of("resolved","closed").contains(status)&&(b.get("resolution")==null||b.get("resolution").toString().isBlank())&&
+           (before.get("resolution")==null||before.get("resolution").toString().isBlank()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"完成整改必须填写处理结果");
         jdbc.update("UPDATE erp_project_issue SET title=COALESCE(?,title),description=COALESCE(?,description),severity=COALESCE(?,severity),owner_employee_id=COALESCE(?,owner_employee_id),due_on=COALESCE(?,due_on),status=COALESCE(?,status),resolution=COALESCE(?,resolution),closed_at=CASE WHEN COALESCE(?,status) IN ('resolved','closed') THEN COALESCE(closed_at,CURRENT_TIMESTAMP(3)) WHEN ? IS NOT NULL THEN NULL ELSE closed_at END WHERE id=?",b.get("title"),b.get("description"),b.get("severity"),opt(b,"ownerEmployeeId"),b.get("dueOn"),status,b.get("resolution"),status,status,id);
-        audit(a,"project.issue.updated","erp_project_issue",id,status); return one("SELECT * FROM erp_project_issue WHERE id=?",id);
+        if(status!=null&&!status.equals(oldStatus))
+            jdbc.update("INSERT INTO erp_project_issue_event(issue_id,from_status,to_status,note,actor_identity_id) VALUES(?,?,?,?,?)",
+                id,oldStatus,status,b.get("resolution")==null?b.get("note"):b.get("resolution"),actor(a));
+        audit(a,"project.issue.updated","erp_project_issue",id,status); return issue(id);
+    }
+
+    @GetMapping("/issues/{id}") @PreAuthorize("hasAuthority('project:read')")
+    public Map<String,Object> getIssue(@PathVariable long id) { return issue(id); }
+
+    @GetMapping("/issues/{id}/events") @PreAuthorize("hasAuthority('project:read')")
+    public List<Map<String,Object>> issueEvents(@PathVariable long id) {
+        one("SELECT id FROM erp_project_issue WHERE id=?",id);
+        return jdbc.queryForList("""
+          SELECT e.*,i.display_name actor_name FROM erp_project_issue_event e
+          JOIN erp_identity i ON i.id=e.actor_identity_id WHERE e.issue_id=? ORDER BY e.id DESC
+          """,id);
+    }
+
+    private Map<String,Object> issue(long id) {
+        return one("SELECT x.*,e.full_name owner_name FROM erp_project_issue x LEFT JOIN erp_employee e ON e.id=x.owner_employee_id WHERE x.id=?",id);
     }
 
     @GetMapping("/projects/{id}/work-packages") @PreAuthorize("hasAuthority('service:read')")
