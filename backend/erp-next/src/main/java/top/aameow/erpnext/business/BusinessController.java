@@ -200,7 +200,7 @@ public class BusinessController {
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); Long contract=optionalLong(b,"contractId");
         if(contract!=null) { Map<String,Object> ct=one("SELECT id,customer_id FROM erp_contract WHERE id=?",contract); if(((Number)ct.get("customer_id")).longValue()!=customer) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同客户与项目客户不一致"); }
         Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) one("SELECT id FROM erp_employee WHERE id=?",manager);
-        jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,planned_start,planned_end,progress,status,honeybee_uploaded,documents_ready,maintenance_card_sent) VALUES(?,?,?,?,?,?,?,?,?,0,'planned',?,?,?)",
+        jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,actual_start,actual_end,progress,status,honeybee_uploaded,documents_ready,maintenance_card_sent) VALUES(?,?,?,?,?,?,?,?,?,0,'planned',?,?,?)",
             no,name,contract,customer,b.get("description"),manager,optionalLong(b,"technicalLeadEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),Boolean.parseBoolean(val(b,"honeybeeUploaded","false")),Boolean.parseBoolean(val(b,"documentsReady","false")),Boolean.parseBoolean(val(b,"maintenanceCardSent","false")));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.created","erp_project",id,no+" "+name);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
