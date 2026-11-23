@@ -96,9 +96,4 @@ if [[ -n "${CODESPACE_NAME:-}" && -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN
   echo "Codespaces URL: https://${CODESPACE_NAME}-${WEB_PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/next.html"
   echo "Keep forwarded port ${WEB_PORT} PRIVATE; do not expose the bootstrap/login page publicly."
 fi
-if grep -q '"initialized":false' <(compose exec -T erp-next-web wget -q -O - http://erp-next-api:8090/next-api/bootstrap/status 2>/dev/null || true); then
-  echo "First run: initialize your admin in the web UI using ERP_BOOTSTRAP_TOKEN from erp-next/.env.local."
-else
-  echo "First run: use ERP_BOOTSTRAP_TOKEN from erp-next/.env.local if the UI asks to initialize admin."
-fi
 echo "Commands: bash start.sh status | logs | stop"
