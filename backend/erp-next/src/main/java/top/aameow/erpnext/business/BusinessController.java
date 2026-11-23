@@ -37,6 +37,15 @@ public class BusinessController {
         return jdbc.queryForList(sql,args);
     }
 
+    private void requireEngineer(long employeeId) {
+        Map<String,Object> employee=one("SELECT id,employee_type,status FROM erp_employee WHERE id=?",employeeId);
+        if(!"active".equals(employee.get("status"))||!"engineer".equals(employee.get("employee_type")))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是有效的工程师员工");
+        Integer qualifications=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee_qualification WHERE employee_id=? AND status='valid' AND (expires_on IS NULL OR expires_on>=CURRENT_DATE)",Integer.class,employeeId);
+        if(qualifications==null||qualifications==0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"工程师员工必须有有效资格记录");
+    }
+
     @GetMapping("/organizations") @PreAuthorize("hasAuthority('organization:read')")
     public List<Map<String,Object>> organizations() {
         return jdbc.queryForList("SELECT id,name,parent_id,status,created_at FROM erp_organization ORDER BY name");
@@ -199,7 +208,7 @@ public class BusinessController {
         String no=required(b,"projectNo"), name=required(b,"name"); long customer=Long.parseLong(required(b,"customerId"));
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); Long contract=optionalLong(b,"contractId");
         if(contract!=null) { Map<String,Object> ct=one("SELECT id,customer_id FROM erp_contract WHERE id=?",contract); if(((Number)ct.get("customer_id")).longValue()!=customer) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同客户与项目客户不一致"); }
-        Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) one("SELECT id FROM erp_employee WHERE id=?",manager);
+        Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) requireEngineer(manager);
         jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,progress,status) VALUES(?,?,?,?,?,?,?,?,0,'planned')",
             no,name,contract,customer,b.get("description"),manager,b.get("plannedStart"),b.get("plannedEnd"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contract,id); audit(a,"project.created","erp_project",id,no+" "+name);
@@ -209,10 +218,11 @@ public class BusinessController {
     @PutMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> updateProject(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_project WHERE id=?",id);
+        Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) requireEngineer(manager);
         BigDecimal progress=b.get("progress")==null?null:new BigDecimal(b.get("progress").toString());
         if(progress!=null && (progress.compareTo(BigDecimal.ZERO)<0||progress.compareTo(BigDecimal.valueOf(100))>0)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"进度必须在 0 到 100 之间");
         jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=COALESCE(?,manager_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),progress=COALESCE(?,progress),status=COALESCE(?,status) WHERE id=?",
-            b.get("name"),b.get("description"),optionalLong(b,"managerEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),progress,b.get("status"),id);
+            b.get("name"),b.get("description"),manager,b.get("plannedStart"),b.get("plannedEnd"),progress,b.get("status"),id);
         audit(a,"project.updated","erp_project",id,"项目进度或资料更新");
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'updated',?)",id,actor(a),val(b,"log","项目资料更新"));
         return one("SELECT * FROM erp_project WHERE id=?",id);
