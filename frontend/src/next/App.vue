@@ -5,7 +5,6 @@ import BusinessModule from './BusinessModule.vue'
 import FinanceModule from './FinanceModule.vue'
 import InvoiceModule from './InvoiceModule.vue'
 import DashboardModule from './DashboardModule.vue'
-import PhotoWorkbench from './PhotoWorkbench.vue'
 import ServiceWorkflow from './ServiceWorkflow.vue'
 import PartnerMaintenance from './PartnerMaintenance.vue'
 
@@ -148,7 +147,6 @@ onMounted(refresh)
       <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务全生命周期</button>
       <button v-if="can('partner:read') || can('maintenance:read')" :class="{active:tab==='partner-maintenance'}" @click="tab='partner-maintenance'"><span>♧</span>合作方与维保</button>
       <button v-if="can('service:read')" :class="{active:tab==='service-workflow'}" @click="tab='service-workflow'"><span>◈</span>技术服务交付</button>
-      <button v-if="can('report:write')" :class="{active:tab==='photo-workbench'}" @click="tab='photo-workbench'"><span>▧</span>现场照片整理</button>
       <div class="side-caption">财务管理</div>
       <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>
       <button v-if="can('invoice:read')" :class="{active:tab==='invoices'}" @click="tab='invoices'"><span>▤</span>发票与应收应付</button>
@@ -158,7 +156,7 @@ onMounted(refresh)
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='partner-maintenance'?'合作方与维保':tab==='service-workflow'?'技术服务交付':tab==='photo-workbench'?'现场照片整理':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='partner-maintenance'?'合作方与维保':tab==='service-workflow'?'技术服务交付':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
       <div class="content">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
@@ -178,7 +176,6 @@ onMounted(refresh)
         </template>
         <PartnerMaintenance v-else-if="tab==='partner-maintenance'" :permissions="user.permissions" />
         <ServiceWorkflow v-else-if="tab==='service-workflow'" :permissions="user.permissions" :user-id="user.id" />
-        <PhotoWorkbench v-else-if="tab==='photo-workbench'" />
         <DashboardModule v-else-if="tab==='dashboard'" />
         <InvoiceModule v-else-if="tab==='invoices'" :permissions="user.permissions" />
         <FinanceModule v-else-if="tab==='finance'" :permissions="user.permissions" :user-id="user.id" />
