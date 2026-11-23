@@ -29,12 +29,7 @@ public class FileController {
         if(ownerValue instanceof Number owner && owner.longValue()==actor(a))return;
         boolean reportRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:read"));
         if(reportRead){
-            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment WHERE file_id=?",Integer.class,f.get("id"));
-            if(linked!=null&&linked>0)return;
-        }
-        boolean reportRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:read"));
-        if(reportRead){
-            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_report_photo_export WHERE file_id=?",Integer.class,f.get("id"));
+            Integer linked=jdbc.queryForObject("SELECT (SELECT COUNT(*) FROM erp_service_report_attachment WHERE file_id=?)+(SELECT COUNT(*) FROM erp_report_photo_export WHERE file_id=?)",Integer.class,f.get("id"),f.get("id"));
             if(linked!=null&&linked>0)return;
         }
         boolean photoRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report_photo:read"));
