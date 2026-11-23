@@ -128,6 +128,8 @@ public class ExpenseController {
         if(applicant(r)==actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"报账申请人不能登记自己的付款");
         String reference=required(b,"paymentReference");
         if(reference.length()>120)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"付款流水号过长");
+        Integer existing=jdbc.queryForObject("SELECT COUNT(*) FROM erp_expense_claim WHERE payment_reference=?",Integer.class,reference);
+        if(existing!=null&&existing>0)throw new ResponseStatusException(HttpStatus.CONFLICT,"付款流水号已被使用");
         BigDecimal paid=amount(b.get("paidAmount"));
         if(paid.compareTo((BigDecimal)r.get("total_amount"))!=0)throw new ResponseStatusException(HttpStatus.CONFLICT,"当前仅支持全额付款，付款金额须等于批准金额");
         jdbc.update("UPDATE erp_expense_claim SET status='paid',payment_reference=?,paid_amount=?,paid_at=CURRENT_TIMESTAMP(3),payer_identity_id=? WHERE id=?",reference,paid,actor(a),id);
