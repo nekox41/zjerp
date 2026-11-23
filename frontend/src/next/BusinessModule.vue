@@ -71,7 +71,7 @@ function resetForm() {
   const defaults={
     customer:{ customerCode:'', name:'', creditCode:'', customerType:'enterprise', industry:'', phone:'', email:'', address:'', ownerEmployeeId:'', notes:'' },
     intermediary:{ intermediaryCode:'', name:'', contactName:'', phone:'', email:'', address:'', notes:'' },
-    employee:{ employeeCode:'', fullName:'', employeeType:'engineer', positionName:'', phone:'', email:'' },
+    employee:{ employeeCode:'', fullName:'', employeeType:'engineer', identityId:'', positionName:'', phone:'', email:'' },
     contract:{ contractNo:'', title:'', customerId:'', contractType:'maintenance', signingMode:'direct', intermediaryId:'', intermediarySharePercent:'', amount:'0', currency:'CNY', signedOn:'', startsOn:'', endsOn:'', ownerEmployeeId:'', notes:'' },
     project:{ projectNo:'', name:'', customerId:'', contractId:'', managerEmployeeId:'', technicalLeadEmployeeId:'', plannedStart:'', plannedEnd:'', description:'' }
   }
@@ -154,6 +154,7 @@ async function saveEdit() {
   } catch(e) { error.value=e.message }
   finally { busy.value=false }
 }
+function resetContactForm() { contactEditId.value=null; contactForm.value={name:'',positionName:'',phone:'',email:'',isPrimary:false,notes:''} }
 function editContact(contact) {
   contactEditId.value=contact.id
   contactForm.value={name:contact.name,positionName:contact.position_name || '',phone:contact.phone || '',email:contact.email || '',isPrimary:!!contact.is_primary,notes:contact.notes || ''}
@@ -316,7 +317,7 @@ onMounted(load)
         <template v-if="section==='customers'">
           <div class="bw-detail-grid"><div><small>客户编号</small><b>{{ selected.customer_code }}</b></div><div><small>统一社会信用代码</small><b>{{ selected.credit_code || '—' }}</b></div><div><small>电话</small><b>{{ selected.phone || '—' }}</b></div><div><small>地址</small><b>{{ selected.address || '—' }}</b></div></div>
           <h4>联系人</h4><div class="bw-mini-list"><div v-for="c in selected.contacts || []" :key="c.id"><b>{{ c.name }}{{ c.is_primary?'（主要联系人）':'' }}</b><span>{{ c.position_name || '' }} · {{ c.phone || '—' }} · {{ c.email || '—' }}</span><button type="button" @click="editContact(c)">编辑</button><button type="button" @click="removeContact(c)">删除</button></div></div>
-          <form class="bw-inline-form" @submit.prevent="addContact"><input v-model="contactForm.name" required placeholder="联系人姓名"><input v-model="contactForm.positionName" placeholder="职位"><input v-model="contactForm.phone" placeholder="电话"><input v-model="contactForm.email" placeholder="邮箱"><label><input type="checkbox" v-model="contactForm.isPrimary"> 主要联系人</label><button class="bw-primary">{{ contactEditId?'保存联系人':'添加联系人' }}</button><button v-if="contactEditId" type="button" class="bw-secondary" @click="contactEditId=null;contactForm={name:'',positionName:'',phone:'',email:'',isPrimary:false,notes:''}">取消</button></form>
+          <form class="bw-inline-form" @submit.prevent="addContact"><input v-model="contactForm.name" required placeholder="联系人姓名"><input v-model="contactForm.positionName" placeholder="职位"><input v-model="contactForm.phone" placeholder="电话"><input v-model="contactForm.email" placeholder="邮箱"><label><input type="checkbox" v-model="contactForm.isPrimary"> 主要联系人</label><button class="bw-primary">{{ contactEditId?'保存联系人':'添加联系人' }}</button><button v-if="contactEditId" type="button" class="bw-secondary" @click="resetContactForm()">取消</button></form>
           <h4>关联合同</h4><div class="bw-mini-list"><div v-for="c in selected.contracts || []" :key="c.id"><b>{{ c.contract_no }} · {{ c.title }}</b><span>{{ c.status }} · {{ c.currency }} {{ c.amount }}</span></div></div>
         </template>
         <template v-else-if="section==='intermediaries'">
