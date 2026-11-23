@@ -5,8 +5,14 @@ ROLES=$(curl -fsS http://127.0.0.1:8090/api/admin/roles -H "Authorization: Beare
 PM_ROLE_ID=$(python -c 'import json,sys; print(next(x["id"] for x in json.load(sys.stdin) if x["code"]=="project_manager"))' <<< "$ROLES")
 ADMIN_ROLE_ID=$(python -c 'import json,sys; print(next(x["id"] for x in json.load(sys.stdin) if x["code"]=="admin"))' <<< "$ROLES")
 
-curl -fsS -X POST http://127.0.0.1:8090/api/admin/identities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"username\":\"ci-reviewer\",\"displayName\":\"CI Reviewer\",\"password\":\"ci-reviewer-password-123\",\"roleIds\":[$PM_ROLE_ID]}" >/dev/null
+REVIEWER=$(curl -fsS -X POST http://127.0.0.1:8090/api/admin/identities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"ci-reviewer\",\"displayName\":\"CI Reviewer\",\"password\":\"ci-reviewer-password-123\",\"roleIds\":[$PM_ROLE_ID]}") 
+REVIEWER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REVIEWER")
+REVIEWER_EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"employeeCode\":\"CI-REVIEWER\",\"fullName\":\"CI Reviewer\",\"identityId\":$REVIEWER_ID,\"employeeType\":\"engineer\"}")
+REVIEWER_EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REVIEWER_EMP")
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/employees/$REVIEWER_EMP_ID/qualifications" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"qualificationName":"CI Reviewer Qualification","expiresOn":"2099-12-31"}' >/dev/null
 curl -fsS -X POST http://127.0.0.1:8090/api/admin/identities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"username\":\"ci-issuer\",\"displayName\":\"CI Issuer\",\"password\":\"ci-issuer-password-123\",\"roleIds\":[$ADMIN_ROLE_ID]}" >/dev/null
 
