@@ -14,6 +14,26 @@ const projectLink=ref({projectId:'',contractId:'',relationType:'service'})
 const leadership=ref({projectId:'',managerEmployeeId:'',technicalLeadEmployeeId:''})
 const maintenanceForm=ref({projectId:'',currentContractId:'',honeybeeContractUploaded:false,honeybeeProjectCreated:false,projectMaterialsCompleted:false,publicCardStatus:'not_started',notes:''})
 const visitForm=ref({visitDate:new Date().toISOString().slice(0,10),contractId:'',employeeIds:[],notes:''})
+const renewalForm=ref({contractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''})
+const renewalHistoryDetail=ref(null)
+async function openRenewalHistory(contractId){
+  try{renewalHistoryDetail.value=await api('/business/contracts/'+contractId)}catch(e){error.value=e.message}
+}
+async function createRenewal(){
+  if(!maintenanceForm.value.projectId)return
+  busy.value=true;error.value=''
+  try{
+    const contract=await api('/business/projects/'+maintenanceForm.value.projectId+'/maintenance-renewals',{
+      method:'POST',body:JSON.stringify(renewalForm.value)
+    })
+    renewalForm.value={contractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''}
+    await load()
+    await openMaintenance(Number(maintenanceForm.value.projectId))
+    notice.value='续签合同草稿已创建并关联原项目，旧合同与维保卡已保留。新合同需要确认后手动指定为当前有效合同。'
+    await openRenewalHistory(contract.id)
+  }catch(e){error.value=e.message}finally{busy.value=false}
+}
+
 const engineers=computed(()=>employees.value.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_valid_qualification))
 async function load(){
   error.value=''
@@ -95,6 +115,7 @@ async function openMaintenance(id){
   visitForm.value.contractId=''
   visitForm.value.employeeIds=[]
   try{
+    renewalHistoryDetail.value=null
     maintenance.value=await api('/business/projects/'+id+'/maintenance')
     Object.assign(maintenanceForm.value,{
       currentContractId:maintenance.value.current_contract_id||'',
@@ -190,6 +211,34 @@ onMounted(load)
         <label class="check"><input v-model="maintenanceForm.projectMaterialsCompleted" type="checkbox"> 项目资料已完成</label>
         <label class="wide">备注<textarea v-model="maintenanceForm.notes"></textarea></label><button class="primary">保存维保状态</button>
       </form>
+      <div class="pm-divider"></div><h3>年度维保合同续签</h3>
+      <p class="pm-note">续签沿用原项目，新合同独立保存合同期限及维保卡附件。新建的是草稿，不会自动替换当前有效合同。</p>
+      <form v-if="maintenance.contractHistory?.length" class="pm-form" @submit.prevent="createRenewal">
+        <label>新合同编号<input v-model="renewalForm.contractNo" required></label>
+        <label>合同名称<input v-model="renewalForm.title" required></label>
+        <label>金额<input v-model="renewalForm.amount" type="number" min="0" step="0.01" required></label>
+        <label>签约日期<input v-model="renewalForm.signedOn" type="date"></label>
+        <label>新合同开始日期<input v-model="renewalForm.startsOn" type="date" required></label>
+        <label>新合同结束日期<input v-model="renewalForm.endsOn" type="date" required></label>
+        <label class="wide">备注<input v-model="renewalForm.notes"></label>
+        <button class="primary" :disabled="busy||!can('contract:write')">创建续签合同</button>
+      </form>
+      <p v-else class="pm-note">此项目没有维保合同。请先在合同管理创建首份合同，再关联合同和项目。</p>
+      <div class="pm-detail"><h4>历年维保合同与对应资料</h4>
+        <div v-for="c in maintenance.contractHistory||[]" :key="c.id" class="pm-contract">
+          <b>{{c.contract_no}} · {{c.title}}</b>
+          <small>{{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}} · {{c.status}}</small>
+          <button type="button" class="secondary-button" @click="openRenewalHistory(c.id)">查看该合同附件</button>
+        </div>
+        <div v-if="renewalHistoryDetail" class="pm-contract">
+          <b>{{renewalHistoryDetail.contract_no}} · 独立附件记录</b>
+          <div v-for="file in renewalHistoryDetail.files||[]" :key="file.id" class="pm-file">
+            <span>{{file.title||file.original_name}} · {{file.file_type}}</span>
+            <button type="button" @click="downloadFile(file.file_id,file.original_name)">下载</button>
+          </div>
+          <p v-if="!renewalHistoryDetail.files?.length" class="pm-note">此合同暂无附件；请在「合同与项目关联」中上传本年度维保卡。</p>
+        </div>
+      </div>
       <div class="pm-divider"></div><h3>维护日期与现场人员（按需登记）</h3><form class="pm-form" @submit.prevent="addMaintenanceVisit">
         <label>维护日期<input v-model="visitForm.visitDate" type="date" required></label>
         <label>对应合同<select v-model="visitForm.contractId"><option value="">当前项目</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}}</option></select></label>
