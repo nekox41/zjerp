@@ -61,13 +61,35 @@ public class BusinessController {
 
     @PutMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> updateEmployee(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_employee WHERE id=?",id);
-        String employeeType=b.get("employeeType")==null?null:b.get("employeeType").toString();
-        if(employeeType!=null&&!Set.of("engineer","operator","employee","manager").contains(employeeType))
+        Map<String,Object> existing=one("SELECT id,identity_id,employee_type FROM erp_employee WHERE id=?",id);
+        String employeeType=b.get("employeeType")==null?existing.get("employee_type").toString():b.get("employeeType").toString();
+        if(!Set.of("engineer","operator","employee","manager").contains(employeeType))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"员工类型无效");
-        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),employee_type=COALESCE(?,employee_type),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
-          b.get("fullName"),employeeType,b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
-        audit(a,"employee.updated","erp_employee",id,"员工资料更新"); return one("SELECT * FROM erp_employee WHERE id=?",id);
+        Long identity=b.containsKey("identityId")?optionalLong(b,"identityId"):(existing.get("identity_id")==null?null:((Number)existing.get("identity_id")).longValue());
+        if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
+        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),employee_type=?,identity_id=CASE WHEN ? THEN ? ELSE identity_id END,phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
+          b.get("fullName"),employeeType,b.containsKey("identityId"),identity,b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
+        if(identity!=null) syncEmployeeRole(identity,employeeType);
+        audit(a,"employee.updated","erp_employee",id,"员工资料更新"); return employee(id);
+    }
+
+    private void syncEmployeeRole(long identityId,String employeeType) {
+        Integer isAdmin=jdbc.queryForObject("""
+          SELECT COUNT(*) FROM erp_identity_role ir JOIN erp_role r ON r.id=ir.role_id
+          WHERE ir.identity_id=? AND r.code='admin'
+          """,Integer.class,identityId);
+        if(isAdmin!=null&&isAdmin>0) return;
+        jdbc.update("""
+          DELETE ir FROM erp_identity_role ir JOIN erp_role r ON r.id=ir.role_id
+          WHERE ir.identity_id=? AND r.code IN ('employee','project_manager','finance','operator')
+          """,identityId);
+        String roleCode=switch(employeeType) {
+            case "engineer" -> "project_manager";
+            case "operator" -> "operator";
+            case "manager" -> "finance";
+            default -> "employee";
+        };
+        jdbc.update("INSERT IGNORE INTO erp_identity_role(identity_id,role_id) SELECT ?,id FROM erp_role WHERE code=?",identityId,roleCode);
     }
 
     @GetMapping("/employees") @PreAuthorize("hasAuthority('employee:read')")
@@ -104,8 +126,10 @@ public class BusinessController {
         if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
         jdbc.update("INSERT INTO erp_employee(employee_code,full_name,employee_type,identity_id,phone,email,position_name,status) VALUES(?,?,?,?,?,?,?,'active')",
             b.get("employeeCode"),name,employeeType,identity,b.get("phone"),b.get("email"),b.get("positionName"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"employee.created","erp_employee",id,name);
-        return one("SELECT * FROM erp_employee WHERE id=?",id);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        if(identity!=null) syncEmployeeRole(identity,employeeType);
+        audit(a,"employee.created","erp_employee",id,name);
+        return employee(id);
     }
 
     @GetMapping("/customers") @PreAuthorize("hasAuthority('customer:read')")
