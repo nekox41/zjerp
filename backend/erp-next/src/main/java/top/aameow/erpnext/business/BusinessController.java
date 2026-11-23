@@ -162,10 +162,16 @@ public class BusinessController {
     }
     @PutMapping("/contacts/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
     public Map<String,Object> updateContact(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_customer_contact WHERE id=?",id);
-        jdbc.update("UPDATE erp_customer_contact SET name=COALESCE(?,name),position_name=COALESCE(?,position_name),phone=COALESCE(?,phone),email=COALESCE(?,email),notes=COALESCE(?,notes) WHERE id=?",
-          b.get("name"),b.get("positionName"),b.get("phone"),b.get("email"),b.get("notes"),id);
-        audit(a,"customer.contact.updated","erp_customer_contact",id,"联系人资料更新"); return one("SELECT * FROM erp_customer_contact WHERE id=?",id);
+        Map<String,Object> existing=one("SELECT id,customer_id FROM erp_customer_contact WHERE id=?",id);
+        if(b.containsKey("name")) required(b,"name");
+        if(b.containsKey("isPrimary") && !(b.get("isPrimary") instanceof Boolean))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"主要联系人标记必须为布尔值");
+        if(Boolean.TRUE.equals(b.get("isPrimary")))
+            jdbc.update("UPDATE erp_customer_contact SET is_primary=0 WHERE customer_id=?",existing.get("customer_id"));
+        jdbc.update("UPDATE erp_customer_contact SET name=COALESCE(?,name),position_name=?,phone=?,email=?,notes=?,is_primary=COALESCE(?,is_primary) WHERE id=?",
+            b.get("name"),b.get("positionName"),b.get("phone"),b.get("email"),b.get("notes"),b.get("isPrimary"),id);
+        audit(a,"customer.contact.updated","erp_customer_contact",id,"联系人资料更新");
+        return one("SELECT * FROM erp_customer_contact WHERE id=?",id);
     }
 
     @DeleteMapping("/contacts/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
