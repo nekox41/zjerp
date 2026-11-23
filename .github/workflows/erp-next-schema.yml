@@ -6,6 +6,7 @@ on:
       - 'backend/erp-next/**'
       - 'frontend/**'
       - 'scripts/erp-next-*.sh'
+      - 'start.sh'
       - '.github/workflows/erp-next-schema.yml'
   pull_request:
     paths:
@@ -27,6 +28,8 @@ jobs:
       ERP_BOOTSTRAP_TOKEN: ci-only-bootstrap-token
     steps:
       - uses: actions/checkout@v4
+      - name: Validate one-click startup script syntax
+        run: bash -n start.sh && grep -q 'erp-next/compose.yaml' start.sh
       - name: Validate isolated Compose configuration
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml config --quiet
       - name: Start isolated MySQL
