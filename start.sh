@@ -56,10 +56,10 @@ if [[ "$command_name" == start && ! -f "$ENV_FILE" ]]; then
     echo "Concurrent startup created the environment file; keeping existing credentials." >&2
   else
     mv -n -- "$temp_file" "$ENV_FILE"
+    echo "Created private secrets in erp-next/.env.local (saved for future starts)."
   fi
   rm -f -- "$temp_file"
   trap - EXIT
-  echo "Created private secrets in erp-next/.env.local (saved for future starts)."
 fi
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing erp-next/.env.local; run 'bash start.sh' once to initialize." >&2
