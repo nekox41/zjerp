@@ -147,7 +147,7 @@ public class ServiceDeliveryController {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"现场复核记录尚未完成");
         }
         if("resolved".equals(to)) jdbc.update("UPDATE erp_project_issue SET status=?,rectification_note=?,resolved_at=CURRENT_TIMESTAMP(3) WHERE id=?",to,note,id);
-        else if("closed".equals(to)) jdbc.update("UPDATE erp_project_issue SET status=?,verified_at=CURRENT_TIMESTAMP(3),verified_by=?,closed_at=CURRENT_TIMESTAMP(3) WHERE id=?",to,actor(a),id);
+        else if("closed".equals(to)) jdbc.update("UPDATE erp_project_issue SET status=?,verified_at=CURRENT_TIMESTAMP(3),verified_by=?,verified_site_visit_id=?,closed_at=CURRENT_TIMESTAMP(3) WHERE id=?",to,actor(a),visit,id);
         else if("open".equals(to)) jdbc.update("UPDATE erp_project_issue SET status='open',verified_at=NULL,verified_by=NULL,closed_at=NULL WHERE id=?",id);
         else jdbc.update("UPDATE erp_project_issue SET status=? WHERE id=?",to,id);
         jdbc.update("INSERT INTO erp_project_issue_event(issue_id,from_status,to_status,content,actor_identity_id) VALUES(?,?,?,?,?)",id,from,to,note,actor(a));
