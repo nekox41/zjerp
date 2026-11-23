@@ -56,7 +56,7 @@ public class ServiceWorkflowController {
     @GetMapping("/work-packages/{id}/visits") @PreAuthorize("hasAuthority('service:visit:read')")
     public List<Map<String,Object>> visits(@PathVariable long id){
         one("SELECT id FROM erp_service_work_package WHERE id=?",id);
-        return jdbc.queryForList("SELECT v.*,i.display_name creator_name,(SELECT COUNT(*) FROM erp_service_visit_staff s WHERE s.visit_id=v.id) staff_count,(SELECT COUNT(*) FROM erp_service_visit_issue x WHERE x.visit_id=v.id) issue_count FROM erp_service_visit v LEFT JOIN erp_identity i ON i.id=v.created_by WHERE v.work_package_id=? ORDER BY v.visit_date DESC,v.id DESC",id);
+        return jdbc.queryForList("SELECT v.*,i.display_name creator_name,(SELECT COUNT(*) FROM erp_service_visit_staff s WHERE s.visit_id=v.id) staff_count,(SELECT GROUP_CONCAT(e.full_name ORDER BY e.full_name SEPARATOR '、') FROM erp_service_visit_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.visit_id=v.id) staff_names,(SELECT COUNT(*) FROM erp_service_visit_issue x WHERE x.visit_id=v.id) issue_count FROM erp_service_visit v LEFT JOIN erp_identity i ON i.id=v.created_by WHERE v.work_package_id=? ORDER BY v.visit_date DESC,v.id DESC",id);
     }
     @PostMapping("/work-packages/{id}/visits") @PreAuthorize("hasAuthority('service:visit:write')") @Transactional
     public Map<String,Object> createVisit(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
