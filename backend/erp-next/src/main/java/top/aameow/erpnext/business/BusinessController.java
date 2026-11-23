@@ -187,9 +187,9 @@ public class BusinessController {
     public List<Map<String,Object>> projects(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String status) {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
-          SELECT p.*,c.name customer_name,ct.contract_no,e.full_name manager_name
+          SELECT p.*,c.name customer_name,ct.contract_no,e.full_name manager_name,te.full_name technical_lead_name
           FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id LEFT JOIN erp_contract ct ON ct.id=p.contract_id
-          LEFT JOIN erp_employee e ON e.id=p.manager_employee_id
+          LEFT JOIN erp_employee e ON e.id=p.manager_employee_id LEFT JOIN erp_employee te ON te.id=p.technical_lead_employee_id
           WHERE (?='' OR p.name LIKE ? OR p.project_no LIKE ? OR c.name LIKE ?)
             AND (?='' OR p.status=?) ORDER BY p.id DESC LIMIT 500
           """,q.trim(),term,term,term,status,status);
@@ -224,7 +224,7 @@ public class BusinessController {
 
     @GetMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:read')")
     public Map<String,Object> project(@PathVariable long id) {
-        Map<String,Object> result=new LinkedHashMap<>(one("SELECT p.*,c.name customer_name,ct.contract_no,ct.title contract_title,e.full_name manager_name FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id LEFT JOIN erp_contract ct ON ct.id=p.contract_id LEFT JOIN erp_employee e ON e.id=p.manager_employee_id WHERE p.id=?",id));
+        Map<String,Object> result=new LinkedHashMap<>(one("SELECT p.*,c.name customer_name,ct.contract_no,ct.title contract_title,e.full_name manager_name,te.full_name technical_lead_name FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id LEFT JOIN erp_contract ct ON ct.id=p.contract_id LEFT JOIN erp_employee e ON e.id=p.manager_employee_id LEFT JOIN erp_employee te ON te.id=p.technical_lead_employee_id WHERE p.id=?",id));
         result.put("members",members(id)); result.put("milestones",milestones(id)); result.put("logs",logs(id)); return result;
     }
 
