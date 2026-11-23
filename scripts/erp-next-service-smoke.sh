@@ -7,7 +7,7 @@ curl -fsS -X POST http://127.0.0.1:8090/api/business/projects \
 
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/employees/$EMP_ID/qualifications" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"qualificationName":"CI 资质","expiresOn":"2099-12-31"}' | grep -q 'CI 资质'
+  -d '{"qualificationName":"CI 资质","qualificationType":"other","expiresOn":"2099-12-31"}' | grep -q 'CI 资质'
 
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/issues" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
