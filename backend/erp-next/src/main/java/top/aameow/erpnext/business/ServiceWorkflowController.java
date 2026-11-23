@@ -208,11 +208,12 @@ public class ServiceWorkflowController {
         try {
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
             long fileId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-            jdbc.update("INSERT INTO erp_service_report_artifact(report_id,version_no,file_id,artifact_type,sha256,created_by) VALUES(?,?,?,'docx',?,?)",id,version,fileId,stored.sha256(),actor(a));
+            Integer artifactRevision=jdbc.queryForObject("SELECT COALESCE(MAX(artifact_revision_no),0)+1 FROM erp_service_report_artifact WHERE report_id=? AND version_no=? AND artifact_type='docx'",Integer.class,id,version);
+            jdbc.update("INSERT INTO erp_service_report_artifact(report_id,version_no,file_id,artifact_type,artifact_revision_no,sha256,created_by) VALUES(?,?,?,'docx',?,?,?)",id,version,fileId,artifactRevision,stored.sha256(),actor(a));
             jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
             for(Long batchId:batchIds)jdbc.update("UPDATE erp_report_photo_batch SET report_id=?,status='locked',locked_at=CURRENT_TIMESTAMP(3) WHERE id=?",id,batchId);
             audit(actor(a),"report.docx.generated","erp_service_report",id,"version="+version+",photos="+photos.size());
-            return Map.of("reportId",id,"versionNo",version,"fileId",fileId,"filename",filename,"sha256",stored.sha256(),"photoCount",photos.size());
+            return Map.of("reportId",id,"versionNo",version,"artifactRevisionNo",artifactRevision,"fileId",fileId,"filename",filename,"sha256",stored.sha256(),"photoCount",photos.size());
         } catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }
 
