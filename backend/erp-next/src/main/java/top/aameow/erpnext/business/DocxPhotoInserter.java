@@ -45,6 +45,10 @@ public final class DocxPhotoInserter {
                 grouped.computeIfAbsent(photo.systemCode(),k->new ArrayList<>()).add(photo);
             }
             Map<String,Anchor> anchors=findAnchors(document);
+            for(String system:grouped.keySet()) {
+                if(!anchors.containsKey(system))
+                    throw new IllegalArgumentException("报告模板中找不到“"+system+"”系统的现场检测照片位置，请选择对应检测范围的报告模板");
+            }
             List<Map.Entry<String,List<Photo>>> insertionOrder=new ArrayList<>(grouped.entrySet());
             insertionOrder.sort((a,b)->Integer.compare(
                 anchors.get(b.getKey()).originalIndex(),anchors.get(a.getKey()).originalIndex()));
