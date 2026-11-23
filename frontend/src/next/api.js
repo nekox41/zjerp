@@ -18,9 +18,9 @@ export async function api(path, options = {}) {
   return payload
 }
 
-export async function privateFileBlob(id) {
+export async function privateBlob(path) {
   const token = sessionStorage.getItem('erp-next-token')
-  const response = await fetch(`${API_BASE}/files/${id}/download`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   })
   if (!response.ok) {
@@ -29,6 +29,8 @@ export async function privateFileBlob(id) {
   }
   return response.blob()
 }
+
+export async function privateFileBlob(id) { return privateBlob(`/files/${id}/download`) }
 
 export async function downloadFile(id, name = '') {
   const blob = await privateFileBlob(id)
