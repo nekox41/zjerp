@@ -89,10 +89,10 @@ async function saveProject() {
       method:'PUT',
       body:JSON.stringify({
         name:projectForm.value.name, description:projectForm.value.description,
-        managerEmployeeId:projectForm.value.managerEmployeeId || null,
-        technicalLeadEmployeeId:projectForm.value.technicalLeadEmployeeId || null,
+        ...(String(projectForm.value.managerEmployeeId || '') !== String(project.value.manager_employee_id || '') ? {managerEmployeeId:projectForm.value.managerEmployeeId || null} : {}),
+        ...(String(projectForm.value.technicalLeadEmployeeId || '') !== String(project.value.technical_lead_employee_id || '') ? {technicalLeadEmployeeId:projectForm.value.technicalLeadEmployeeId || null} : {}),
         actualStart:projectForm.value.actualStart, actualEnd:projectForm.value.actualEnd,
-        status:projectForm.value.status, log:'项目负责人、技术负责人或项目基本信息更新'
+        status:projectForm.value.status, log:'项目基本信息更新'
       })
     })
   })
