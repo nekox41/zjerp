@@ -60,7 +60,7 @@ public class PrivateFileStorage {
         String media=mediaType==null?"application/octet-stream":mediaType.split(";")[0].trim().toLowerCase();
         if(!Set.of("application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document").contains(media))
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"不支持的文件类型");
-        String original=filename==null?"generated":filename.replace('\\\\','/').replaceAll("[\\\\p{Cntrl}]","_");
+        String original=filename==null?"generated":filename.replace('\\','/').replaceAll("[\\p{Cntrl}]","_");
         original=Paths.get(original).getFileName().toString().trim();
         if(original.isBlank()) original="generated";
         if(original.length()>240) original=original.substring(original.length()-240);
