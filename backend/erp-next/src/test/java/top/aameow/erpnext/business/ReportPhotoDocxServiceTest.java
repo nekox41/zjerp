@@ -52,6 +52,12 @@ class ReportPhotoDocxServiceTest {
         }
     }
 
+    private int visibleImageCount(XWPFDocument doc) {
+        return doc.getTables().stream().flatMap(t -> t.getRows().stream())
+            .flatMap(row -> row.getTableCells().stream()).flatMap(cell -> cell.getParagraphs().stream())
+            .mapToInt(p -> p.getRuns().stream().mapToInt(r -> r.getEmbeddedPictures().size()).sum()).sum();
+    }
+
     @Test
     void detectsSystemPhotoGroupsAndAliases() throws Exception {
         List<Map<String,Object>> result = service.inspect(new ByteArrayInputStream(template()));
@@ -69,7 +75,7 @@ class ReportPhotoDocxServiceTest {
                                          new ReportPhotoDocxService.PhotoImage("b.png", image(Color.BLUE)))),
             Map.of("fire_alarm", "replace"));
         try (XWPFDocument doc = new XWPFDocument(new ByteArrayInputStream(output))) {
-            assertEquals(6, doc.getAllPictures().size());
+            assertEquals(6, visibleImageCount(doc));
             String text = doc.getParagraphs().stream().map(XWPFParagraph::getText).reduce("", (a,b) -> a + b);
             assertTrue(text.contains("火灾自动报警系统"));
             assertTrue(text.contains("消防给水系统"));
@@ -87,7 +93,7 @@ class ReportPhotoDocxServiceTest {
             Map.of("fire_alarm", List.of(new ReportPhotoDocxService.PhotoImage("new.png", image(Color.GREEN)))),
             Map.of("fire_alarm", "append"));
         try (XWPFDocument doc = new XWPFDocument(new ByteArrayInputStream(output))) {
-            assertEquals(9, doc.getAllPictures().size());
+            assertEquals(9, visibleImageCount(doc));
         }
     }
 }
