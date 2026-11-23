@@ -296,7 +296,7 @@ onBeforeUnmount(clearUrls)
 
 <template>
   <section class="photo-workbench">
-    <header class="photo-head"><div><span class="eyebrow">REPORT / PHOTO WORKBENCH</span><h2>现场照片整理</h2><p>批量导入 → 人工分类 → 分组排序 → DOCX 预览 → 插入报告。</p></div><span class="pw-limit">JPG / PNG · 最多 300 张 / 批次</span></header>
+    <header class="photo-head"><div><span class="eyebrow">REPORT / PHOTO WORKBENCH</span><h2>现场照片整理</h2><p>批量导入 → 人工分类 → 分组排序 → DOCX 预览 → 插入报告。</p></div><span class="pw-limit">JPG / PNG · 最多 300 张 / 批次 · 120 MB</span></header>
     <div class="pw-stepper"><span class="active">01 导入照片</span><i>→</i><span :class="{active:ready}">02 分类确认</span><i>→</i><span :class="{active:ready && !!templateFileId}">03 预览报告</span><i>→</i><span :class="{active:batch?.status==='inserted'}">04 生成版本</span></div>
     <div class="pw-context">
       <label v-if="!props.projectId">项目<select v-model="projectIdLocal" @change="selectProject"><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="String(p.id)">{{ p.project_no }} · {{ p.name }}</option></select></label>
