@@ -48,6 +48,12 @@ public class ServiceDeliveryController {
         return jdbc.queryForList("SELECT q.*,e.full_name,e.employee_code FROM erp_employee_qualification q JOIN erp_employee e ON e.id=q.employee_id WHERE q.expires_on IS NOT NULL AND q.expires_on<=DATE_ADD(CURRENT_DATE,INTERVAL ? DAY) AND q.status='valid' ORDER BY q.expires_on",bounded);
     }
 
+    @GetMapping("/contracts/{id}/amendments") @PreAuthorize("hasAuthority('contract:read')")
+    public List<Map<String,Object>> contractAmendments(@PathVariable long id) {
+        one("SELECT id FROM erp_contract WHERE id=?",id);
+        return jdbc.queryForList("SELECT * FROM erp_contract_amendment WHERE contract_id=? ORDER BY effective_on DESC,id DESC",id);
+    }
+
     @PostMapping("/contracts/{id}/amendments") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> addAmendment(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         Map<String,Object> ct=one("SELECT id,amount,status FROM erp_contract WHERE id=?",id);
@@ -56,7 +62,9 @@ public class ServiceDeliveryController {
         if(revised.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"变更金额不能为负数");
         String no=req(b,"amendmentNo"),title=req(b,"title"),summary=req(b,"changeSummary");
         jdbc.update("INSERT INTO erp_contract_amendment(contract_id,amendment_no,title,change_summary,previous_amount,revised_amount,effective_on,created_by) VALUES(?,?,?,?,?,?,?,?)",id,no,title,summary,previous,revised,b.get("effectiveOn"),actor(a));
-        long aid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"contract.amendment.created","erp_contract_amendment",aid,no);
+        long aid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        jdbc.update("UPDATE erp_contract SET amount=? WHERE id=?",revised,id);
+        audit(a,"contract.amendment.created","erp_contract_amendment",aid,no);
         return one("SELECT * FROM erp_contract_amendment WHERE id=?",aid);
     }
     @GetMapping("/contracts/{id}/amendments") @PreAuthorize("hasAuthority('contract:read')")
