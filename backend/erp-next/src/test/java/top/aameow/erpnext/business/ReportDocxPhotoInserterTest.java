@@ -37,7 +37,7 @@ class ReportDocxPhotoInserterTest {
                 new ReportDocxPhotoInserter.Photo("消防给水系统",png(),"b.png","2026-08-12","")
             ));
             assertEquals(2,doc.getAllPictures().size());
-            assertEquals(1,doc.getTables().size()+0); // only retained system tables
+            assertEquals(2,doc.getTables().size()); // one retained photo table per populated system
             String text=doc.getParagraphs().stream().map(XWPFParagraph::getText).reduce("",String::concat);
             assertTrue(text.contains("报告正文"));
             assertEquals(2,doc.getBodyElements().stream().filter(x->x instanceof XWPFParagraph p && "现场检测照片".equals(p.getText())).count());
