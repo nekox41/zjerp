@@ -202,7 +202,7 @@ public class BusinessController {
         Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) one("SELECT id FROM erp_employee WHERE id=?",manager);
         jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,progress,status) VALUES(?,?,?,?,?,?,?,?,0,'planned')",
             no,name,contract,customer,b.get("description"),manager,b.get("plannedStart"),b.get("plannedEnd"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,"service")",contract,id); audit(a,"project.created","erp_project",id,no+" "+name);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contract,id); audit(a,"project.created","erp_project",id,no+" "+name);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
