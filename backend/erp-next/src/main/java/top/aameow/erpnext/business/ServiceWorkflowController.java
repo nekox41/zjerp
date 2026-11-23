@@ -122,11 +122,13 @@ public class ServiceWorkflowController {
         Map<String,Object> batch=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",id);
         if(!"collecting".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"照片批次已提交审核，不能继续添加");
         long fileId=Long.parseLong(req(b,"fileId"));
-        Map<String,Object> file=one("SELECT id,uploaded_by,media_type FROM erp_file_object WHERE id=?",fileId);
+        Map<String,Object> file=one("SELECT id,uploaded_by,media_type,byte_size FROM erp_file_object WHERE id=?",fileId);
         if(((Number)file.get("uploaded_by")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能添加自己上传的照片");
         if(!Set.of("image/jpeg","image/png").contains(file.get("media_type").toString()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"仅支持 JPG/PNG 照片");
         Integer count=jdbc.queryForObject("SELECT COUNT(*) FROM erp_report_photo WHERE batch_id=?",Integer.class,id);
         if(count!=null&&count>=500)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"单批最多 500 张照片");
+        Long totalBytes=jdbc.queryForObject("SELECT COALESCE(SUM(f.byte_size),0) FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.batch_id=?",Long.class,id);
+        if(totalBytes!=null&&totalBytes+((Number)file.get("byte_size")).longValue()>220L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"单批照片总量不能超过 220MB");
         Integer order=jdbc.queryForObject("SELECT COALESCE(MAX(sort_order),-1)+1 FROM erp_report_photo WHERE batch_id=?",Integer.class,id);
         jdbc.update("INSERT INTO erp_report_photo(batch_id,file_id,taken_on,caption,sort_order) VALUES(?,?,?,?,?)",id,fileId,b.get("takenOn"),b.get("caption"),order);
         long photoId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
