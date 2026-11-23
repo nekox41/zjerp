@@ -89,6 +89,7 @@ PY
 
 TEMPLATE=$(curl -fsS -X POST http://127.0.0.1:8090/api/files -H "Authorization: Bearer $TOKEN" -F 'file=@/tmp/erp-photo-template.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 TEMPLATE_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$TEMPLATE")
+curl -fsS "http://127.0.0.1:8090/api/report-photos/templates/$TEMPLATE_ID/systems" -H "Authorization: Bearer $TOKEN" | grep -q '消防给水系统'
 BATCH=$(curl -fsS -X POST http://127.0.0.1:8090/api/report-photos/batches \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"projectId\":$PROJECT_ID,\"title\":\"CI 现场照片批次\"}")
