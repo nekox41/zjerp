@@ -22,6 +22,25 @@ ALTER TABLE erp_project
   ADD COLUMN maintenance_card_sent BOOLEAN NOT NULL DEFAULT FALSE AFTER documents_ready,
   ADD CONSTRAINT fk_erp_project_technical_lead FOREIGN KEY (technical_lead_employee_id) REFERENCES erp_employee(id);
 
+-- A maintenance project can span multiple annual contracts (renewals).
+CREATE TABLE erp_project_contract (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  project_id BIGINT NOT NULL,
+  contract_id BIGINT NOT NULL,
+  relation_type VARCHAR(24) NOT NULL DEFAULT 'initial',
+  is_current BOOLEAN NOT NULL DEFAULT FALSE,
+  linked_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_erp_project_contract (project_id,contract_id),
+  KEY idx_erp_project_contract_current (project_id,is_current),
+  CONSTRAINT fk_erp_project_contract_project FOREIGN KEY (project_id) REFERENCES erp_project(id) ON DELETE CASCADE,
+  CONSTRAINT fk_erp_project_contract_contract FOREIGN KEY (contract_id) REFERENCES erp_contract(id) ON DELETE RESTRICT,
+  CONSTRAINT ck_erp_project_contract_relation CHECK (relation_type IN ('initial','renewal','supplemental'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT IGNORE INTO erp_project_contract(project_id,contract_id,relation_type,is_current)
+ SELECT id,contract_id,'initial',TRUE FROM erp_project WHERE contract_id IS NOT NULL;
+
 -- Keep the existing role IDs and account assignments; simplify their visible names.
 UPDATE erp_role SET name='管理人员' WHERE code='finance';
 UPDATE erp_role SET name='工程师' WHERE code='project_manager';
