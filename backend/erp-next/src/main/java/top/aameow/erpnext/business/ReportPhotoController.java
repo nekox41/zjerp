@@ -198,7 +198,8 @@ public class ReportPhotoController {
         Map<String,Object> p=photo(id);
         if(Boolean.TRUE.equals(p.get("is_deleted"))) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"照片不存在");
         Map<String,Object> f=one("SELECT storage_key FROM erp_file_object WHERE id=?",p.get("file_id"));
-        BufferedImage source=ImageIO.read(Files.newInputStream(storage.resolve(f.get("storage_key").toString())));
+        BufferedImage source;
+        try(var input=Files.newInputStream(storage.resolve(f.get("storage_key").toString()))) { source=ImageIO.read(input); }
         if(source==null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片无法解码");
         double scale=Math.min(1.0,Math.min(720.0/source.getWidth(),540.0/source.getHeight()));
         int w=Math.max(1,(int)Math.round(source.getWidth()*scale)),h=Math.max(1,(int)Math.round(source.getHeight()*scale));
