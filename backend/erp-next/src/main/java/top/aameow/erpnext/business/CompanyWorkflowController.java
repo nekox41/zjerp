@@ -227,10 +227,14 @@ public class CompanyWorkflowController {
         one("SELECT id FROM erp_project WHERE id=?",id);
         jdbc.update("""
           UPDATE erp_project SET honeybee_uploaded=COALESCE(?,honeybee_uploaded),
-            documents_ready=COALESCE(?,documents_ready),maintenance_card_sent=COALESCE(?,maintenance_card_sent),
+            honeybee_project_created=COALESCE(?,honeybee_project_created),
+            documents_ready=COALESCE(?,documents_ready),
+            maintenance_card_prepared=COALESCE(?,maintenance_card_prepared),
+            maintenance_card_sent=COALESCE(?,maintenance_card_sent),
             actual_start=CASE WHEN ? THEN ? ELSE actual_start END,actual_end=CASE WHEN ? THEN ? ELSE actual_end END
           WHERE id=?
-          """,b.get("honeybeeUploaded"),b.get("documentsReady"),b.get("maintenanceCardSent"),
+          """,b.get("honeybeeUploaded"),b.get("honeybeeProjectCreated"),b.get("documentsReady"),
+            b.get("maintenanceCardPrepared"),b.get("maintenanceCardSent"),
             b.containsKey("actualStart"),blank(b.get("actualStart")),b.containsKey("actualEnd"),blank(b.get("actualEnd")),id);
         audit(a,"project.maintenance.updated","erp_project",id,"维护保养状态更新");
         return one("SELECT * FROM erp_project WHERE id=?",id);
