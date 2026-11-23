@@ -72,7 +72,7 @@ public class BusinessController {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
           SELECT e.id,e.employee_code,e.full_name,e.organization_id,o.name organization_name,e.identity_id,
-                 e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on
+                 e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on,e.employee_type
           FROM erp_employee e LEFT JOIN erp_organization o ON o.id=e.organization_id
           WHERE ?='' OR e.full_name LIKE ? OR e.employee_code LIKE ? OR e.phone LIKE ?
           ORDER BY e.id DESC LIMIT 500
@@ -83,8 +83,8 @@ public class BusinessController {
         String name=required(b,"fullName"); Long org=optionalLong(b,"organizationId"), identity=optionalLong(b,"identityId");
         if(org!=null) one("SELECT id FROM erp_organization WHERE id=?",org);
         if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
-        jdbc.update("INSERT INTO erp_employee(employee_code,full_name,organization_id,identity_id,phone,email,position_name,status) VALUES(?,?,?,?,?,?,?,'active')",
-            b.get("employeeCode"),name,org,identity,b.get("phone"),b.get("email"),b.get("positionName"));
+        jdbc.update("INSERT INTO erp_employee(employee_code,full_name,organization_id,identity_id,phone,email,position_name,employee_type,status) VALUES(?,?,?,?,?,?,?,?,'active')",
+            b.get("employeeCode"),name,org,identity,b.get("phone"),b.get("email"),b.get("positionName"),val(b,"employeeType","general"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"employee.created","erp_employee",id,name);
         return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
@@ -169,9 +169,9 @@ public class BusinessController {
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
         BigDecimal amount=new BigDecimal(val(b,"amount","0")); if(amount.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
         jdbc.update("""
-          INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-          """,no,title,customer,b.get("contractType"),amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
+          INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,service_type,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+          """,no,title,customer,b.get("contractType"),val(b,"serviceType","other"),amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"contract.created","erp_contract",id,no+" "+title);
         return one("SELECT ct.*,c.name customer_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id WHERE ct.id=?",id);
     }
@@ -202,7 +202,7 @@ public class BusinessController {
         Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) one("SELECT id FROM erp_employee WHERE id=?",manager);
         jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,progress,status) VALUES(?,?,?,?,?,?,?,?,0,'planned')",
             no,name,contract,customer,b.get("description"),manager,b.get("plannedStart"),b.get("plannedEnd"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.created","erp_project",id,no+" "+name);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,"service")",contract,id); audit(a,"project.created","erp_project",id,no+" "+name);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
