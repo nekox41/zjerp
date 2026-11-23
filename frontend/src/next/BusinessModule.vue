@@ -90,6 +90,8 @@ async function submit(kind) {
     if (!endpoint) throw new Error('不支持的操作')
     await api('/business' + endpoint(),{method:'POST',body:JSON.stringify(data)})
     notice.value='保存成功'; forms[kind].value=Object.fromEntries(Object.keys(forms[kind].value).map(k=>[k,typeof forms[k].value[k]==='boolean'?false:'']))
+    if(kind==='employee') forms.employee.value.employeeType='employee'
+    if(kind==='contract') { forms.contract.value.contractType='maintenance'; forms.contract.value.signingMode='direct'; forms.contract.value.currency='CNY'; forms.contract.value.amount='0' }
     await load()
     if(kind==='contact') await openCustomer(selectedCustomer.value.id)
     if(['milestone','workPackage','issue'].includes(kind)) await openProject(selectedProject.value.id)
