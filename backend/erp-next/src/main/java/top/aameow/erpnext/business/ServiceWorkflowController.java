@@ -138,10 +138,13 @@ public class ServiceWorkflowController {
         Map<String,Object> p=one("SELECT p.*,b.status batch_status FROM erp_report_photo p JOIN erp_report_photo_batch b ON b.id=p.batch_id WHERE p.id=? FOR UPDATE",id);
         if(!"collecting".equals(p.get("batch_status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前批次已提交，照片不可修改");
         String system=b.get("systemCode")==null?null:b.get("systemCode").toString();
+        if(system!=null&&system.isBlank())system=null;
         if(system!=null&&!inserter.supportedSystems().contains(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效消防系统分类");
         String confirmation=b.get("confirmed")==null?null:(Boolean.parseBoolean(b.get("confirmed").toString())?"confirmed":"pending");
+        Object takenOn=b.containsKey("takenOn")?b.get("takenOn"):p.get("taken_on");
+        if(takenOn!=null&&takenOn.toString().isBlank())takenOn=null;
         jdbc.update("UPDATE erp_report_photo SET system_code=?,taken_on=?,caption=?,sort_order=COALESCE(?,sort_order),confirmation_status=COALESCE(?,confirmation_status),confirmed_by=CASE WHEN ?='confirmed' THEN ? WHEN ?='pending' THEN NULL ELSE confirmed_by END,confirmed_at=CASE WHEN ?='confirmed' THEN CURRENT_TIMESTAMP(3) WHEN ?='pending' THEN NULL ELSE confirmed_at END WHERE id=?",
-            system,b.containsKey("takenOn")?b.get("takenOn"):p.get("taken_on"),b.containsKey("caption")?b.get("caption"):p.get("caption"),
+            system,takenOn,b.containsKey("caption")?b.get("caption"):p.get("caption"),
             opt(b,"sortOrder"),confirmation,confirmation,actor(a),confirmation,confirmation,confirmation,id);
         audit(actor(a),"report.photo.updated","erp_report_photo",id,system);
         return one("SELECT * FROM erp_report_photo WHERE id=?",id);
