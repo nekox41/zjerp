@@ -7,7 +7,6 @@ const busy = ref(false)
 const error = ref('')
 const notice = ref('')
 const q = ref('')
-const organizations = ref([])
 const employees = ref([])
 const identities = ref([])
 const projectMembers = ref([])
@@ -31,7 +30,6 @@ const selectedCustomer = ref(null)
 const contacts = ref([])
 const milestones = ref([])
 const forms = {
-  organization: ref({name:'',parentId:''}),
   employee: ref({employeeCode:'',fullName:'',organizationId:'',identityId:'',positionName:'',phone:'',email:''}),
   customer: ref({customerCode:'',name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',notes:''}),
   contact: ref({name:'',positionName:'',phone:'',email:'',isPrimary:false}),
@@ -46,7 +44,6 @@ const forms = {
 }
 const rows = ref([])
 const config = {
-  organizations:{title:'组织架构',endpoint:'/organizations',form:'organization',permission:'organization:write'},
   employees:{title:'员工档案',endpoint:'/employees',form:'employee',permission:'employee:write'},
   customers:{title:'客户管理',endpoint:'/customers',form:'customer',permission:'customer:write'},
   contracts:{title:'合同管理',endpoint:'/contracts',form:'contract',permission:'contract:write'},
@@ -55,15 +52,14 @@ const config = {
 async function load() {
   error.value=''; notice.value=''
   try {
-    const [o,e,c,ct,p,ids] = await Promise.all([
-      api('/business/organizations').catch(()=>[]),
+    const [e,c,ct,p,ids] = await Promise.all([
       api('/business/employees').catch(()=>[]),
       api('/business/customers').catch(()=>[]),
       api('/business/contracts').catch(()=>[]),
       api('/business/projects').catch(()=>[]),
       api('/admin/identities').catch(()=>[])
     ])
-    organizations.value=o; employees.value=e; customers.value=c; contracts.value=ct; projects.value=p; identities.value=ids
+    employees.value=e; customers.value=c; contracts.value=ct; projects.value=p; identities.value=ids
     const cfg=config[section.value]
     rows.value=cfg ? await api('/business'+cfg.endpoint+'?q='+encodeURIComponent(q.value)).catch(()=>[]) : []
   } catch(e) { error.value=e.message }
@@ -73,8 +69,26 @@ async function submit(kind) {
   try {
     const data={...forms[kind].value}
     Object.keys(data).forEach(k=>{if(data[k]==='') data[k]=null})
-    const endpoints={organization:'/organizations',employee:'/employees',customer:'/customers',contact:'/customers/'+selectedCustomer.value.id+'/contacts',contract:'/contracts',project:'/projects',milestone:'/projects/'+selectedProject.value.id+'/milestones',qualification:'/employees/'+selectedEmployee.value.id+'/qualifications',workPackage:'/projects/'+selectedProject.value.id+'/work-packages',issue:'/projects/'+selectedProject.value.id+'/issues',record:'/work-packages/'+selectedWorkPackage.value.id+'/records',amendment:'/contracts/'+selectedContract.value.id+'/amendments'}
-    await api('/business'+endpoints[kind],{method:'POST',body:JSON.stringify(data)})
+    const selectedId = value => {
+      if (!value?.id) throw new Error('请先打开对应记录，再执行此操作。')
+      return value.id
+    }
+    const endpoints = {
+      employee: () => '/employees',
+      customer: () => '/customers',
+      contact: () => '/customers/' + selectedId(selectedCustomer.value) + '/contacts',
+      contract: () => '/contracts',
+      project: () => '/projects',
+      milestone: () => '/projects/' + selectedId(selectedProject.value) + '/milestones',
+      qualification: () => '/employees/' + selectedId(selectedEmployee.value) + '/qualifications',
+      workPackage: () => '/projects/' + selectedId(selectedProject.value) + '/work-packages',
+      issue: () => '/projects/' + selectedId(selectedProject.value) + '/issues',
+      record: () => '/work-packages/' + selectedId(selectedWorkPackage.value) + '/records',
+      amendment: () => '/contracts/' + selectedId(selectedContract.value) + '/amendments'
+    }
+    const endpoint = endpoints[kind]
+    if (!endpoint) throw new Error('不支持的操作')
+    await api('/business' + endpoint(),{method:'POST',body:JSON.stringify(data)})
     notice.value='保存成功'; forms[kind].value=Object.fromEntries(Object.keys(forms[kind].value).map(k=>[k,typeof forms[k].value[k]==='boolean'?false:'']))
     await load()
     if(kind==='contact') await openCustomer(selectedCustomer.value.id)
@@ -127,21 +141,18 @@ onMounted(load)
   <p v-if="error" class="message error">{{error}}</p><p v-if="notice" class="message success">{{notice}}</p>
   <div class="business-layout">
     <div class="business-list panel">
-      <div class="business-list-head"><div><h3>{{config[section].title}}</h3><p>统一维护业务主数据与关联记录</p></div><input v-model="q" placeholder="搜索名称或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
+      <div class="business-list-head"><div><h3>{{config[section].title}}</h3></div><input v-model="q" placeholder="搜索" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
       <div class="business-records">
         <button v-for="r in rows" :key="r.id" class="business-record" @click="section==='customers'?openCustomer(r.id):section==='projects'?openProject(r.id):section==='contracts'?openContract(r.id):section==='employees'?openEmployee(r.id):null">
           <b>{{r.name||r.full_name||r.title}}</b><small>{{r.customer_code||r.employee_code||r.contract_no||r.project_no||r.status||r.position_name}}</small>
           <span>{{r.customer_name||r.organization_name||r.owner_name||''}}</span>
         </button>
-        <p v-if="!rows.length" class="empty">暂无记录，使用下方表单创建第一条数据。</p>
+        <p v-if="!rows.length" class="empty">暂无记录</p>
       </div>
     </div>
     <div class="business-forms panel">
-      <template v-if="section==='organizations'">
-        <h3>新增组织</h3><form class="create-grid" @submit.prevent="submit('organization')"><label>部门名称<input v-model="forms.organization.value.name" required></label><label>上级部门<select v-model="forms.organization.value.parentId"><option value="">无</option><option v-for="x in organizations" :value="x.id">{{x.name}}</option></select></label><button class="primary-button">创建部门</button></form>
-      </template>
       <template v-else-if="section==='employees'">
-        <h3>新增员工档案</h3><form class="create-grid" @submit.prevent="submit('employee')"><label>员工编号<input v-model="forms.employee.value.employeeCode"></label><label>姓名<input v-model="forms.employee.value.fullName" required></label><label>所属部门<select v-model="forms.employee.value.organizationId"><option value="">未分配</option><option v-for="x in organizations" :value="x.id">{{x.name}}</option></select></label><label>岗位<input v-model="forms.employee.value.positionName"></label><label>电话<input v-model="forms.employee.value.phone"></label><label>邮箱<input v-model="forms.employee.value.email" type="email"></label><label>关联登录账号<select v-model="forms.employee.value.identityId"><option value="">暂不关联</option><option v-for="x in identities" :value="x.id">{{x.username}} · {{x.display_name}}</option></select></label><button class="primary-button">创建员工</button></form>
+        <h3>新增员工档案</h3><form class="create-grid" @submit.prevent="submit('employee')"><label>员工编号<input v-model="forms.employee.value.employeeCode"></label><label>姓名<input v-model="forms.employee.value.fullName" required></label><label>岗位<input v-model="forms.employee.value.positionName"></label><label>电话<input v-model="forms.employee.value.phone"></label><label>邮箱<input v-model="forms.employee.value.email" type="email"></label><label>关联登录账号<select v-model="forms.employee.value.identityId"><option value="">暂不关联</option><option v-for="x in identities" :value="x.id">{{x.username}} · {{x.display_name}}</option></select></label><button class="primary-button">创建员工</button></form>
       </template>
         <div v-if="selectedEmployee" class="related-card"><h4>{{selectedEmployee.full_name}} · 资质证书</h4><p v-for="x in qualifications" :key="x.id" class="log-line">{{x.qualification_name}} · {{x.certificate_no||'无编号'}} · {{x.expires_on||'长期有效'}} · {{x.effective_status}}</p><form class="create-grid compact" @submit.prevent="submit('qualification')"><label>资质名称<input v-model="forms.qualification.value.qualificationName" required></label><label>证书编号<input v-model="forms.qualification.value.certificateNo"></label><label>发证机构<input v-model="forms.qualification.value.issuingAuthority"></label><label>发证日期<input v-model="forms.qualification.value.issuedOn" type="date"></label><label>有效期至<input v-model="forms.qualification.value.expiresOn" type="date"></label><button class="primary-button">添加资质</button></form></div>
       <template v-else-if="section==='customers'">
