@@ -35,22 +35,34 @@ const reportForm = ref({ reportNo:'', title:'', reportType:'inspection', summary
 const can = p => props.permissions.includes(p)
 const engineerEmployees = computed(() => employees.value.filter(e => e.employee_type === 'engineer' && e.status === 'active'))
 const selectedReport = computed(() => reports.value.find(r => String(r.id) === String(selectedReportId.value)) || null)
+const visibleTabs = computed(() => [
+  {id:'overview',label:'项目概览',permission:'project:read'},
+  {id:'contracts',label:'合同关系',permission:'contract:read'},
+  {id:'scope',label:'检测范围',permission:'project:scope:read'},
+  {id:'maintenance',label:'维护保养',permission:'maintenance:read'},
+  {id:'service',label:'现场服务',permission:'service:read'},
+  {id:'issues',label:'问题整改',permission:'project:read'},
+  {id:'reports',label:'报告管理',permission:'report:read'},
+  {id:'photos',label:'照片整理',permission:'photo:read'}
+].filter(x => can(x.permission)))
 
 async function loadAll() {
   loading.value = true; error.value = ''
   try {
     const id = props.projectId
-    const [p,e,c,s,m,v,i,r] = await Promise.all([
+    const safe = promise => promise.catch(() => [])
+    const [p,e,c,pc,s,m,v,i,r] = await Promise.all([
       api('/business/projects/' + id),
-      api('/business/employees'),
-      api('/business/contracts'),
-      api('/business/projects/' + id + '/scope-units'),
-      api('/business/projects/' + id + '/maintenance-visits'),
-      api('/business/projects/' + id + '/service-visits'),
-      api('/business/projects/' + id + '/issues'),
-      api('/business/projects/' + id + '/reports')
+      safe(api('/business/employees')),
+      safe(api('/business/contracts')),
+      safe(api('/business/projects/' + id + '/contracts')),
+      safe(api('/business/projects/' + id + '/scope-units')),
+      safe(api('/business/projects/' + id + '/maintenance-visits')),
+      safe(api('/business/projects/' + id + '/service-visits')),
+      safe(api('/business/projects/' + id + '/issues')),
+      safe(api('/business/projects/' + id + '/reports'))
     ])
-    project.value = p; employees.value = e; contracts.value = c; scopeUnits.value = s
+    project.value = { ...p, contracts:pc }; employees.value = e; contracts.value = c; scopeUnits.value = s
     maintenanceVisits.value = m; serviceVisits.value = v; issues.value = i; reports.value = r
     projectForm.value = {
       name:p.name, description:p.description || '', managerEmployeeId:p.manager_employee_id || '',
@@ -196,7 +208,7 @@ onMounted(loadAll)
     <div v-if="loading" class="pw-empty">正在加载项目资料…</div>
     <template v-else-if="project">
       <nav class="pw-tabs">
-        <button v-for="item in [{id:'overview',label:'项目概览'},{id:'contracts',label:'合同关系'},{id:'scope',label:'检测范围'},{id:'maintenance',label:'维护保养'},{id:'service',label:'现场服务'},{id:'issues',label:'问题整改'},{id:'reports',label:'报告管理'},{id:'photos',label:'照片整理'}]" :key="item.id" :class="{active:tab===item.id}" @click="tab=item.id">{{ item.label }}</button>
+        <button v-for="item in visibleTabs" :key="item.id" :class="{active:tab===item.id}" @click="tab=item.id">{{ item.label }}</button>
       </nav>
 
       <section v-if="tab==='overview'" class="pw-panel">
