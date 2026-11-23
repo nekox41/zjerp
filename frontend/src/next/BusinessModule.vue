@@ -175,10 +175,7 @@ onMounted(load)
       </div>
     </div>
     <div class="business-forms panel">
-      <template v-if="section==='organizations'">
-        <h3>新增组织</h3><form class="create-grid" @submit.prevent="submit('organization')"><label>部门名称<input v-model="forms.organization.value.name" required></label><label>上级部门<select v-model="forms.organization.value.parentId"><option value="">无</option><option v-for="x in organizations" :value="x.id">{{x.name}}</option></select></label><button class="primary-button">创建部门</button></form>
-      </template>
-      <template v-else-if="section==='employees'">
+      <template v-if="section==='employees'">
         <h3>新增员工档案</h3><form class="create-grid" @submit.prevent="submit('employee')"><label>员工编号<input v-model="forms.employee.value.employeeCode"></label><label>姓名<input v-model="forms.employee.value.fullName" required></label><label>岗位<input v-model="forms.employee.value.positionName"></label><label>员工类型<select v-model="forms.employee.value.employeeType"><option value="general">普通员工</option><option value="operator">操作员</option><option value="engineer">工程师</option><option value="manager">管理人员</option></select></label><label>电话<input v-model="forms.employee.value.phone"></label><label>邮箱<input v-model="forms.employee.value.email" type="email"></label><label>关联登录账号<select v-model="forms.employee.value.identityId"><option value="">暂不关联</option><option v-for="x in identities" :value="x.id">{{x.username}} · {{x.display_name}}</option></select></label><button class="primary-button">创建员工</button></form>
       </template>
         <div v-if="selectedEmployee" class="related-card">
