@@ -227,7 +227,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
         <button class="primary" :disabled="busy">登记问题</button>
       </form>
       <div class="sw-list">
-        <article v-for="i in issues" :key="i.id"><div><b>{{ i.title }}</b><small>{{ i.severity }} · {{ i.owner_name||'未分配' }} · 截止 {{ i.due_on||'未设置' }}</small><p>{{ i.description||'暂无描述' }}</p><p v-if="i.resolution" class="sw-resolution">处理结果：{{ i.resolution }}</p></div><div class="sw-issue-actions"><span class="sw-pill">{{ ({open:'待整改',in_progress:'整改中',resolved:'已解决',closed:'已关闭'})[i.status] }}</span><button v-if="i.status==='open'" @click="changeIssue(i,'in_progress')">开始整改</button><button v-if="i.status==='in_progress'||i.status==='open'" @click="changeIssue(i,'resolved')">提交复核</button><button v-if="i.status==='resolved'" @click="changeIssue(i,'closed')">关闭</button></div></article>
+        <article v-for="i in issues" :key="i.id"><div><b>#{{ i.id }} · {{ i.title }}</b><small>{{ i.severity }} · {{ i.owner_name||'未分配' }} · 截止 {{ i.due_on||'未设置' }}</small><p>{{ i.description||'暂无描述' }}</p><p v-if="i.resolution" class="sw-resolution">处理结果：{{ i.resolution }}</p></div><div class="sw-issue-actions"><span class="sw-pill">{{ ({open:'待整改',in_progress:'整改中',resolved:'已解决',closed:'已关闭'})[i.status] }}</span><button v-if="i.status==='open'" @click="changeIssue(i,'in_progress')">开始整改</button><button v-if="i.status==='in_progress'||i.status==='open'" @click="changeIssue(i,'resolved')">提交复核</button><button v-if="i.status==='resolved'" @click="changeIssue(i,'closed')">关闭</button></div></article>
         <div v-if="!issues.length" class="sw-empty small">当前没有问题清单</div>
       </div>
     </div>
