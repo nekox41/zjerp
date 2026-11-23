@@ -350,7 +350,7 @@ public class ReportPhotoController {
     private String outputName(long batchId,Map<String,Object>b) {
         Map<String,Object> report=one("SELECT report_no FROM erp_service_report WHERE id=?",Long.parseLong(req(b,"reportId")));
         String no=report.get("report_no").toString().replaceAll("[^\\p{L}\\p{N}._-]","_");
-        return no+"-照片整理版.docx";
+        return no+"-照片整理版-批次"+batchId+".docx";
     }
 
     private ResponseEntity<byte[]> docxResponse(byte[] bytes,String filename) {
