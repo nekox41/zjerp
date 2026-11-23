@@ -38,7 +38,7 @@ const currentProjectId = computed(() => props.projectId ? String(props.projectId
 const docxAttachments = computed(() => (report.value?.attachments || []).filter(a =>
   a.media_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
   (a.original_name || '').toLowerCase().endsWith('.docx')
-))
+).sort((a,b)=>Number(b.attachment_id)-Number(a.attachment_id)))
 const filtered = computed(() => photos.value.filter(p =>
   activeFilter.value === '全部' ||
   (activeFilter.value === '未分类' ? !p.system_code : p.system_code === activeFilter.value)
