@@ -81,6 +81,20 @@ public class BusinessController {
           ORDER BY e.id DESC LIMIT 500
           """,q.trim(),term,term,term);
     }
+    @GetMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:read')")
+    public Map<String,Object> employee(@PathVariable long id) {
+        Map<String,Object> result=new LinkedHashMap<>(one("""
+          SELECT e.*,i.username,i.display_name account_display_name
+          FROM erp_employee e LEFT JOIN erp_identity i ON i.id=e.identity_id WHERE e.id=?
+          """,id));
+        result.put("qualifications",jdbc.queryForList("""
+          SELECT q.*,CASE WHEN q.expires_on<CURRENT_DATE THEN 'expired'
+            WHEN q.expires_on<=DATE_ADD(CURRENT_DATE,INTERVAL 60 DAY) THEN 'expiring' ELSE 'valid' END effective_status
+          FROM erp_employee_qualification q WHERE q.employee_id=? ORDER BY q.expires_on
+          """,id));
+        return result;
+    }
+
     @PostMapping("/employees") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> createEmployee(@RequestBody Map<String,Object>b,Authentication a) {
         String name=required(b,"fullName"); Long identity=optionalLong(b,"identityId");
