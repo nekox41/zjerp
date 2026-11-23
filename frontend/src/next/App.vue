@@ -21,6 +21,8 @@ const tab = ref('overview')
 const loginForm = ref({ username: '', password: '' })
 const bootstrapForm = ref({ token: '', username: 'admin', displayName: '系统管理员', password: '', confirm: '' })
 const createForm = ref({ username: '', displayName: '', password: '', roleIds: [] })
+const identityEdit = ref(null)
+const identityEditForm = ref({ displayName: '', status: 'active', roleIds: [], password: '' })
 const can = permission => user.value?.permissions?.includes(permission)
 const initials = computed(() => (user.value?.displayName || '管').slice(0, 1))
 
@@ -84,6 +86,35 @@ async function createIdentity() {
     await api('/admin/identities', { method: 'POST', body: JSON.stringify(createForm.value) })
     notice.value = '账号创建成功。'
     createForm.value = { username: '', displayName: '', password: '', roleIds: [] }
+    identities.value = await api('/admin/identities')
+  } catch (e) { error.value = e.message }
+  finally { submitting.value = false }
+}
+
+function openIdentityEditor(item) {
+  identityEdit.value = item
+  const roleCodes = (item.roles || '').split(',').filter(Boolean)
+  identityEditForm.value = {
+    displayName: item.display_name || '',
+    status: item.status || 'active',
+    roleIds: roles.value.filter(role => roleCodes.includes(role.code)).map(role => role.id),
+    password: ''
+  }
+}
+async function saveIdentity() {
+  if (!identityEdit.value) return
+  error.value = ''; notice.value = ''; submitting.value = true
+  try {
+    const body = {
+      displayName: identityEditForm.value.displayName,
+      status: identityEditForm.value.status,
+      roleIds: identityEditForm.value.roleIds
+    }
+    if (identityEditForm.value.password) body.password = identityEditForm.value.password
+    await api('/admin/identities/' + identityEdit.value.id, { method: 'PUT', body: JSON.stringify(body) })
+    notice.value = '账号资料、角色和状态已更新。'
+    identityEdit.value = null
+    identityEditForm.value = { displayName: '', status: 'active', roleIds: [], password: '' }
     identities.value = await api('/admin/identities')
   } catch (e) { error.value = e.message }
   finally { submitting.value = false }
@@ -167,9 +198,10 @@ onMounted(refresh)
           <section class="next-card"><div class="next-icon">✦</div><div><b>接下来会发生什么？</b><p>新版业务模块将按真实工作流程逐步上线。现阶段不会展示尚未实现的功能入口，也不会将旧系统数据误当作新系统数据。</p></div></section>
         </template>
         <template v-else-if="tab==='identities'">
-          <div class="section-heading"><div><h2>账号管理</h2><p>创建账号并分配角色；员工档案将在后续业务模块中独立管理。</p></div></div>
+          <div class="section-heading"><div><h2>账号管理</h2><p>系统账号独立于员工档案；在这里维护登录状态、角色权限和密码。</p></div></div>
           <section class="panel create-panel"><h3>新建账号</h3><form class="create-grid" @submit.prevent="createIdentity"><label>登录账号<input v-model="createForm.username" required maxlength="100"></label><label>显示名称<input v-model="createForm.displayName" required maxlength="200"></label><label>初始密码<input v-model="createForm.password" type="password" required minlength="12" maxlength="128"></label><label>分配角色<select v-model="createForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><button class="primary-button" :disabled="submitting">创建账号</button></form></section>
-          <section class="panel"><h3>已有账号 <span>{{ identities.length }}</span></h3><div class="table-wrap"><table><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>状态</th></tr></thead><tbody><tr v-for="item in identities" :key="item.id"><td>{{ item.username }}</td><td>{{ item.display_name }}</td><td>{{ item.roles || '未分配' }}</td><td><span class="status-pill"><i></i>{{ item.status }}</span></td></tr></tbody></table><p v-if="!identities.length" class="empty">暂无账号数据</p></div></section>
+          <section v-if="identityEdit" class="panel create-panel"><h3>编辑账号 · {{ identityEdit.username }}</h3><form class="create-grid" @submit.prevent="saveIdentity"><label>显示名称<input v-model="identityEditForm.displayName" required maxlength="200"></label><label>账号状态<select v-model="identityEditForm.status"><option value="active">启用</option><option value="disabled">停用</option></select></label><label>角色权限<select v-model="identityEditForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><label>重置密码（留空则不修改）<input v-model="identityEditForm.password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label><div class="report-actions"><button class="primary-button" :disabled="submitting">保存账号</button><button type="button" class="secondary-button" @click="identityEdit=null">取消</button></div></form><p class="muted">停用账号会立即阻止后续请求；重置密码会撤销该账号已有会话。系统至少保留一个启用的系统管理员。</p></section>
+          <section class="panel"><h3>已有账号 <span>{{ identities.length }}</span></h3><div class="table-wrap"><table><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="item in identities" :key="item.id"><td>{{ item.username }}</td><td>{{ item.display_name }}</td><td>{{ item.roles || '未分配' }}</td><td><span class="status-pill"><i></i>{{ item.status==='active'?'启用':'停用' }}</span></td><td><button class="secondary-button" @click="openIdentityEditor(item)">编辑</button></td></tr></tbody></table><p v-if="!identities.length" class="empty">暂无账号数据</p></div></section>
         </template>
         <template v-else-if="tab==='audit'">
           <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
