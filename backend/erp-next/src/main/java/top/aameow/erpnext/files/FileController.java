@@ -27,8 +27,18 @@ public class FileController {
     private void assertReadable(Map<String,Object> f,Authentication a){
         Object ownerValue=f.get("uploaded_by");
         if(ownerValue instanceof Number owner && owner.longValue()==actor(a))return;
-        Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment a JOIN erp_service_report r ON r.id=a.report_id WHERE a.file_id=?",Integer.class,f.get("id"));
-        if(linked==null||linked==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"文件不存在");
+        boolean reportRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:read"));
+        if(reportRead){
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment WHERE file_id=?",Integer.class,f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
+        boolean expenseRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("expense:read"));
+        if(expenseRead){
+            boolean finance=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("expense:approve")||x.getAuthority().equals("expense:pay"));
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_expense_attachment ea JOIN erp_expense_claim c ON c.id=ea.claim_id WHERE ea.file_id=? AND (?=1 OR c.applicant_identity_id=?)",Integer.class,f.get("id"),finance?1:0,actor(a));
+            if(linked!=null&&linked>0)return;
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND,"文件不存在");
     }
     @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('file:upload')")
