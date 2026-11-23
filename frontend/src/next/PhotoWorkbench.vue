@@ -104,7 +104,7 @@ async function addPhotos(event){
  try{
   const form=new FormData();good.forEach(f=>form.append('photos',f))
   const result=await api('/report-photos/batches/'+activeBatch.value.id+'/photos',{method:'POST',body:form})
-  activeBatch.value=result;await loadPreviews(result.photos);notice.value='已导入 '+good.length+' 张原始照片';await loadProject()
+  activeBatch.value=result;await loadPreviews(result.photos);notice.value='已导入 '+good.length+' 张原始照片'
  }catch(e){error.value=e.message}finally{uploading.value=false;event.target.value=''}
 }
 async function saveCategory(photo,code){
@@ -138,8 +138,8 @@ async function exportReport(){
  if(exportBlocked.value){error.value=unclassified.value.length?'仍有未分类照片':'有照片分类在当前 DOCX 模板中找不到对应照片位置';return}
  busy.value=true;error.value='';notice.value=''
  try{
-  const result=await api('/report-photos/batches/'+activeBatch.value.id+'/export',{method:'POST',body:JSON.stringify({expectedReportVersionNo:activeBatch.value.current_version_no,modes})})
-  await downloadFile(result.fileId,result.fileName);await openBatch(activeBatch.value.id);await loadProject()
+  const result=await api('/report-photos/batches/'+activeBatch.value.id+'/export',{method:'POST',body:JSON.stringify({expectedReportVersionNo:activeBatch.value.current_version_no,modes:modes.value})})
+  const batchId=activeBatch.value.id;await downloadFile(result.fileId,result.fileName);await openBatch(batchId);reports.value=await api('/business/projects/'+selectedProjectId.value+'/reports')
   notice.value='已生成报告新版本 v'+result.reportVersionNo+'，'+result.photoCount+' 张照片已按系统写入原有章节'
  }catch(e){error.value=e.message}finally{busy.value=false}
 }
