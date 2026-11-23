@@ -71,6 +71,23 @@ VISIT=$(curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$UNCOVERE
 VISIT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$VISIT")
 curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/maintenance" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 技术负责人'
 
+# Renew on the existing project, retaining original contract and project history.
+BAD_RENEWAL=$(curl -sS -o /tmp/erp-invalid-renewal.json -w '%{http_code}' -X POST "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/maintenance-renewals" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"contractNo":"CI-RENEWAL-INVALID","title":"CI 无效续签","amount":100,"startsOn":"2028-01-01","endsOn":"2027-12-31"}')
+test "$BAD_RENEWAL" = "400"
+RENEWAL=$(curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/maintenance-renewals" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"contractNo":"CI-RENEWAL-001","title":"CI 第二年度续签","amount":1200,"signedOn":"2026-11-23","startsOn":"2027-01-01","endsOn":"2027-12-31"}')
+RENEWAL_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$RENEWAL")
+test -n "$RENEWAL_ID"
+echo "$RENEWAL" | grep -q '"status":"draft"'
+echo "$RENEWAL" | grep -q '"service_type":"maintenance"'
+PROJECT_HISTORY=$(curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/contracts" -H "Authorization: Bearer $TOKEN")
+echo "$PROJECT_HISTORY" | grep -q 'CI-CT-001'
+echo "$PROJECT_HISTORY" | grep -q 'CI-RENEWAL-001'
+curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/maintenance" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; data=json.load(sys.stdin); assert len(data["contractHistory"])>=2; assert data["current_contract_id"]==int(sys.argv[1])' "$CONTRACT_ID"
+
 # Contract originals, public cards and project materials use the private file store.
 printf 'CI maintenance attachment.\\n' > /tmp/erp-maintenance-ci.txt
 UPLOAD=$(curl -fsS -X POST http://127.0.0.1:8090/api/files -H "Authorization: Bearer $TOKEN" -F 'file=@/tmp/erp-maintenance-ci.txt;type=text/plain')
