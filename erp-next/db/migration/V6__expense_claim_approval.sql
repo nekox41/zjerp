@@ -83,8 +83,8 @@ INSERT INTO erp_permission(code,name) VALUES
 INSERT IGNORE INTO erp_role_permission(role_id,permission_id)
  SELECT r.id,p.id FROM erp_role r CROSS JOIN erp_permission p WHERE r.code='admin';
 INSERT IGNORE INTO erp_role_permission(role_id,permission_id)
- SELECT r.id,p.id FROM erp_role r JOIN erp_permission p ON p.code IN ('expense:read','expense:write')
+ SELECT r.id,p.id FROM erp_role r JOIN erp_permission p ON p.code IN ('expense:read','expense:write','file:upload','file:read')
  WHERE r.code IN ('employee','project_manager');
 INSERT IGNORE INTO erp_role_permission(role_id,permission_id)
- SELECT r.id,p.id FROM erp_role r JOIN erp_permission p ON p.code IN ('expense:read','expense:write','expense:approve','expense:pay')
+ SELECT r.id,p.id FROM erp_role r JOIN erp_permission p ON p.code IN ('expense:read','expense:write','expense:approve','expense:pay','file:upload','file:read')
  WHERE r.code='finance';
