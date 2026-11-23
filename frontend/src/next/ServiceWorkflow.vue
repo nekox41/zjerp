@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { api, downloadFile } from './api'
 
-const props = defineProps({ permissions: { type: Array, default: () => [] } })
+const props = defineProps({ permissions: { type: Array, default: () => [] }, userId: { type: Number, default: 0 } })
 const can = p => props.permissions.includes(p)
 const projects = ref([]), packages = ref([]), employees = ref([]), issues = ref([])
 const visits = ref([]), batches = ref([]), reports = ref([]), deliveries = ref([])
@@ -258,7 +258,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
           </article>
         </div>
         <div v-if="batch.status==='collecting'" class="sw-bottom-actions"><button class="primary" @click="submitBatch">提交照片审核</button><small>所有照片必须完成分类、日期和人工确认。</small></div>
-        <div v-if="batch.status==='submitted'&&can('report:review')&&batch.created_by!==undefined" class="sw-bottom-actions"><button class="primary" @click="reviewBatch">审核通过照片批次</button></div>
+        <div v-if="batch.status==='submitted'&&can('report:review')&&Number(batch.created_by)!==props.userId" class="sw-bottom-actions"><button class="primary" @click="reviewBatch">审核通过照片批次</button></div>
       </div>
     </div>
 
