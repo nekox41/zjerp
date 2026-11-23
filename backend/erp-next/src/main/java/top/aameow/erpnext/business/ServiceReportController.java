@@ -57,6 +57,8 @@ public class ServiceReportController {
         r.put("versionCreatedBy",v.get("created_by"));
         r.put("versions",jdbc.queryForList("SELECT version_no,content_sha256,archive_manifest,created_by,created_at FROM erp_service_report_version WHERE report_id=? ORDER BY version_no DESC",id));
         r.put("attachments",jdbc.queryForList("SELECT a.id attachment_id,f.id file_id,f.original_name,f.media_type,f.byte_size file_size,f.sha256,a.version_no FROM erp_service_report_attachment a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? AND a.version_no=? ORDER BY a.id",id,r.get("current_version_no")));
+        r.put("siteVisits",jdbc.queryForList("SELECT v.id,v.visit_no,v.visit_type,v.title,v.performed_on,v.status FROM erp_service_report_site_visit rv JOIN erp_site_visit v ON v.id=rv.site_visit_id WHERE rv.report_id=? ORDER BY v.performed_on",id));
+        r.put("deliveries",jdbc.queryForList("SELECT id,version_no,recipient_name,courier_name,tracking_no,sent_on,delivery_status,delivered_on FROM erp_service_report_delivery WHERE report_id=? ORDER BY id DESC",id));
         r.put("events",jdbc.queryForList("SELECT e.*,i.display_name actor_name FROM erp_service_report_event e JOIN erp_identity i ON i.id=e.actor_identity_id WHERE e.report_id=? ORDER BY e.id",id));
         return r;
     }
@@ -69,25 +71,62 @@ public class ServiceReportController {
     @GetMapping("/projects/{projectId}/reports") @PreAuthorize("hasAuthority('report:read')")
     public List<Map<String,Object>> byProject(@PathVariable long projectId){
         one("SELECT id FROM erp_project WHERE id=?",projectId);
-        return jdbc.queryForList("SELECT r.id,r.report_no,r.title,r.report_type,r.status,r.revision_no,r.current_version_no,r.updated_at,w.package_no,w.title work_package_title FROM erp_service_report r JOIN erp_service_work_package w ON w.id=r.work_package_id WHERE w.project_id=? ORDER BY r.updated_at DESC",projectId);
+        return jdbc.queryForList("""
+          SELECT r.id,r.report_no,r.title,r.report_type,r.status,r.revision_no,r.current_version_no,r.updated_at,
+                 w.package_no,w.title work_package_title
+          FROM erp_service_report r LEFT JOIN erp_service_work_package w ON w.id=r.work_package_id
+          WHERE r.project_id=? ORDER BY r.updated_at DESC
+          """,projectId);
     }
+
+    @GetMapping("/reports") @PreAuthorize("hasAuthority('report:read')")
+    public List<Map<String,Object>> allReports(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String status) {
+        String term="%"+q.trim()+"%";
+        return jdbc.queryForList("""
+          SELECT r.id,r.report_no,r.title,r.report_type,r.status,r.revision_no,r.current_version_no,r.updated_at,
+                 p.id project_id,p.project_no,p.name project_name,c.name customer_name
+          FROM erp_service_report r JOIN erp_project p ON p.id=r.project_id
+          JOIN erp_customer c ON c.id=p.customer_id
+          WHERE (?='' OR r.report_no LIKE ? OR r.title LIKE ? OR p.name LIKE ? OR c.name LIKE ?)
+            AND (?='' OR r.status=?) ORDER BY r.updated_at DESC LIMIT 500
+          """,q.trim(),term,term,term,term,status,status);
+    }
+
     @GetMapping("/work-packages/{workPackageId}/reports") @PreAuthorize("hasAuthority('report:read')")
     public List<Map<String,Object>> byWorkPackage(@PathVariable long workPackageId){
         one("SELECT id FROM erp_service_work_package WHERE id=?",workPackageId);
         return jdbc.queryForList("SELECT id,report_no,title,report_type,status,revision_no,current_version_no,updated_at FROM erp_service_report WHERE work_package_id=? ORDER BY updated_at DESC",workPackageId);
     }
+    @PostMapping("/projects/{projectId}/reports") @PreAuthorize("hasAuthority('report:write')") @Transactional
+    public Map<String,Object> createForProject(@PathVariable long projectId,@RequestBody Map<String,Object>b,Authentication a){
+        one("SELECT id FROM erp_project WHERE id=?",projectId);
+        String no=req(b,"reportNo"),title=req(b,"title"),type=b.get("reportType")==null?"service":b.get("reportType").toString();
+        if(!Set.of("service","inspection","rating","assessment","maintenance","other").contains(type))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效报告类型");
+        Map<String,Object> data=b.get("content") instanceof Map<?,?> m?(Map<String,Object>)m:Map.of();
+        jdbc.update("INSERT INTO erp_service_report(report_no,project_id,work_package_id,title,report_type,created_by) VALUES(?,?,NULL,?,?,?)",
+            no,projectId,title,type,actor(a));
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        insertVersion(id,1,data,actor(a));
+        event(id,null,"draft",actor(a),"创建项目报告");
+        return detail(id);
+    }
+
     @PostMapping("/work-packages/{workPackageId}/reports") @PreAuthorize("hasAuthority('report:write')") @Transactional
     public Map<String,Object> create(@PathVariable long workPackageId,@RequestBody Map<String,Object>b,Authentication a){
-        one("SELECT id FROM erp_service_work_package WHERE id=?",workPackageId);
+        Map<String,Object> work=one("SELECT id,project_id FROM erp_service_work_package WHERE id=?",workPackageId);
         String no=req(b,"reportNo"),title=req(b,"title"),type=b.get("reportType")==null?"service":b.get("reportType").toString();
-        if(!Set.of("service","inspection","maintenance").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效报告类型");
+        if(!Set.of("service","inspection","rating","assessment","maintenance","other").contains(type))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效报告类型");
         Map<String,Object> data=b.get("content") instanceof Map<?,?> m?(Map<String,Object>)m:Map.of();
-        jdbc.update("INSERT INTO erp_service_report(report_no,work_package_id,title,report_type,created_by) VALUES(?,?,?,?,?)",no,workPackageId,title,type,actor(a));
+        jdbc.update("INSERT INTO erp_service_report(report_no,project_id,work_package_id,title,report_type,created_by) VALUES(?,?,?,?,?,?)",
+            no,work.get("project_id"),workPackageId,title,type,actor(a));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         insertVersion(id,1,data,actor(a));
         event(id,null,"draft",actor(a),"创建报告");
         return detail(id);
     }
+
     @GetMapping("/reports/{id}") @PreAuthorize("hasAuthority('report:read')")
     public Map<String,Object> get(@PathVariable long id){return detail(id);}
     @PutMapping("/reports/{id}") @PreAuthorize("hasAuthority('report:write')") @Transactional
