@@ -57,6 +57,7 @@ public class ServiceReportController {
         r.put("versionCreatedBy",v.get("created_by"));
         r.put("versions",jdbc.queryForList("SELECT version_no,content_sha256,archive_manifest,created_by,created_at FROM erp_service_report_version WHERE report_id=? ORDER BY version_no DESC",id));
         r.put("attachments",jdbc.queryForList("SELECT a.id attachment_id,f.id file_id,f.original_name,f.media_type,f.byte_size file_size,f.sha256,a.version_no FROM erp_service_report_attachment a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? AND a.version_no=? ORDER BY a.id",id,r.get("current_version_no")));
+        r.put("artifacts",jdbc.queryForList("SELECT a.id,a.version_no,a.artifact_type,a.artifact_revision_no,a.sha256,a.created_at,a.file_id,f.original_name,f.byte_size file_size FROM erp_service_report_artifact a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? ORDER BY a.version_no DESC,a.artifact_revision_no DESC",id));
         r.put("events",jdbc.queryForList("SELECT e.*,i.display_name actor_name FROM erp_service_report_event e JOIN erp_identity i ON i.id=e.actor_identity_id WHERE e.report_id=? ORDER BY e.id",id));
         return r;
     }
