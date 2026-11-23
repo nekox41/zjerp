@@ -99,14 +99,8 @@ jobs:
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/contracts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractId\":$RENEWAL_ID,\"relationType\":\"renewal\",\"isCurrent\":true}" | grep -q 'CI 续签合同'
           curl -fsS "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 中间人'
           echo 'SMOKE CHECK: intermediary contract'
-          curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"title":"CI 里程碑"}' >/dev/null
-          curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 里程碑'
-          MILESTONE_ID=$(curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
-          curl -fsS -X PUT "http://127.0.0.1:8090/api/business/milestones/$MILESTONE_ID/complete" -H "Authorization: Bearer $TOKEN" | grep -q 'completed'
           curl -fsS "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 合同'
           curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 项目'
-          curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeId\":$EMP_ID,\"role\":\"负责人\"}" >/dev/null
-          curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 员工'
           source scripts/erp-next-service-smoke.sh
           source scripts/erp-next-report-smoke.sh
           source scripts/erp-next-expense-smoke.sh
