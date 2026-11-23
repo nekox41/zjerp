@@ -66,8 +66,6 @@ CREATE TABLE erp_project_contract (
   UNIQUE KEY uk_erp_project_contract (project_id,contract_id),
   UNIQUE KEY uk_erp_project_current_contract (current_project_id),
   KEY idx_erp_project_contract_contract (contract_id),
-  CONSTRAINT fk_erp_project_contract_project FOREIGN KEY (project_id) REFERENCES erp_project(id) ON DELETE CASCADE,
-  CONSTRAINT fk_erp_project_contract_contract FOREIGN KEY (contract_id) REFERENCES erp_contract(id) ON DELETE RESTRICT,
   CONSTRAINT ck_erp_project_contract_relation CHECK (relation_type IN ('initial','renewal','supplemental'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
