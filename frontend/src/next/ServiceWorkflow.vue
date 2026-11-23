@@ -112,7 +112,7 @@ async function importPhotos(event) {
       await api('/service-workflow/photo-batches/'+batch.value.id+'/photos',{method:'POST',body:JSON.stringify({fileId:uploaded.id,takenOn:batch.value.visit_date})})
       await loadPreview(uploaded.id);added++
     }
-    await openBatch(batch.value.id);await selectPackage(workPackage.value.id)
+    const batchId=batch.value.id;await selectPackage(workPackage.value.id);await openBatch(batchId)
     notice.value='已导入 '+added+' 张照片；请逐张确认系统分类和拍摄日期'
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
@@ -143,10 +143,10 @@ async function removePhoto(photo) {
   try{await api('/service-workflow/photos/'+photo.id,{method:'DELETE'});await openBatch(batch.value.id)}catch(e){error.value=e.message}
 }
 async function submitBatch() {
-  try{await api('/service-workflow/photo-batches/'+batch.value.id+'/submit',{method:'POST'});await openBatch(batch.value.id);await selectPackage(workPackage.value.id);notice.value='照片批次已提交内部审核'}catch(e){error.value=e.message}
+  try{const batchId=batch.value.id;await api('/service-workflow/photo-batches/'+batchId+'/submit',{method:'POST'});await selectPackage(workPackage.value.id);await openBatch(batchId);notice.value='照片批次已提交内部审核'}catch(e){error.value=e.message}
 }
 async function reviewBatch() {
-  try{await api('/service-workflow/photo-batches/'+batch.value.id+'/review',{method:'POST'});await openBatch(batch.value.id);await selectPackage(workPackage.value.id);notice.value='照片批次审核通过'}catch(e){error.value=e.message}
+  try{const batchId=batch.value.id;await api('/service-workflow/photo-batches/'+batchId+'/review',{method:'POST'});await selectPackage(workPackage.value.id);await openBatch(batchId);notice.value='照片批次审核通过'}catch(e){error.value=e.message}
 }
 async function createReport() {
   busy.value=true;error.value='';try{
