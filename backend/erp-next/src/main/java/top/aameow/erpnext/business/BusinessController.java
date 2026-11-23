@@ -254,8 +254,8 @@ public class BusinessController {
         if(manager!=null) assertQualifiedEngineer(manager,"项目负责人");
         if(technicalLead!=null) assertQualifiedEngineer(technicalLead,"技术负责人");
         if(manager!=null&&manager.equals(technicalLead)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是不同人员");
-        jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,actual_start,actual_end,progress,status,honeybee_uploaded,documents_ready,maintenance_card_sent) VALUES(?,?,?,?,?,?,?,?,?,0,'planned',?,?,?)",
-            no,name,contract,customer,b.get("description"),manager,technicalLead,b.get("actualStart"),b.get("actualEnd"),
+        jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,planned_start,planned_end,actual_start,actual_end,progress,status,honeybee_uploaded,documents_ready,maintenance_card_sent) VALUES(?,?,?,?,?,?,?,?,?,?,?,0,'planned',?,?,?)",
+            no,name,contract,customer,b.get("description"),manager,technicalLead,b.get("plannedStart"),b.get("plannedEnd"),b.get("actualStart"),b.get("actualEnd"),
             Boolean.parseBoolean(val(b,"honeybeeUploaded","false")),Boolean.parseBoolean(val(b,"documentsReady","false")),Boolean.parseBoolean(val(b,"maintenanceCardSent","false")));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         if(contract!=null) jdbc.update("INSERT INTO erp_project_contract(project_id,contract_id,relation_type,is_current) VALUES(?,?,'initial',TRUE)",id,contract);
@@ -274,12 +274,16 @@ public class BusinessController {
         Long finalManager=b.containsKey("managerEmployeeId")?manager:optionalLong(one("SELECT manager_employee_id FROM erp_project WHERE id=?",id),"manager_employee_id");
         Long finalLead=b.containsKey("technicalLeadEmployeeId")?technicalLead:optionalLong(one("SELECT technical_lead_employee_id FROM erp_project WHERE id=?",id),"technical_lead_employee_id");
         if(finalManager!=null&&finalManager.equals(finalLead)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是不同人员");
-        jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=?,technical_lead_employee_id=?,actual_start=CASE WHEN ? THEN ? ELSE actual_start END,actual_end=CASE WHEN ? THEN ? ELSE actual_end END,progress=COALESCE(?,progress),status=COALESCE(?,status),honeybee_uploaded=COALESCE(?,honeybee_uploaded),documents_ready=COALESCE(?,documents_ready),maintenance_card_sent=COALESCE(?,maintenance_card_sent) WHERE id=?",
-            b.get("name"),b.get("description"),finalManager,finalLead,b.containsKey("actualStart"),blankToNull(b.get("actualStart")),b.containsKey("actualEnd"),blankToNull(b.get("actualEnd")),
-            progress,b.get("status"),b.get("honeybeeUploaded"),b.get("documentsReady"),b.get("maintenanceCardSent"),id);
+        String nextStatus=b.get("status")==null?null:b.get("status").toString();
+        if(nextStatus!=null&&!Set.of("planned","in_progress","paused","completed","cancelled").contains(nextStatus))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目状态无效");
+        jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=?,technical_lead_employee_id=?,planned_start=CASE WHEN ? THEN ? ELSE planned_start END,planned_end=CASE WHEN ? THEN ? ELSE planned_end END,actual_start=CASE WHEN ? THEN ? ELSE actual_start END,actual_end=CASE WHEN ? THEN ? ELSE actual_end END,progress=COALESCE(?,progress),status=COALESCE(?,status),honeybee_uploaded=COALESCE(?,honeybee_uploaded),documents_ready=COALESCE(?,documents_ready),maintenance_card_sent=COALESCE(?,maintenance_card_sent) WHERE id=?",
+            b.get("name"),b.get("description"),finalManager,finalLead,b.containsKey("plannedStart"),blankToNull(b.get("plannedStart")),b.containsKey("plannedEnd"),blankToNull(b.get("plannedEnd")),
+            b.containsKey("actualStart"),blankToNull(b.get("actualStart")),b.containsKey("actualEnd"),blankToNull(b.get("actualEnd")),
+            progress,nextStatus,b.get("honeybeeUploaded"),b.get("documentsReady"),b.get("maintenanceCardSent"),id);
         audit(a,"project.updated","erp_project",id,"项目资料更新");
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'updated',?)",id,actor(a),val(b,"log","项目资料更新"));
-        return project(id);
+        return projectDetail(id);
     }
     @GetMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:read')")
     public Map<String,Object> contract(@PathVariable long id) { return contractDetail(id); }
