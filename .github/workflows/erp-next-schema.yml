@@ -92,7 +92,7 @@ jobs:
           PROJECT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectNo\":\"CI-P-001\",\"name\":\"CI 项目\",\"customerId\":$CUSTOMER_ID,\"contractId\":$CONTRACT_ID,\"managerEmployeeId\":$EMP_ID}")
           PROJECT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$PROJECT")
           PROJECT_NO_CONTRACT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectNo\":\"CI-P-002\",\"name\":\"CI 无合同项目\",\"customerId\":$CUSTOMER_ID}")
-          python -c 'import json,os; assert json.loads(os.environ["PROJECT_NO_CONTRACT"]).get("contract_id") is None'
+          python -c 'import json,sys; assert json.load(sys.stdin).get("contract_id") is None' <<< "$PROJECT_NO_CONTRACT"
           echo 'SMOKE CHECK: project without contract'
           RENEWAL=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/contracts -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractNo\":\"CI-CT-002\",\"title\":\"CI 续签合同\",\"customerId\":$CUSTOMER_ID,\"contractType\":\"maintenance\",\"signingMode\":\"intermediary\",\"intermediaryName\":\"CI 中间人\",\"intermediarySharePercent\":20,\"amount\":1200}")
           RENEWAL_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$RENEWAL")
