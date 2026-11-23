@@ -23,7 +23,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/report-photos")
 public class ReportPhotoController {
-    private static final long MAX_BATCH_BYTES=220L*1024*1024;
+    private static final long MAX_BATCH_BYTES=120L*1024*1024;
     private static final int MAX_BATCH_PHOTOS=300;
     private static final String DOCX_MEDIA="application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private final JdbcTemplate jdbc;
@@ -123,7 +123,7 @@ public class ReportPhotoController {
         if(existing+uploads.size()>MAX_BATCH_PHOTOS) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"一个照片批次最多 300 张");
         long total=uploads.stream().mapToLong(MultipartFile::getSize).sum();
         long prior=jdbc.queryForObject("SELECT COALESCE(SUM(f.byte_size),0) FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.batch_id=?",Long.class,id);
-        if(total+prior>MAX_BATCH_BYTES) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"照片批次总大小不能超过 220MB");
+        if(total+prior>MAX_BATCH_BYTES) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"照片批次总大小不能超过 120MB");
         List<PrivateFileStorage.StoredFile> storedFiles=new ArrayList<>();
         try {
             int order=existing;
