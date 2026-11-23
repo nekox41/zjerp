@@ -77,6 +77,19 @@ class ReportDocxPhotoInserterTest {
         }
     }
     @Test
+    void recognizesParenthesizedSectionNumbersUsedByBothSuppliedTemplates() throws Exception {
+        try(XWPFDocument doc=new XWPFDocument()){
+            section(doc,"（一）火灾自动报警系统",1);
+            section(doc,"（十四）建筑灭火器",1);
+            new ReportDocxPhotoInserter().insert(doc,List.of(
+                new ReportDocxPhotoInserter.Photo("火灾自动报警系统",png(),"alarm.png","2026-08-11",""),
+                new ReportDocxPhotoInserter.Photo("建筑灭火器",png(),"extinguisher.png","2026-08-11","")
+            ));
+            assertEquals(2,pictureReferences(doc));
+            assertEquals(2,doc.getTables().size());
+        }
+    }
+    @Test
     void refusesCategoriesMissingFromTheSelectedTemplate() throws Exception {
         try(XWPFDocument doc=new XWPFDocument()){
             section(doc,"火灾自动报警系统",1);
