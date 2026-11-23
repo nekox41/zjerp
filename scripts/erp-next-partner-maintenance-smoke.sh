@@ -5,10 +5,13 @@ PARTNER=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/partners \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"partnerCode":"CI-PARTNER-001","name":"CI 介绍合作方","partnerType":"introducer","contactName":"CI 联系人"}')
 PARTNER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$PARTNER")
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/partners/$PARTNER_ID" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"CI 介绍合作方已更新","phone":"13800000000","status":"active"}' | grep -q 'CI 介绍合作方已更新'
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID/partners" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"partnerId\":$PARTNER_ID,\"sharePercent\":20,\"notes\":\"CI 合作分成\"}" | grep -q '20'
-curl -fsS "http://127.0.0.1:8090/api/business/partners/$PARTNER_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 介绍合作方'
+curl -fsS "http://127.0.0.1:8090/api/business/partners/$PARTNER_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 介绍合作方已更新'
 curl -fsS "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID/partners" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 介绍合作方'
 
 PARTNER_2=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/partners \
@@ -29,6 +32,15 @@ curl -fsS -X POST "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID/pro
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"projectId\":$UNCOVERED_ID,\"relationType\":\"renewal\"}" | grep -q 'renewal'
 curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/contracts" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-CT-001'
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"CI 甲方客户已更新","customerType":"enterprise","phone":"13900000000"}' | grep -q 'CI 甲方客户已更新'
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/employees/$EMP_ID" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"employeeType":"engineer","phone":"13700000000"}' | grep -q 'engineer'
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"CI 维保项目已更新","plannedStart":"2026-01-01","plannedEnd":"2026-12-31","status":"in_progress"}' | grep -q 'CI 维保项目已更新'
 
 # Project manager and technical lead must be distinct qualified engineers.
 TECH=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees \
