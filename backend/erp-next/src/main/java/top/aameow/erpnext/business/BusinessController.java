@@ -319,13 +319,6 @@ public class BusinessController {
           LEFT JOIN erp_employee e ON e.id=p.manager_employee_id
           LEFT JOIN erp_employee te ON te.id=p.technical_lead_employee_id WHERE p.id=?
           """,id));
-        result.put("contracts",jdbc.queryForList("""
-          SELECT pc.id,pc.contract_id,pc.relation_type,pc.is_current,ct.contract_no,ct.title,ct.contract_type,
-                 ct.starts_on,ct.ends_on,ct.status,ct.signing_mode,ct.intermediary_name_snapshot,ct.intermediary_share_percent
-          FROM erp_project_contract pc JOIN erp_contract ct ON ct.id=pc.contract_id
-          WHERE pc.project_id=? ORDER BY pc.is_current DESC,ct.starts_on DESC,pc.id DESC
-          """,id));
-        result.put("scopeUnits",jdbc.queryForList("SELECT * FROM erp_project_scope_unit WHERE project_id=? ORDER BY id",id));
         result.put("members",members(id)); result.put("logs",logs(id)); return result;
     }
 
