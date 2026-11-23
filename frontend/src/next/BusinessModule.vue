@@ -54,6 +54,7 @@ const forms = {
   contract:ref({contractNo:'',title:'',customerId:'',contractType:'maintenance',signingMode:'direct',intermediaryId:'',intermediarySharePercent:'',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',status:'draft',notes:''}),
   project:ref({projectNo:'',name:'',customerId:'',contractId:'',managerEmployeeId:'',technicalLeadEmployeeId:'',plannedStart:'',plannedEnd:'',description:''})
 }
+const customerEdit=ref({}),partnerEdit=ref({}),employeeEdit=ref({})
 const contractEdit = ref({})
 const projectEdit = ref({})
 const contractLink = ref({contractId:'',relationType:'renewal',isCurrent:true})
@@ -119,15 +120,15 @@ async function create(kind) {
 }
 
 async function openCustomer(id) {
-  try { selectedCustomer.value=await api('/business/customers/'+id); contacts.value=selectedCustomer.value.contacts||[]; selectedPartner.value=null; selectedEmployee.value=null; selectedContract.value=null; selectedProject.value=null }
+  try { selectedCustomer.value=await api('/business/customers/'+id); contacts.value=selectedCustomer.value.contacts||[]; customerEdit.value={name:selectedCustomer.value.name,creditCode:selectedCustomer.value.credit_code||'',industry:selectedCustomer.value.industry||'',phone:selectedCustomer.value.phone||'',email:selectedCustomer.value.email||'',address:selectedCustomer.value.address||'',notes:selectedCustomer.value.notes||''}; selectedPartner.value=null; selectedEmployee.value=null; selectedContract.value=null; selectedProject.value=null }
   catch(e){error.value=e.message}
 }
 async function openPartner(id) {
-  try { selectedPartner.value=await api('/business/partners/'+id); selectedCustomer.value=null; selectedEmployee.value=null; selectedContract.value=null; selectedProject.value=null }
+  try { selectedPartner.value=await api('/business/partners/'+id); partnerEdit.value={name:selectedPartner.value.name,contactName:selectedPartner.value.contact_name||'',phone:selectedPartner.value.phone||'',email:selectedPartner.value.email||'',address:selectedPartner.value.address||'',status:selectedPartner.value.status,notes:selectedPartner.value.notes||''}; selectedCustomer.value=null; selectedEmployee.value=null; selectedContract.value=null; selectedProject.value=null }
   catch(e){error.value=e.message}
 }
 async function openEmployee(id) {
-  try { selectedEmployee.value=employees.value.find(x=>x.id===id)||null; qualifications.value=await api('/business/employees/'+id+'/qualifications'); selectedCustomer.value=null; selectedPartner.value=null; selectedContract.value=null; selectedProject.value=null }
+  try { selectedEmployee.value=employees.value.find(x=>x.id===id)||null; employeeEdit.value={fullName:selectedEmployee.value.full_name,employeeType:selectedEmployee.value.employee_type,positionName:selectedEmployee.value.position_name||'',phone:selectedEmployee.value.phone||'',email:selectedEmployee.value.email||'',status:selectedEmployee.value.status}; qualifications.value=await api('/business/employees/'+id+'/qualifications'); selectedCustomer.value=null; selectedPartner.value=null; selectedContract.value=null; selectedProject.value=null }
   catch(e){error.value=e.message}
 }
 async function openContract(id) {
@@ -207,6 +208,21 @@ async function uploadContractDocument(event,documentType) {
   } catch(e){error.value=e.message}
   finally{busy.value=false;event.target.value=''}
 }
+async function saveCustomer(){
+  if(!selectedCustomer.value)return
+  try{await api('/business/customers/'+selectedCustomer.value.id,{method:'PUT',body:JSON.stringify(customerEdit.value)});await openCustomer(selectedCustomer.value.id);await load();notice.value='客户资料已更新'}
+  catch(e){error.value=e.message}
+}
+async function savePartner(){
+  if(!selectedPartner.value)return
+  try{await api('/business/partners/'+selectedPartner.value.id,{method:'PUT',body:JSON.stringify(partnerEdit.value)});await openPartner(selectedPartner.value.id);await load();notice.value='合作方资料已更新'}
+  catch(e){error.value=e.message}
+}
+async function saveEmployee(){
+  if(!selectedEmployee.value)return
+  try{await api('/business/employees/'+selectedEmployee.value.id,{method:'PUT',body:JSON.stringify(employeeEdit.value)});await load();await openEmployee(selectedEmployee.value.id);notice.value='员工资料已更新'}
+  catch(e){error.value=e.message}
+}
 async function updateContact(contact) {
   try {
     await api('/business/contacts/'+contact.id,{method:'PUT',body:JSON.stringify({name:contact.name,positionName:contact.position_name,phone:contact.phone,email:contact.email,notes:contact.notes})})
@@ -262,10 +278,15 @@ onMounted(load)
         <div v-if="selectedCustomer" class="detail-block">
           <h3>{{selectedCustomer.name}} · 客户详情</h3>
           <p>客户编号：{{selectedCustomer.customer_code}}　信用代码：{{selectedCustomer.credit_code||'—'}}</p>
-          <p>联系电话：{{selectedCustomer.phone||'—'}}　邮箱：{{selectedCustomer.email||'—'}}</p>
+          <form class="create-grid compact" @submit.prevent="saveCustomer">
+            <label>客户名称<input v-model="customerEdit.name"></label><label>信用代码<input v-model="customerEdit.creditCode"></label>
+            <label>行业<input v-model="customerEdit.industry"></label><label>联系电话<input v-model="customerEdit.phone"></label>
+            <label>邮箱<input v-model="customerEdit.email"></label><label>地址<input v-model="customerEdit.address"></label>
+            <label class="span-2">备注<input v-model="customerEdit.notes"></label><button class="primary-button">保存客户资料</button>
+          </form>
           <h4>联系人</h4>
           <div v-for="c in contacts" :key="c.id" class="contact-row">
-            <div><b>{{c.name}}</b><small>{{c.position_name||'—'}} · {{c.phone||'无电话'}} · {{c.email||'无邮箱'}}</small></div>
+            <div class="contact-edit"><input v-model="c.name" aria-label="联系人姓名"><input v-model="c.position_name" aria-label="联系人岗位"><input v-model="c.phone" aria-label="联系人电话"><input v-model="c.email" aria-label="联系人邮箱"></div>
             <span v-if="c.is_primary" class="tag">主要联系人</span>
             <button class="text-button" @click="updateContact(c)">保存</button><button class="text-button danger" @click="deleteContact(c)">删除</button>
           </div>
@@ -289,7 +310,12 @@ onMounted(load)
         </form>
         <div v-if="selectedPartner" class="detail-block">
           <h3>{{selectedPartner.name}} · 合作记录</h3>
-          <p>联系人：{{selectedPartner.contact_name||'—'}}　电话：{{selectedPartner.phone||'—'}}</p>
+          <form class="create-grid compact" @submit.prevent="savePartner">
+            <label>合作方名称<input v-model="partnerEdit.name"></label><label>联系人<input v-model="partnerEdit.contactName"></label>
+            <label>电话<input v-model="partnerEdit.phone"></label><label>邮箱<input v-model="partnerEdit.email"></label>
+            <label>地址<input v-model="partnerEdit.address"></label><label>状态<select v-model="partnerEdit.status"><option value="active">启用</option><option value="disabled">停用</option></select></label>
+            <label class="span-2">备注<input v-model="partnerEdit.notes"></label><button class="primary-button">保存合作方资料</button>
+          </form>
           <h4>介绍的合同</h4>
           <div v-for="c in selectedPartner.contracts||[]" :key="c.id" class="log-line">{{c.contract_no}} · {{c.title}} · {{c.intermediary_share_percent}}%</div>
         </div>
@@ -306,7 +332,13 @@ onMounted(load)
         </form>
         <div v-if="selectedEmployee" class="detail-block">
           <h3>{{selectedEmployee.full_name}} · 资格档案</h3>
-          <p>类型：{{employeeTypes.find(x=>x.value===selectedEmployee.employee_type)?.label}}　工程师资格：{{selectedEmployee.has_engineer_qualification?'有效':'未登记/已过期'}}</p>
+          <form class="create-grid compact" @submit.prevent="saveEmployee">
+            <label>姓名<input v-model="employeeEdit.fullName"></label><label>员工类型<select v-model="employeeEdit.employeeType"><option v-for="x in employeeTypes" :key="x.value" :value="x.value">{{x.label}}</option></select></label>
+            <label>岗位<input v-model="employeeEdit.positionName"></label><label>电话<input v-model="employeeEdit.phone"></label>
+            <label>邮箱<input v-model="employeeEdit.email"></label><label>状态<select v-model="employeeEdit.status"><option value="active">在职</option><option value="inactive">离职/停用</option></select></label>
+            <button class="primary-button">保存员工资料</button>
+          </form>
+          <p>工程师资格：{{selectedEmployee.has_engineer_qualification?'有效':'未登记/已过期'}}</p>
           <div v-for="q in qualifications" :key="q.id" class="log-line">{{q.qualification_name}} · {{q.qualification_type==='engineer'?'工程师资格':'其他资格'}} · {{q.certificate_no||'无证书编号'}} · {{q.effective_status||q.status}} · 到期 {{q.expires_on||'长期'}}</div>
           <form class="create-grid compact" @submit.prevent="create('qualification')">
             <label>资格名称<input v-model="forms.qualification.value.qualificationName" required></label>
@@ -386,10 +418,14 @@ onMounted(load)
             <label>合同关系<select v-model="contractLink.relationType"><option value="initial">初始合同</option><option value="renewal">续签合同</option><option value="supplemental">补充合同</option></select></label>
             <label class="inline-check"><input type="checkbox" v-model="contractLink.isCurrent">设为当前合同</label><button class="primary-button">关联合同</button>
           </form>
-          <div class="project-checks">
-            <span :class="{'is-done':projectEdit.honeybeeUploaded}">小蜜蜂：{{projectEdit.honeybeeUploaded?'已上传':'待上传'}}</span>
-            <span :class="{'is-done':projectEdit.documentsReady}">项目资料：{{projectEdit.documentsReady?'已完成':'待完善'}}</span>
-            <span :class="{'is-done':projectEdit.maintenanceCardSent}">维保公示卡：{{projectEdit.maintenanceCardSent?'已寄出':'待寄出'}}</span>
+          <div class="project-status-edit">
+            <label class="inline-check"><input type="checkbox" v-model="projectEdit.honeybeeUploaded"> 小蜜蜂信息已上传</label>
+            <label>上传日期<input type="date" v-model="projectEdit.honeybeeUploadedOn"></label>
+            <label class="inline-check"><input type="checkbox" v-model="projectEdit.documentsReady"> 项目资料已完成</label>
+            <label>资料完成日期<input type="date" v-model="projectEdit.documentsReadyOn"></label>
+            <label class="inline-check"><input type="checkbox" v-model="projectEdit.maintenanceCardSent"> 维保公示卡已寄出</label>
+            <label>寄出日期<input type="date" v-model="projectEdit.maintenanceCardSentOn"></label>
+            <button class="primary-button" @click="saveProject">保存维保状态</button>
           </div>
           <p class="muted">维保状态与现场服务记录在对应模块管理；此处仅维护项目基础信息。</p>
         </div>
@@ -400,6 +436,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.business-module{display:grid;gap:18px}.business-header h2{margin:5px 0;font-size:23px;color:#203149}.business-header p{margin:0;color:#7d889a;font-size:12px}.business-tabs{display:flex;gap:8px;flex-wrap:wrap}.business-tabs button{border:1px solid #dce3ed;background:#fff;color:#516078;border-radius:8px;padding:9px 15px;font-size:12px}.business-tabs button.active{background:#eaf0ff;border-color:#b8c9f4;color:#2856b7;font-weight:700}.business-layout{display:grid;grid-template-columns:minmax(240px,.78fr) minmax(420px,1.5fr);gap:16px;align-items:start}.business-list,.business-forms{padding:20px;min-width:0}.business-list-head{display:flex;gap:10px;align-items:center;justify-content:space-between}.business-list-head h3,.business-forms>h3{margin:0;font-size:15px}.business-list-head small{color:#9aa4b3;font-size:11px}.business-list-head input{border:1px solid #dce2eb;border-radius:8px;padding:9px;max-width:150px;min-width:90px}.business-records{display:grid;gap:7px;margin-top:16px;max-height:680px;overflow:auto}.business-record{display:grid;text-align:left;gap:4px;border:1px solid #edf0f5;border-radius:9px;background:#fff;padding:12px;color:#27354b}.business-record:hover,.business-record.chosen{border-color:#a9bce9;background:#f8faff}.business-record small,.business-record span{font-size:11px;color:#8792a4}.create-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-top:16px}.create-grid.compact{margin-top:12px}.create-grid label{display:grid;gap:7px;font-size:11px;color:#65738a}.create-grid input,.create-grid select{width:100%;min-width:0;border:1px solid #dce2eb;border-radius:8px;padding:10px 11px;background:#fff;font:inherit;font-size:12px}.create-grid .primary-button{align-self:end}.span-2{grid-column:span 2}.detail-block{border-top:1px solid #edf0f5;margin-top:24px;padding-top:18px}.detail-block h3{font-size:15px;margin:0 0 10px}.detail-block h4{font-size:12px;margin:20px 0 8px;color:#3f516b}.detail-block p{font-size:12px;color:#68768b;line-height:1.8}.contact-row,.detail-heading{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #edf0f5}.contact-row>div{display:grid;gap:4px}.contact-row small{font-size:10px;color:#8792a4}.tag{font-size:10px;color:#2e7c5b;background:#eaf7f0;padding:5px 8px;border-radius:20px}.text-button{border:0;background:transparent;color:#315fca;font-size:11px;padding:5px}.text-button.danger{color:#b84e4e}.detail-heading h3{margin:0}.detail-heading p{margin:5px 0 0}.upload-row{display:flex;gap:15px;flex-wrap:wrap;margin-top:12px}.upload-row label{display:grid;gap:7px;font-size:11px;color:#65738a}.upload-row input{max-width:220px;font-size:11px}.log-line{font-size:11px;color:#68768b;padding:8px 0;border-bottom:1px solid #edf0f5;line-height:1.7}.inline-check{display:flex!important;align-items:center;gap:8px}.inline-check input{width:auto}.project-checks{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.project-checks span{padding:7px 10px;border-radius:7px;background:#f2f4f7;color:#788396;font-size:11px}.project-checks span.is-done{background:#eaf7f0;color:#25815b}.muted{font-size:11px;color:#8995a7}.detail-block pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fa;padding:10px;border-radius:8px;font-size:10px}
+.business-module{display:grid;gap:18px}.business-header h2{margin:5px 0;font-size:23px;color:#203149}.business-header p{margin:0;color:#7d889a;font-size:12px}.business-tabs{display:flex;gap:8px;flex-wrap:wrap}.business-tabs button{border:1px solid #dce3ed;background:#fff;color:#516078;border-radius:8px;padding:9px 15px;font-size:12px}.business-tabs button.active{background:#eaf0ff;border-color:#b8c9f4;color:#2856b7;font-weight:700}.business-layout{display:grid;grid-template-columns:minmax(240px,.78fr) minmax(420px,1.5fr);gap:16px;align-items:start}.business-list,.business-forms{padding:20px;min-width:0}.business-list-head{display:flex;gap:10px;align-items:center;justify-content:space-between}.business-list-head h3,.business-forms>h3{margin:0;font-size:15px}.business-list-head small{color:#9aa4b3;font-size:11px}.business-list-head input{border:1px solid #dce2eb;border-radius:8px;padding:9px;max-width:150px;min-width:90px}.business-records{display:grid;gap:7px;margin-top:16px;max-height:680px;overflow:auto}.business-record{display:grid;text-align:left;gap:4px;border:1px solid #edf0f5;border-radius:9px;background:#fff;padding:12px;color:#27354b}.business-record:hover,.business-record.chosen{border-color:#a9bce9;background:#f8faff}.business-record small,.business-record span{font-size:11px;color:#8792a4}.create-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-top:16px}.create-grid.compact{margin-top:12px}.create-grid label{display:grid;gap:7px;font-size:11px;color:#65738a}.create-grid input,.create-grid select{width:100%;min-width:0;border:1px solid #dce2eb;border-radius:8px;padding:10px 11px;background:#fff;font:inherit;font-size:12px}.create-grid .primary-button{align-self:end}.span-2{grid-column:span 2}.detail-block{border-top:1px solid #edf0f5;margin-top:24px;padding-top:18px}.detail-block h3{font-size:15px;margin:0 0 10px}.detail-block h4{font-size:12px;margin:20px 0 8px;color:#3f516b}.detail-block p{font-size:12px;color:#68768b;line-height:1.8}.contact-row,.detail-heading{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #edf0f5}.contact-edit{display:grid;grid-template-columns:repeat(4,minmax(70px,1fr));gap:5px;flex:1}.contact-edit input{min-width:0;border:1px solid #e1e7ef;border-radius:6px;padding:6px;font-size:10px}.contact-row>div{display:grid;gap:4px}.contact-row small{font-size:10px;color:#8792a4}.tag{font-size:10px;color:#2e7c5b;background:#eaf7f0;padding:5px 8px;border-radius:20px}.text-button{border:0;background:transparent;color:#315fca;font-size:11px;padding:5px}.text-button.danger{color:#b84e4e}.detail-heading h3{margin:0}.detail-heading p{margin:5px 0 0}.upload-row{display:flex;gap:15px;flex-wrap:wrap;margin-top:12px}.upload-row label{display:grid;gap:7px;font-size:11px;color:#65738a}.upload-row input{max-width:220px;font-size:11px}.log-line{font-size:11px;color:#68768b;padding:8px 0;border-bottom:1px solid #edf0f5;line-height:1.7}.inline-check{display:flex!important;align-items:center;gap:8px}.inline-check input{width:auto}.project-status-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0;padding:12px;background:#f8fafc;border-radius:9px}.project-status-edit label{display:flex;gap:8px;align-items:center;font-size:11px;color:#62718a}.project-status-edit input[type=date]{padding:7px;border:1px solid #dce2eb;border-radius:6px}.project-status-edit .primary-button{grid-column:span 2}.project-checks{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.project-checks span{padding:7px 10px;border-radius:7px;background:#f2f4f7;color:#788396;font-size:11px}.project-checks span.is-done{background:#eaf7f0;color:#25815b}.muted{font-size:11px;color:#8995a7}.detail-block pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fa;padding:10px;border-radius:8px;font-size:10px}
 @media(max-width:950px){.business-layout{grid-template-columns:1fr}.business-list{max-height:none}.create-grid{grid-template-columns:1fr}.span-2{grid-column:auto}}
 </style>
