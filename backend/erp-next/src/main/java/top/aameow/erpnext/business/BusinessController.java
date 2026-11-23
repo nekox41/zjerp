@@ -236,7 +236,7 @@ public class BusinessController {
     private List<Map<String,Object>> projectContracts(long projectId) {
         return jdbc.queryForList("""
           SELECT pc.id,pc.project_id,pc.contract_id,pc.relation_type,pc.is_current,pc.linked_at,
-                 ct.contract_no,ct.title,ct.contract_type,ct.amount,ct.currency,ct.starts_on,ct.ends_on,ct.status
+                 ct.contract_no,ct.title,ct.contract_type,ct.signing_mode,ct.intermediary_name,ct.intermediary_share_percent,ct.amount,ct.currency,ct.starts_on,ct.ends_on,ct.status
           FROM erp_project_contract pc JOIN erp_contract ct ON ct.id=pc.contract_id
           WHERE pc.project_id=? ORDER BY pc.is_current DESC,ct.starts_on DESC,pc.id DESC
           """,projectId);
