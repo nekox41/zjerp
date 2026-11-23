@@ -143,8 +143,8 @@ onMounted(refresh)
       <button :class="{active:tab==='overview'}" @click="tab='overview'"><span>⌂</span>工作台</button>
       <button v-if="can('project:read')" :class="{active:tab==='dashboard'}" @click="tab='dashboard'"><span>◫</span>经营驾驶舱</button>
       <div class="side-caption">业务管理</div>
-      <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务全生命周期</button>
-      <button v-if="can('report:write')" :class="{active:tab==='photo-workbench'}" @click="tab='photo-workbench'"><span>▧</span>现场照片整理</button>
+      <button v-if="can('customer:read') || can('intermediary:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务全生命周期</button>
+      <button v-if="can('photo:write')" :class="{active:tab==='photo-workbench'}" @click="tab='photo-workbench'"><span>▧</span>现场照片整理</button>
       <div class="side-caption">财务管理</div>
       <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>
       <button v-if="can('invoice:read')" :class="{active:tab==='invoices'}" @click="tab='invoices'"><span>▤</span>发票与应收应付</button>
@@ -159,10 +159,10 @@ onMounted(refresh)
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
         <template v-if="tab==='overview'">
-          <section class="welcome-card"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>你好，{{ user.displayName }}</h2><p>平台基础已经就绪。接下来将逐步开放客户、合同、项目与交付流程。</p></div><div class="welcome-symbol">众</div></section>
+          <section class="welcome-card"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>你好，{{ user.displayName }}</h2><p>客户、合同、项目、现场服务与报告交付已进入统一工作流程。</p></div><div class="welcome-symbol">众</div></section>
           <div class="section-heading"><div><h2>平台状态</h2><p>当前已启用的基础能力</p></div><span class="status-pill"><i></i>运行中</span></div>
           <div class="stat-grid"><article class="stat-card"><span>当前账号</span><b>{{ user.username }}</b><small>身份认证已启用</small></article><article class="stat-card"><span>可用权限</span><b>{{ user.permissions?.length || 0 }}</b><small>由服务端角色授权</small></article><article class="stat-card"><span>账号档案</span><b>{{ identities.length || '—' }}</b><small>当前可查看的账号</small></article></div>
-          <section class="next-card"><div class="next-icon">✦</div><div><b>接下来会发生什么？</b><p>新版业务模块将按真实工作流程逐步上线。现阶段不会展示尚未实现的功能入口，也不会将旧系统数据误当作新系统数据。</p></div></section>
+          <section class="next-card"><div class="next-icon">✦</div><div><b>接下来会发生什么？</b><p>从客户与中间人档案，到合同、项目、现场服务、照片整理、报告审核和邮寄交付，按实际业务流程完成记录与追踪。</p></div></section>
         </template>
         <template v-else-if="tab==='identities'">
           <div class="section-heading"><div><h2>账号管理</h2><p>创建账号并分配角色；员工档案将在后续业务模块中独立管理。</p></div></div>
@@ -172,11 +172,11 @@ onMounted(refresh)
         <template v-else-if="tab==='audit'">
           <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
         </template>
-        <PhotoWorkbench v-else-if="tab==='photo-workbench'" />
+        <PhotoWorkbench v-else-if="tab==='photo-workbench'" :permissions="user.permissions" />
         <DashboardModule v-else-if="tab==='dashboard'" />
         <InvoiceModule v-else-if="tab==='invoices'" :permissions="user.permissions" />
         <FinanceModule v-else-if="tab==='finance'" :permissions="user.permissions" :user-id="user.id" />
-        <BusinessModule v-else />
+        <BusinessModule v-else :permissions="user.permissions" />
       </div>
     </section>
   </main>
