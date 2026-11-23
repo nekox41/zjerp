@@ -111,7 +111,7 @@ public class ServiceDeliveryController {
             id,visit,title,b.get("description"),severity,owner,b.get("dueOn"),b.get("reportedToCustomerOn"));
         long issueId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         jdbc.update("INSERT INTO erp_project_issue_event(issue_id,from_status,to_status,content,actor_identity_id) VALUES(?,NULL,'open',?,?)",
-            issueId,req(b,"initialNote").isBlank()?title:req(b,"initialNote"),actor(a));
+            issueId,val(b,"initialNote",title),actor(a));
         audit(a,"project.issue.created","erp_project_issue",issueId,title);
         return one("SELECT * FROM erp_project_issue WHERE id=?",issueId);
     }
