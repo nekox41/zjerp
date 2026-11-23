@@ -7,7 +7,6 @@ const busy = ref(false)
 const error = ref('')
 const notice = ref('')
 const q = ref('')
-const organizations = ref([])
 const employees = ref([])
 const identities = ref([])
 const projectMembers = ref([])
@@ -31,8 +30,7 @@ const selectedCustomer = ref(null)
 const contacts = ref([])
 const milestones = ref([])
 const forms = {
-  organization: ref({name:'',parentId:''}),
-  employee: ref({employeeCode:'',fullName:'',organizationId:'',identityId:'',positionName:'',phone:'',email:''}),
+  employee: ref({employeeCode:'',fullName:'',identityId:'',positionName:'',phone:'',email:'',employeeType:'general'}),
   customer: ref({customerCode:'',name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',notes:''}),
   contact: ref({name:'',positionName:'',phone:'',email:'',isPrimary:false}),
   contract: ref({contractNo:'',title:'',customerId:'',contractType:'',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',notes:''}),
@@ -46,7 +44,6 @@ const forms = {
 }
 const rows = ref([])
 const config = {
-  organizations:{title:'组织架构',endpoint:'/organizations',form:'organization',permission:'organization:write'},
   employees:{title:'员工档案',endpoint:'/employees',form:'employee',permission:'employee:write'},
   customers:{title:'客户管理',endpoint:'/customers',form:'customer',permission:'customer:write'},
   contracts:{title:'合同管理',endpoint:'/contracts',form:'contract',permission:'contract:write'},
@@ -55,15 +52,14 @@ const config = {
 async function load() {
   error.value=''; notice.value=''
   try {
-    const [o,e,c,ct,p,ids] = await Promise.all([
-      api('/business/organizations').catch(()=>[]),
+    const [e,c,ct,p,ids] = await Promise.all([
       api('/business/employees').catch(()=>[]),
       api('/business/customers').catch(()=>[]),
       api('/business/contracts').catch(()=>[]),
       api('/business/projects').catch(()=>[]),
       api('/admin/identities').catch(()=>[])
     ])
-    organizations.value=o; employees.value=e; customers.value=c; contracts.value=ct; projects.value=p; identities.value=ids
+    employees.value=e; customers.value=c; contracts.value=ct; projects.value=p; identities.value=ids
     const cfg=config[section.value]
     rows.value=cfg ? await api('/business'+cfg.endpoint+'?q='+encodeURIComponent(q.value)).catch(()=>[]) : []
   } catch(e) { error.value=e.message }
@@ -73,9 +69,21 @@ async function submit(kind) {
   try {
     const data={...forms[kind].value}
     Object.keys(data).forEach(k=>{if(data[k]==='') data[k]=null})
-    const endpoints={organization:'/organizations',employee:'/employees',customer:'/customers',contact:'/customers/'+selectedCustomer.value.id+'/contacts',contract:'/contracts',project:'/projects',milestone:'/projects/'+selectedProject.value.id+'/milestones',qualification:'/employees/'+selectedEmployee.value.id+'/qualifications',workPackage:'/projects/'+selectedProject.value.id+'/work-packages',issue:'/projects/'+selectedProject.value.id+'/issues',record:'/work-packages/'+selectedWorkPackage.value.id+'/records',amendment:'/contracts/'+selectedContract.value.id+'/amendments'}
-    await api('/business'+endpoints[kind],{method:'POST',body:JSON.stringify(data)})
-    notice.value='保存成功'; forms[kind].value=Object.fromEntries(Object.keys(forms[kind].value).map(k=>[k,typeof forms[k].value[k]==='boolean'?false:'']))
+    let endpoint=null
+    if(kind==='employee') endpoint='/employees'
+    else if(kind==='customer') endpoint='/customers'
+    else if(kind==='contract') endpoint='/contracts'
+    else if(kind==='project') endpoint='/projects'
+    else if(kind==='contact'&&selectedCustomer.value) endpoint='/customers/'+selectedCustomer.value.id+'/contacts'
+    else if(kind==='qualification'&&selectedEmployee.value) endpoint='/employees/'+selectedEmployee.value.id+'/qualifications'
+    else if(kind==='milestone'&&selectedProject.value) endpoint='/projects/'+selectedProject.value.id+'/milestones'
+    else if(kind==='workPackage'&&selectedProject.value) endpoint='/projects/'+selectedProject.value.id+'/work-packages'
+    else if(kind==='issue'&&selectedProject.value) endpoint='/projects/'+selectedProject.value.id+'/issues'
+    else if(kind==='record'&&selectedWorkPackage.value) endpoint='/work-packages/'+selectedWorkPackage.value.id+'/records'
+    else if(kind==='amendment'&&selectedContract.value) endpoint='/contracts/'+selectedContract.value.id+'/amendments'
+    if(!endpoint) throw new Error('请先选择对应的客户、员工、项目或合同记录')
+    await api('/business'+endpoint,{method:'POST',body:JSON.stringify(data)})
+    notice.value='保存成功'; forms[kind].value=Object.fromEntries(Object.keys(forms[kind].value).map(k=>[k,typeof forms[kind].value[k]==='boolean'?false:'']))
     await load()
     if(kind==='contact') await openCustomer(selectedCustomer.value.id)
     if(['milestone','workPackage','issue'].includes(kind)) await openProject(selectedProject.value.id)
@@ -85,20 +93,87 @@ async function submit(kind) {
   } catch(e) { error.value=e.message } finally { busy.value=false }
 }
 async function openCustomer(id) {
-  try { selectedCustomer.value=await api('/business/customers/'+id); contacts.value=selectedCustomer.value.contacts||[] }
-  catch(e){error.value=e.message}
+  try {
+    selectedCustomer.value=await api('/business/customers/'+id)
+    contacts.value=selectedCustomer.value.contacts||[]
+    customerEditForm.value={
+      name:selectedCustomer.value.name||'',creditCode:selectedCustomer.value.credit_code||'',
+      customerType:selectedCustomer.value.customer_type||'enterprise',industry:selectedCustomer.value.industry||'',
+      phone:selectedCustomer.value.phone||'',email:selectedCustomer.value.email||'',address:selectedCustomer.value.address||'',
+      ownerEmployeeId:selectedCustomer.value.owner_employee_id||'',status:selectedCustomer.value.status||'active',
+      notes:selectedCustomer.value.notes||''
+    }
+    customerEditOpen.value=false
+  } catch(e){error.value=e.message}
+}
+async function saveCustomer(){
+  if(!selectedCustomer.value)return
+  busy.value=true
+  try{
+    await api('/business/customers/'+selectedCustomer.value.id,{method:'PUT',body:JSON.stringify(customerEditForm.value)})
+    await load();await openCustomer(selectedCustomer.value.id)
+    customerEditOpen.value=false;notice.value='甲方客户资料已更新'
+  }catch(e){error.value=e.message}finally{busy.value=false}
 }
 const selectedProject=ref(null)
 const selectedContract=ref(null)
 const contractAmendments=ref([])
-async function openEmployee(id) { try { selectedEmployee.value=employees.value.find(x=>x.id===id); qualifications.value=await api('/business/employees/'+id+'/qualifications') } catch(e){error.value=e.message} }
+const customerEditOpen=ref(false),employeeEditOpen=ref(false),contractEditOpen=ref(false)
+const customerEditForm=ref({name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',status:'active',notes:''})
+const employeeEditForm=ref({fullName:'',employeeType:'general',identityId:'',positionName:'',phone:'',email:'',status:'active'})
+const contractEditForm=ref({title:'',contractType:'',serviceType:'other',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',status:'draft',notes:''})
+async function openEmployee(id) {
+  try {
+    selectedEmployee.value=employees.value.find(x=>x.id===id)
+    if(!selectedEmployee.value) throw new Error('员工记录不存在，请刷新列表')
+    employeeEditForm.value={
+      fullName:selectedEmployee.value.full_name||'',employeeType:selectedEmployee.value.employee_type||'general',
+      identityId:selectedEmployee.value.identity_id||'',positionName:selectedEmployee.value.position_name||'',
+      phone:selectedEmployee.value.phone||'',email:selectedEmployee.value.email||'',status:selectedEmployee.value.status||'active'
+    }
+    employeeEditOpen.value=false
+    qualifications.value=await api('/business/employees/'+id+'/qualifications')
+  } catch(e){error.value=e.message}
+}
+async function saveEmployee(){
+  if(!selectedEmployee.value)return
+  busy.value=true
+  try{
+    await api('/business/employees/'+selectedEmployee.value.id,{method:'PUT',body:JSON.stringify(employeeEditForm.value)})
+    await load();await openEmployee(selectedEmployee.value.id)
+    employeeEditOpen.value=false;notice.value='员工档案已更新'
+  }catch(e){error.value=e.message}finally{busy.value=false}
+}
 async function openWorkPackage(id) { try { selectedWorkPackage.value=workPackages.value.find(x=>x.id===id)||{id}; const [records,reports]=await Promise.all([api('/business/work-packages/'+id+'/records'),api('/business/work-packages/'+id+'/reports')]); serviceRecords.value=records; reportList.value=reports; selectedReport.value=null } catch(e){error.value=e.message} }
 async function createReport() { reportBusy.value=true; try { const f=reportForm.value; const created=await api('/business/work-packages/'+selectedWorkPackage.value.id+'/reports',{method:'POST',body:JSON.stringify({reportNo:f.reportNo,title:f.title,reportType:f.reportType,content:{summary:f.summary,scope:f.scope,methods:f.methods,findings:f.findings,conclusion:f.conclusion}})}); reportForm.value={reportNo:'',title:'',reportType:'service',summary:'',scope:'',methods:'',findings:'',conclusion:''}; await openWorkPackage(selectedWorkPackage.value.id); await openReport(created.id); notice.value='报告草稿已创建' } catch(e){error.value=e.message} finally{reportBusy.value=false} }
 async function openReport(id) { try { selectedReport.value=await api('/business/reports/'+id); const x=selectedReport.value.content||{}; reportForm.value={reportNo:selectedReport.value.report_no,title:selectedReport.value.title,reportType:selectedReport.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''} } catch(e){error.value=e.message} }
 async function saveReport() { if(!selectedReport.value)return; reportBusy.value=true; try { const f=reportForm.value,reportId=selectedReport.value.id; selectedReport.value=await api('/business/reports/'+reportId,{method:'PUT',body:JSON.stringify({expectedVersionNo:selectedReport.value.current_version_no,title:f.title,content:{summary:f.summary,scope:f.scope,methods:f.methods,findings:f.findings,conclusion:f.conclusion}})}); await openWorkPackage(selectedWorkPackage.value.id); await openReport(reportId); notice.value='报告版本已保存' } catch(e){error.value=e.message} finally{reportBusy.value=false} }
 async function uploadReportAttachment(event) { const file=event.target.files?.[0]; if(!file||!selectedReport.value)return; reportBusy.value=true; try { const form=new FormData();form.append('file',file);const uploaded=await api('/files',{method:'POST',body:form});selectedReport.value=await api('/business/reports/'+selectedReport.value.id+'/attachments',{method:'POST',body:JSON.stringify({fileId:uploaded.id})});await openReport(selectedReport.value.id);notice.value='附件已上传并关联' } catch(e){error.value=e.message} finally{reportBusy.value=false;event.target.value=''} }
 async function reportAction(action) { if(!selectedReport.value)return; reportBusy.value=true;try { const body=['return','withdraw'].includes(action)?{reason:reportActionReason.value}:{};const updated=await api('/business/reports/'+selectedReport.value.id+'/'+action,{method:'POST',body:JSON.stringify(body)});reportActionReason.value='';await openWorkPackage(selectedWorkPackage.value.id);await openReport(updated.id);notice.value='报告状态已更新' }catch(e){error.value=e.message}finally{reportBusy.value=false} }
-async function openContract(id) { try { selectedContract.value=await api('/business/contracts/'+id); contractAmendments.value=await api('/business/contracts/'+id+'/amendments') } catch(e){error.value=e.message} }
+async function openContract(id) {
+  try {
+    selectedContract.value=await api('/business/contracts/'+id)
+    contractAmendments.value=await api('/business/contracts/'+id+'/amendments')
+    contractEditForm.value={
+      title:selectedContract.value.title||'',contractType:selectedContract.value.contract_type||'',
+      serviceType:selectedContract.value.service_type||'other',amount:String(selectedContract.value.amount??'0'),
+      currency:selectedContract.value.currency||'CNY',signedOn:selectedContract.value.signed_on||'',
+      startsOn:selectedContract.value.starts_on||'',endsOn:selectedContract.value.ends_on||'',
+      ownerEmployeeId:selectedContract.value.owner_employee_id||'',status:selectedContract.value.status||'draft',
+      notes:selectedContract.value.notes||''
+    }
+    contractEditOpen.value=false
+  } catch(e){error.value=e.message}
+}
+async function saveContract(){
+  if(!selectedContract.value)return
+  busy.value=true
+  try{
+    await api('/business/contracts/'+selectedContract.value.id,{method:'PUT',body:JSON.stringify(contractEditForm.value)})
+    await load();await openContract(selectedContract.value.id)
+    contractEditOpen.value=false;notice.value='合同资料已更新'
+  }catch(e){error.value=e.message}finally{busy.value=false}
+}
 async function removeMember(projectId,employeeId) { try { await api('/business/projects/'+projectId+'/members/'+employeeId,{method:'DELETE'}); await openProject(projectId); notice.value='成员已移除' } catch(e){error.value=e.message} }
 async function skipMilestone(id) { try { await api('/business/milestones/'+id+'/skip',{method:'PUT'}); await openProject(selectedProject.value.id); notice.value='里程碑已跳过' } catch(e){error.value=e.message} }
 async function openProject(id) {
