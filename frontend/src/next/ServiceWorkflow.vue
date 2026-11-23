@@ -67,6 +67,12 @@ async function createIssue() {
     issues.value=await api('/business/projects/'+project.value.id+'/issues');notice.value='问题清单已登记'
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
+async function linkIssueToVisit(visit) {
+  const value=prompt('输入要关联的问题编号（问题清单中的 ID）：')
+  if(!value)return
+  try{await api('/service-workflow/visits/'+visit.id+'/issues',{method:'POST',body:JSON.stringify({issueId:Number(value),relationType:'reviewed'})});await selectPackage(workPackage.value.id);notice.value='问题已关联到本次现场服务'}
+  catch(e){error.value=e.message}
+}
 async function changeIssue(issue,status) {
   const resolution=status==='resolved'||status==='closed'?prompt('填写整改/复核结果：'):null
   if((status==='resolved'||status==='closed')&&!resolution)return
@@ -205,7 +211,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
         <button class="primary" :disabled="busy">保存现场记录</button>
       </form>
       <div class="sw-list">
-        <article v-for="v in visits" :key="v.id"><div><b>{{ v.title }}</b><small>{{ v.visit_date }} · {{ ({inspection:'现场检测',rectification_review:'整改复核',supplement:'补充采集',maintenance:'维护保养',other:'其他'})[v.visit_type] }}</small><p>{{ v.summary||'暂无现场记录' }}</p></div><span class="sw-pill">{{ v.staff_count }} 位人员 · {{ v.issue_count }} 项问题</span></article>
+        <article v-for="v in visits" :key="v.id"><div><b>{{ v.title }}</b><small>{{ v.visit_date }} · {{ ({inspection:'现场检测',rectification_review:'整改复核',supplement:'补充采集',maintenance:'维护保养',other:'其他'})[v.visit_type] }}</small><p>{{ v.summary||'暂无现场记录' }}</p></div><div><span class="sw-pill">{{ v.staff_count }} 位人员 · {{ v.issue_count }} 项问题</span><button @click="linkIssueToVisit(v)">关联问题</button></div></article>
         <div v-if="!visits.length" class="sw-empty small">尚未登记现场服务记录</div>
       </div>
     </div>
