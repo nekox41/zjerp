@@ -56,7 +56,10 @@ class DocxPhotoInserterTest {
             assertTrue(document.getParagraphs().stream().anyMatch(p->p.getText().equals("结论")));
             long photoHeadings=document.getParagraphs().stream().filter(p->p.getText().trim().equals("现场检测照片")).count();
             assertEquals(5,photoHeadings); // 2 original anchors + 3 inserted groups
-            assertEquals(6,document.getAllPictures().size());
+            assertEquals(1,document.getAllPictures().size(),"POI deduplicates identical image bytes");
+            assertEquals(6,document.getDocument().getBody().getDomNode()
+                .getElementsByTagNameNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main","drawing").getLength(),
+                "all six photo placements must be present in the DOCX body");
             assertEquals(5,document.getTables().size()); // 2 original tables + 3 inserted tables
         }
     }
