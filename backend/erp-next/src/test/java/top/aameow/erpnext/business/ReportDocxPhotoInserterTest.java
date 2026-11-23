@@ -17,6 +17,13 @@ class ReportDocxPhotoInserterTest {
             assertTrue(javax.imageio.ImageIO.write(image,"png",out));return out.toByteArray();
         }
     }
+    private long pictureReferences(XWPFDocument doc) {
+        return doc.getTables().stream().flatMap(t->t.getRows().stream())
+            .flatMap(row->row.getTableCells().stream())
+            .flatMap(cell->cell.getParagraphs().stream())
+            .flatMap(p->p.getRuns().stream())
+            .mapToLong(run->run.getEmbeddedPictures().size()).sum();
+    }
     private void section(XWPFDocument doc,String name,int blocks) {
         doc.createParagraph().createRun().setText(name);
         for(int i=0;i<blocks;i++){
@@ -36,7 +43,7 @@ class ReportDocxPhotoInserterTest {
                 new ReportDocxPhotoInserter.Photo("火灾自动报警系统",png(),"a.png","2026-08-11",""),
                 new ReportDocxPhotoInserter.Photo("消防给水系统",png(),"b.png","2026-08-12","")
             ));
-            assertEquals(2,doc.getAllPictures().size());
+            assertEquals(2,pictureReferences(doc));
             assertEquals(2,doc.getTables().size()); // one retained photo table per populated system
             String text=doc.getParagraphs().stream().map(XWPFParagraph::getText).reduce("",String::concat);
             assertTrue(text.contains("报告正文"));
@@ -50,7 +57,7 @@ class ReportDocxPhotoInserterTest {
             var photos=new java.util.ArrayList<ReportDocxPhotoInserter.Photo>();
             for(int i=0;i<5;i++)photos.add(new ReportDocxPhotoInserter.Photo("消防给水系统",png(),i+".png","2026-08-11",""));
             new ReportDocxPhotoInserter().insert(doc,photos);
-            assertEquals(5,doc.getAllPictures().size());
+            assertEquals(5,pictureReferences(doc));
             assertEquals(3,doc.getTables().get(0).getRows().size());
         }
     }
