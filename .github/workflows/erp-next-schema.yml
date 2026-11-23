@@ -60,21 +60,27 @@ jobs:
             sleep 2
           done
           curl -fsS http://127.0.0.1:8090/actuator/health
+          echo 'SMOKE CHECK: API health'
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8089/next.html -o /tmp/erp-next-page.html && grep -q 'next-app' /tmp/erp-next-page.html && break
             sleep 2
           done
           grep -q 'next-app' /tmp/erp-next-page.html || { echo 'New frontend entry missing:'; head -c 1000 /tmp/erp-next-page.html; exit 1; }
+          echo 'SMOKE CHECK: frontend entry'
           curl -fsS http://127.0.0.1:8089/next-api/bootstrap/status -o /tmp/erp-next-bootstrap.json
           grep -q '"initialized":false' /tmp/erp-next-bootstrap.json || { cat /tmp/erp-next-bootstrap.json; exit 1; }
+          echo 'SMOKE CHECK: bootstrap status'
           curl -fsS -X POST http://127.0.0.1:8089/next-api/bootstrap/admin \
             -H 'Content-Type: application/json' -H "X-Bootstrap-Token: $ERP_BOOTSTRAP_TOKEN" \
             -d '{"username":"admin","displayName":"CI Admin","password":"ci-only-password-123"}' >/dev/null
+          echo 'SMOKE CHECK: bootstrap admin'
           LOGIN=$(curl -fsS -X POST http://127.0.0.1:8089/next-api/auth/login \
             -H 'Content-Type: application/json' -d '{"username":"admin","password":"ci-only-password-123"}')
           TOKEN=$(python -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<< "$LOGIN")
           test -n "$TOKEN"
+          echo 'SMOKE CHECK: login'
           curl -fsS http://127.0.0.1:8089/next-api/auth/me -H "Authorization: Bearer $TOKEN" | grep -q 'CI Admin'
+          echo 'SMOKE CHECK: auth me'
 
           EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"employeeCode":"CI-001","fullName":"CI 员工","employeeType":"engineer"}')
           EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$EMP")
@@ -86,11 +92,13 @@ jobs:
           PROJECT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectNo\":\"CI-P-001\",\"name\":\"CI 项目\",\"customerId\":$CUSTOMER_ID,\"contractId\":$CONTRACT_ID,\"managerEmployeeId\":$EMP_ID}")
           PROJECT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$PROJECT")
           PROJECT_NO_CONTRACT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectNo\":\"CI-P-002\",\"name\":\"CI 无合同项目\",\"customerId\":$CUSTOMER_ID}")
-          echo "$PROJECT_NO_CONTRACT" | grep -q '"contract_id":null'
+          python -c 'import json,os; assert json.loads(os.environ["PROJECT_NO_CONTRACT"]).get("contract_id") is None'
+          echo 'SMOKE CHECK: project without contract'
           RENEWAL=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/contracts -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractNo\":\"CI-CT-002\",\"title\":\"CI 续签合同\",\"customerId\":$CUSTOMER_ID,\"contractType\":\"maintenance\",\"signingMode\":\"intermediary\",\"intermediaryName\":\"CI 中间人\",\"intermediarySharePercent\":20,\"amount\":1200}")
           RENEWAL_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$RENEWAL")
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/contracts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractId\":$RENEWAL_ID,\"relationType\":\"renewal\",\"isCurrent\":true}" | grep -q 'CI 续签合同'
           curl -fsS "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 中间人'
+          echo 'SMOKE CHECK: intermediary contract'
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"title":"CI 里程碑"}' >/dev/null
           curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 里程碑'
           MILESTONE_ID=$(curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
