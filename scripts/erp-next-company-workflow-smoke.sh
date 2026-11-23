@@ -18,6 +18,9 @@ curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/contr
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"contractId\":$RENEWAL_ID,\"relationType\":\"renewal\",\"isCurrent\":true}" | grep -q 'CI 中间人合同'
 curl -fsS "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 项目'
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"active"}' | grep -q '"status":"active"'
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID/amendments" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"amendmentNo":"CI-AMD-001","title":"CI 合同金额调整","changeSummary":"测试合同变更记录","revisedAmount":6500,"effectiveOn":"2026-11-23"}' | grep -q '6500'
+curl -fsS "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID/amendments" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-AMD-001'
 
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/scope-units" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
