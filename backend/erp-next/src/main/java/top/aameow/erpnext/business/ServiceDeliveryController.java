@@ -38,10 +38,26 @@ public class ServiceDeliveryController {
     @PostMapping("/employees/{id}/qualifications") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> addQualification(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_employee WHERE id=?",id);
-        jdbc.update("INSERT INTO erp_employee_qualification(employee_id,qualification_name,certificate_no,issuing_authority,issued_on,expires_on,notes) VALUES(?,?,?,?,?,?,?)",id,req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),b.get("issuedOn"),b.get("expiresOn"),b.get("notes"));
+        String type=val(b,"qualificationType","other");
+        if(!Set.of("engineer","other").contains(type)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资格类别无效");
+        jdbc.update("INSERT INTO erp_employee_qualification(employee_id,qualification_name,qualification_type,certificate_no,issuing_authority,issued_on,expires_on,notes) VALUES(?,?,?,?,?,?,?,?)",
+            id,req(b,"qualificationName"),type,b.get("certificateNo"),b.get("issuingAuthority"),b.get("issuedOn"),b.get("expiresOn"),b.get("notes"));
         long qid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"employee.qualification.created","erp_employee_qualification",qid,req(b,"qualificationName"));
         return one("SELECT * FROM erp_employee_qualification WHERE id=?",qid);
     }
+    @PutMapping("/qualifications/{id}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
+    public Map<String,Object> updateQualification(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
+        one("SELECT id FROM erp_employee_qualification WHERE id=?",id);
+        String type=b.get("qualificationType")==null?null:b.get("qualificationType").toString();
+        String status=b.get("status")==null?null:b.get("status").toString();
+        if(type!=null&&!Set.of("engineer","other").contains(type)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资格类别无效");
+        if(status!=null&&!Set.of("valid","expired","revoked").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资格状态无效");
+        jdbc.update("UPDATE erp_employee_qualification SET qualification_name=COALESCE(?,qualification_name),qualification_type=COALESCE(?,qualification_type),certificate_no=COALESCE(?,certificate_no),issuing_authority=COALESCE(?,issuing_authority),issued_on=COALESCE(?,issued_on),expires_on=COALESCE(?,expires_on),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE id=?",
+            b.get("qualificationName"),type,b.get("certificateNo"),b.get("issuingAuthority"),b.get("issuedOn"),b.get("expiresOn"),status,b.get("notes"),id);
+        audit(a,"employee.qualification.updated","erp_employee_qualification",id,"更新员工资格");
+        return one("SELECT * FROM erp_employee_qualification WHERE id=?",id);
+    }
+
     @GetMapping("/qualifications/expiring") @PreAuthorize("hasAuthority('employee:read')")
     public List<Map<String,Object>> expiringQualifications(@RequestParam(defaultValue="60") int days) {
         int bounded=Math.max(0,Math.min(days,365));
@@ -80,22 +96,69 @@ public class ServiceDeliveryController {
         one("SELECT id FROM erp_project WHERE id=?",id);
         return jdbc.queryForList("SELECT i.*,e.full_name owner_name FROM erp_project_issue i LEFT JOIN erp_employee e ON e.id=i.owner_employee_id WHERE i.project_id=? ORDER BY FIELD(i.status,'open','in_progress','resolved','closed'),i.due_on",id);
     }
-    @PostMapping("/projects/{id}/issues") @PreAuthorize("hasAuthority('project:write')") @Transactional
+    @PostMapping("/projects/{id}/issues") @PreAuthorize("hasAuthority('project_issue:write')") @Transactional
     public Map<String,Object> createIssue(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_project WHERE id=?",id); Long owner=opt(b,"ownerEmployeeId"); if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
+        one("SELECT id FROM erp_project WHERE id=?",id);
+        Long owner=opt(b,"ownerEmployeeId"),visit=opt(b,"sourceSiteVisitId");
+        if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
+        if(visit!=null) {
+            Map<String,Object> v=one("SELECT project_id FROM erp_site_visit WHERE id=?",visit);
+            if(((Number)v.get("project_id")).longValue()!=id) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"问题来源现场服务不属于当前项目");
+        }
         String title=req(b,"title"),severity=val(b,"severity","medium");
         if(!Set.of("low","medium","high","critical").contains(severity)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效严重级别");
-        jdbc.update("INSERT INTO erp_project_issue(project_id,title,description,severity,owner_employee_id,due_on) VALUES(?,?,?,?,?,?)",id,title,b.get("description"),severity,owner,b.get("dueOn"));
-        long issueId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.issue.created","erp_project_issue",issueId,title);
+        jdbc.update("INSERT INTO erp_project_issue(project_id,source_site_visit_id,title,description,severity,owner_employee_id,due_on,reported_to_customer_on) VALUES(?,?,?,?,?,?,?,?)",
+            id,visit,title,b.get("description"),severity,owner,b.get("dueOn"),b.get("reportedToCustomerOn"));
+        long issueId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        jdbc.update("INSERT INTO erp_project_issue_event(issue_id,from_status,to_status,content,actor_identity_id) VALUES(?,NULL,'open',?,?)",
+            issueId,req(b,"initialNote").isBlank()?title:req(b,"initialNote"),actor(a));
+        audit(a,"project.issue.created","erp_project_issue",issueId,title);
         return one("SELECT * FROM erp_project_issue WHERE id=?",issueId);
     }
-    @PutMapping("/issues/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
+
+    @PutMapping("/issues/{id}") @PreAuthorize("hasAuthority('project_issue:write')") @Transactional
     public Map<String,Object> updateIssue(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_project_issue WHERE id=?",id); String status=b.get("status")==null?null:b.get("status").toString();
-        if(status!=null&&!Set.of("open","in_progress","resolved","closed").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效整改状态");
-        if(status!=null&&Set.of("resolved","closed").contains(status)&&(b.get("resolution")==null||b.get("resolution").toString().isBlank())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"关闭整改项必须填写处理结果");
-        jdbc.update("UPDATE erp_project_issue SET title=COALESCE(?,title),description=COALESCE(?,description),severity=COALESCE(?,severity),owner_employee_id=COALESCE(?,owner_employee_id),due_on=COALESCE(?,due_on),status=COALESCE(?,status),resolution=COALESCE(?,resolution),closed_at=CASE WHEN COALESCE(?,status) IN ('resolved','closed') THEN COALESCE(closed_at,CURRENT_TIMESTAMP(3)) WHEN ? IS NOT NULL THEN NULL ELSE closed_at END WHERE id=?",b.get("title"),b.get("description"),b.get("severity"),opt(b,"ownerEmployeeId"),b.get("dueOn"),status,b.get("resolution"),status,status,id);
-        audit(a,"project.issue.updated","erp_project_issue",id,status); return one("SELECT * FROM erp_project_issue WHERE id=?",id);
+        one("SELECT id FROM erp_project_issue WHERE id=?",id);
+        Long owner=opt(b,"ownerEmployeeId");
+        if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
+        jdbc.update("UPDATE erp_project_issue SET title=COALESCE(?,title),description=COALESCE(?,description),severity=COALESCE(?,severity),owner_employee_id=COALESCE(?,owner_employee_id),due_on=COALESCE(?,due_on),reported_to_customer_on=COALESCE(?,reported_to_customer_on),rectification_note=COALESCE(?,rectification_note) WHERE id=?",
+            b.get("title"),b.get("description"),b.get("severity"),owner,b.get("dueOn"),b.get("reportedToCustomerOn"),b.get("rectificationNote"),id);
+        audit(a,"project.issue.updated","erp_project_issue",id,"问题整改资料更新");
+        return one("SELECT * FROM erp_project_issue WHERE id=?",id);
+    }
+
+    @PostMapping("/issues/{id}/transition") @PreAuthorize("hasAuthority('project_issue:write')") @Transactional
+    public Map<String,Object> transitionIssue(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
+        Map<String,Object> issue=one("SELECT * FROM erp_project_issue WHERE id=? FOR UPDATE",id);
+        String from=issue.get("status").toString(),to=req(b,"toStatus"),note=req(b,"note");
+        boolean allowed=(from.equals("open")&&to.equals("in_progress"))||
+            (from.equals("in_progress")&&to.equals("resolved"))||
+            (from.equals("resolved")&&to.equals("closed"))||
+            (from.equals("closed")&&to.equals("open"));
+        if(!allowed) throw new ResponseStatusException(HttpStatus.CONFLICT,"当前整改状态不能流转到目标状态");
+        Long visit=opt(b,"siteVisitId");
+        if("resolved".equals(to)&&note.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"登记整改完成时必须填写整改结果");
+        if("closed".equals(to)) {
+            if(visit==null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"复核关闭必须关联一次现场复核记录");
+            Map<String,Object> v=one("SELECT project_id FROM erp_site_visit WHERE id=?",visit);
+            if(((Number)v.get("project_id")).longValue()!=((Number)issue.get("project_id")).longValue())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"复核现场记录不属于当前项目");
+            if(!"completed".equals(one("SELECT status FROM erp_site_visit WHERE id=?",visit).get("status").toString()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"现场复核记录尚未完成");
+        }
+        if("resolved".equals(to)) jdbc.update("UPDATE erp_project_issue SET status=?,rectification_note=?,resolved_at=CURRENT_TIMESTAMP(3) WHERE id=?",to,note,id);
+        else if("closed".equals(to)) jdbc.update("UPDATE erp_project_issue SET status=?,verified_at=CURRENT_TIMESTAMP(3),verified_by=?,closed_at=CURRENT_TIMESTAMP(3) WHERE id=?",to,actor(a),id);
+        else if("open".equals(to)) jdbc.update("UPDATE erp_project_issue SET status='open',verified_at=NULL,verified_by=NULL,closed_at=NULL WHERE id=?",id);
+        else jdbc.update("UPDATE erp_project_issue SET status=? WHERE id=?",to,id);
+        jdbc.update("INSERT INTO erp_project_issue_event(issue_id,from_status,to_status,content,actor_identity_id) VALUES(?,?,?,?,?)",id,from,to,note,actor(a));
+        audit(a,"project.issue."+to,"erp_project_issue",id,note);
+        return one("SELECT * FROM erp_project_issue WHERE id=?",id);
+    }
+
+    @GetMapping("/issues/{id}/events") @PreAuthorize("hasAuthority('project_issue:read')")
+    public List<Map<String,Object>> issueEvents(@PathVariable long id) {
+        one("SELECT id FROM erp_project_issue WHERE id=?",id);
+        return jdbc.queryForList("SELECT e.*,i.display_name actor_name FROM erp_project_issue_event e JOIN erp_identity i ON i.id=e.actor_identity_id WHERE e.issue_id=? ORDER BY e.id",id);
     }
 
     @GetMapping("/projects/{id}/work-packages") @PreAuthorize("hasAuthority('service:read')")
