@@ -52,7 +52,7 @@ sha256sum "backups/erp_next_$STAMP.sql" "backups/erp_next_files_$STAMP.tar.gz" >
 
 ## V1 验收清单
 
-- [ ] 新库 `erp_next` 初始化，Flyway V1–V7 全部成功；重复运行迁移无副作用
+- [ ] 新库 `erp_next` 初始化，Flyway V1–V8 全部成功；重复运行迁移无副作用
 - [ ] 管理员初始化仅可执行一次，账号登录/退出和权限隔离正常
 - [ ] 组织、员工、客户、联系人、合同及项目可创建和检索
 - [ ] 项目里程碑、成员、服务工作包、记录、问题处理可操作
