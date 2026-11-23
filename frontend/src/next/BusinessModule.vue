@@ -13,9 +13,12 @@ const identities = ref([])
 const intermediaries = ref([])
 const contracts = ref([])
 const selected = ref(null)
+const editMode = ref(false)
+const editForm = ref({})
+const contactEditId = ref(null)
 const selectedProjectId = ref(null)
 const qualifications = ref([])
-const contactForm = ref({ name:'', positionName:'', phone:'', email:'', isPrimary:false })
+const contactForm = ref({ name:'', positionName:'', phone:'', email:'', isPrimary:false, notes:'' })
 const qualificationForm = ref({ qualificationName:'', certificateNo:'', issuingAuthority:'', issuedOn:'', expiresOn:'', notes:'' })
 const attachmentForm = ref({ attachmentType:'signed_contract', title:'' })
 const forms = ref({
@@ -102,6 +105,7 @@ async function createRecord() {
   finally { busy.value=false }
 }
 async function openDetail(id) {
+  editMode.value=false; contactEditId.value=null
   error.value=''
   try {
     const endpoint={
@@ -116,8 +120,49 @@ async function addContact() {
   if(!selected.value) return
   busy.value=true; error.value=''
   try {
-    await api('/business/customers/'+selected.value.id+'/contacts',{method:'POST',body:JSON.stringify(contactForm.value)})
-    contactForm.value={name:'',positionName:'',phone:'',email:'',isPrimary:false}
+    if(contactEditId.value) await api('/business/contacts/'+contactEditId.value,{method:'PUT',body:JSON.stringify(contactForm.value)})
+    else await api('/business/customers/'+selected.value.id+'/contacts',{method:'POST',body:JSON.stringify(contactForm.value)})
+    contactEditId.value=null
+    contactForm.value={name:'',positionName:'',phone:'',email:'',isPrimary:false,notes:''}
+    selected.value=await api('/business/customers/'+selected.value.id)
+  } catch(e) { error.value=e.message }
+  finally { busy.value=false }
+}
+function startEdit() {
+  if(!selected.value) return
+  editMode.value=true
+  const x=selected.value
+  if(section.value==='customers') editForm.value={name:x.name,creditCode:x.credit_code,industry:x.industry,phone:x.phone,email:x.email,address:x.address,status:x.status,notes:x.notes}
+  else if(section.value==='intermediaries') editForm.value={name:x.name,contactName:x.contact_name,phone:x.phone,email:x.email,address:x.address,status:x.status,notes:x.notes}
+  else if(section.value==='employees') editForm.value={fullName:x.full_name,employeeType:x.employee_type,identityId:x.identity_id || '',positionName:x.position_name,phone:x.phone,email:x.email,status:x.status}
+  else if(section.value==='contracts') editForm.value={title:x.title,contractType:x.contract_type,signingMode:x.signing_mode,intermediaryId:x.intermediary_id || '',intermediarySharePercent:x.intermediary_share_percent ?? '',amount:x.amount,currency:x.currency,status:x.status,signedOn:x.signed_on,startsOn:x.starts_on,endsOn:x.ends_on,notes:x.notes}
+}
+async function saveEdit() {
+  busy.value=true; error.value=''
+  try {
+    const routes={customers:'/business/customers/',intermediaries:'/business/intermediaries/',employees:'/business/employees/',contracts:'/business/contracts/'}
+    const body={...editForm.value}
+    if(section.value==='employees') body.identityId=body.identityId ? Number(body.identityId) : null
+    if(section.value==='contracts') {
+      if(body.signingMode==='direct'){body.intermediaryId=null;body.intermediarySharePercent=null}
+      else {body.intermediaryId=body.intermediaryId?Number(body.intermediaryId):null}
+    }
+    await api(routes[section.value]+selected.value.id,{method:'PUT',body:JSON.stringify(body)})
+    selected.value=await api(routes[section.value]+selected.value.id)
+    if(section.value==='employees') qualifications.value=await api('/business/employees/'+selected.value.id+'/qualifications')
+    editMode.value=false; notice.value='档案已更新。'; await loadRows()
+  } catch(e) { error.value=e.message }
+  finally { busy.value=false }
+}
+function editContact(contact) {
+  contactEditId.value=contact.id
+  contactForm.value={name:contact.name,positionName:contact.position_name || '',phone:contact.phone || '',email:contact.email || '',isPrimary:!!contact.is_primary,notes:contact.notes || ''}
+}
+async function removeContact(contact) {
+  if(!confirm('确定删除联系人吗？')) return
+  busy.value=true; error.value=''
+  try {
+    await api('/business/contacts/'+contact.id,{method:'DELETE'})
     selected.value=await api('/business/customers/'+selected.value.id)
   } catch(e) { error.value=e.message }
   finally { busy.value=false }
@@ -245,11 +290,33 @@ onMounted(load)
       </section>
 
       <section v-if="selected && section!=='projects'" class="bw-detail-panel">
-        <div class="bw-panel-head"><h3>{{ selected.name || selected.full_name || selected.title }} · 详情</h3><button @click="selected=null">关闭</button></div>
+        <div class="bw-panel-head"><h3>{{ selected.name || selected.full_name || selected.title }} · 详情</h3><div class="bw-head-actions"><button v-if="section!=='projects' && can(section==='customers'?'customer:write':section==='intermediaries'?'intermediary:write':section==='employees'?'employee:write':'contract:write')" @click="editMode=!editMode;editMode?startEdit():null">{{ editMode?'取消编辑':'编辑档案' }}</button><button @click="selected=null">关闭</button></div></div>
+        <form v-if="editMode" class="bw-form bw-edit-form" @submit.prevent="saveEdit">
+          <template v-if="section==='customers'">
+            <label>客户名称<input v-model="editForm.name" required></label><label>统一社会信用代码<input v-model="editForm.creditCode"></label>
+            <label>行业<input v-model="editForm.industry"></label><label>电话<input v-model="editForm.phone"></label><label>邮箱<input v-model="editForm.email"></label><label>状态<select v-model="editForm.status"><option value="active">正常</option><option value="disabled">停用</option></select></label><label class="wide">地址<input v-model="editForm.address"></label><label class="wide">备注<textarea v-model="editForm.notes"></textarea></label>
+          </template>
+          <template v-else-if="section==='intermediaries'">
+            <label>名称<input v-model="editForm.name" required></label><label>联系人<input v-model="editForm.contactName"></label><label>电话<input v-model="editForm.phone"></label><label>邮箱<input v-model="editForm.email"></label><label>状态<select v-model="editForm.status"><option value="active">合作中</option><option value="disabled">停用</option></select></label><label class="wide">地址<input v-model="editForm.address"></label><label class="wide">备注<textarea v-model="editForm.notes"></textarea></label>
+          </template>
+          <template v-else-if="section==='employees'">
+            <label>姓名<input v-model="editForm.fullName" required></label><label>员工类型<select v-model="editForm.employeeType"><option value="engineer">工程师</option><option value="operator">操作员</option><option value="employee">普通员工</option><option value="manager">管理人员</option></select></label>
+            <label>登录账号<select v-model="editForm.identityId"><option value="">不关联账号</option><option v-for="i in identities" :key="i.id" :value="i.id">{{ i.display_name }} · {{ i.username }}</option></select></label><label>岗位<input v-model="editForm.positionName"></label><label>电话<input v-model="editForm.phone"></label><label>邮箱<input v-model="editForm.email"></label><label>状态<select v-model="editForm.status"><option value="active">在职</option><option value="inactive">离职/停用</option></select></label>
+          </template>
+          <template v-else>
+            <label>合同名称<input v-model="editForm.title" required></label><label>合同类型<select v-model="editForm.contractType"><option value="maintenance">维护保养</option><option value="fire_inspection">消防检测</option><option value="fire_evaluation">消防评估</option><option value="fire_assessment">消防验收评定</option><option value="other">其他</option></select></label>
+            <label>签约方式<select v-model="editForm.signingMode"><option value="direct">直接签约</option><option value="intermediary">中间人签约</option></select></label>
+            <label v-if="editForm.signingMode==='intermediary'">中间人<select v-model="editForm.intermediaryId"><option value="">选择中间人</option><option v-for="m in intermediaries" :key="m.id" :value="m.id">{{ m.name }}</option></select></label>
+            <label v-if="editForm.signingMode==='intermediary'">分成比例（%）<input v-model="editForm.intermediarySharePercent" type="number" min="0" max="100" step="0.01"></label>
+            <label>金额<input v-model="editForm.amount" type="number" min="0" step="0.01"></label><label>币种<input v-model="editForm.currency"></label><label>状态<select v-model="editForm.status"><option value="draft">草稿</option><option value="active">生效</option><option value="completed">已完成</option><option value="terminated">已终止</option></select></label>
+            <label>签订日期<input v-model="editForm.signedOn" type="date"></label><label>开始日期<input v-model="editForm.startsOn" type="date"></label><label>结束日期<input v-model="editForm.endsOn" type="date"></label><label class="wide">备注<textarea v-model="editForm.notes"></textarea></label>
+          </template>
+          <div class="bw-form-actions"><button class="bw-primary" :disabled="busy">保存修改</button></div>
+        </form>
         <template v-if="section==='customers'">
           <div class="bw-detail-grid"><div><small>客户编号</small><b>{{ selected.customer_code }}</b></div><div><small>统一社会信用代码</small><b>{{ selected.credit_code || '—' }}</b></div><div><small>电话</small><b>{{ selected.phone || '—' }}</b></div><div><small>地址</small><b>{{ selected.address || '—' }}</b></div></div>
-          <h4>联系人</h4><div class="bw-mini-list"><div v-for="c in selected.contacts || []" :key="c.id"><b>{{ c.name }}{{ c.is_primary?'（主要联系人）':'' }}</b><span>{{ c.position_name || '' }} · {{ c.phone || '—' }} · {{ c.email || '—' }}</span></div></div>
-          <form class="bw-inline-form" @submit.prevent="addContact"><input v-model="contactForm.name" required placeholder="联系人姓名"><input v-model="contactForm.positionName" placeholder="职位"><input v-model="contactForm.phone" placeholder="电话"><input v-model="contactForm.email" placeholder="邮箱"><label><input type="checkbox" v-model="contactForm.isPrimary"> 主要联系人</label><button class="bw-primary">添加联系人</button></form>
+          <h4>联系人</h4><div class="bw-mini-list"><div v-for="c in selected.contacts || []" :key="c.id"><b>{{ c.name }}{{ c.is_primary?'（主要联系人）':'' }}</b><span>{{ c.position_name || '' }} · {{ c.phone || '—' }} · {{ c.email || '—' }}</span><button type="button" @click="editContact(c)">编辑</button><button type="button" @click="removeContact(c)">删除</button></div></div>
+          <form class="bw-inline-form" @submit.prevent="addContact"><input v-model="contactForm.name" required placeholder="联系人姓名"><input v-model="contactForm.positionName" placeholder="职位"><input v-model="contactForm.phone" placeholder="电话"><input v-model="contactForm.email" placeholder="邮箱"><label><input type="checkbox" v-model="contactForm.isPrimary"> 主要联系人</label><button class="bw-primary">{{ contactEditId?'保存联系人':'添加联系人' }}</button><button v-if="contactEditId" type="button" class="bw-secondary" @click="contactEditId=null;contactForm={name:'',positionName:'',phone:'',email:'',isPrimary:false,notes:''}">取消</button></form>
           <h4>关联合同</h4><div class="bw-mini-list"><div v-for="c in selected.contracts || []" :key="c.id"><b>{{ c.contract_no }} · {{ c.title }}</b><span>{{ c.status }} · {{ c.currency }} {{ c.amount }}</span></div></div>
         </template>
         <template v-else-if="section==='intermediaries'">
@@ -275,5 +342,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.business-workspace{display:grid;gap:15px}.bw-header{display:flex;justify-content:space-between;align-items:center;gap:15px}.bw-header h2{margin:4px 0;font-size:22px;color:#25364f}.bw-header p{margin:0;color:#8995a5;font-size:11px}.bw-primary{border:1px solid #315fca;background:#315fca;color:#fff;border-radius:8px;padding:9px 13px;font-size:11px;cursor:pointer}.bw-secondary{border:1px solid #dce4ef;background:#fff;color:#60738e;border-radius:8px;padding:9px 13px;font-size:11px}.bw-tabs{display:flex;gap:4px;padding:4px;background:#edf1f6;border-radius:10px}.bw-tabs button{border:0;background:transparent;padding:9px 14px;border-radius:7px;color:#6b7c92;font-size:11px;cursor:pointer}.bw-tabs button.active{background:#fff;color:#315fca;box-shadow:0 1px 4px #172b4d12}.bw-panel,.bw-list-panel,.bw-detail-panel{background:#fff;border:1px solid #e5ebf2;border-radius:14px;padding:17px;display:grid;gap:14px}.bw-panel-head,.bw-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.bw-panel-head h3,.bw-list-head h3{margin:0;font-size:14px;color:#3b4f69}.bw-panel-head button{border:0;background:none;color:#8a96a6;cursor:pointer}.bw-list-head small{display:block;color:#96a1af;font-size:10px;margin-top:4px}.bw-search{display:flex;gap:7px}.bw-search input{border:1px solid #e0e6ee;border-radius:8px;padding:8px 10px;font-size:11px}.bw-search button{border:1px solid #dfe6ef;background:#fff;border-radius:8px;padding:8px 12px;font-size:11px;color:#61748f}.bw-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.bw-form label{display:grid;gap:6px;color:#64758b;font-size:11px}.bw-form label.wide{grid-column:1/-1}.bw-form input,.bw-form select,.bw-form textarea,.bw-attach-row input,.bw-attach-row select{width:100%;box-sizing:border-box;border:1px solid #dfe6ef;border-radius:8px;padding:9px 10px;font:inherit;color:#3d4f68;background:#fff}.bw-form-actions{grid-column:1/-1;display:flex;gap:8px}.bw-form.compact{margin-top:12px}.bw-table-wrap{overflow:auto}.bw-table-wrap table{width:100%;border-collapse:collapse}.bw-table-wrap th,.bw-table-wrap td{padding:11px 9px;border-bottom:1px solid #edf0f4;text-align:left;font-size:11px;color:#5a6d85;white-space:nowrap}.bw-table-wrap th{color:#8d99a9;font-weight:600}.bw-table-wrap td b,.bw-table-wrap td small{display:block}.bw-table-wrap td small{font-size:10px;color:#96a1af;margin-top:4px}.bw-link{border:0;background:none;color:#315fca;cursor:pointer;font-size:11px}.bw-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:11px}.bw-project-card{border:1px solid #e7edf4;border-radius:11px;padding:14px;display:grid;gap:13px;cursor:pointer;transition:.15s}.bw-project-card:hover{border-color:#b8c9e7;box-shadow:0 4px 14px #1b33500d}.bw-project-card>div:first-child{display:grid;gap:5px}.bw-project-card span{font-size:10px;color:#6680b2}.bw-project-card b{font-size:13px;color:#354a66}.bw-project-card small{font-size:10px;color:#96a1af}.bw-card-meta,.bw-card-foot{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#8592a4}.bw-card-foot b{color:#315fca;font-size:10px}.bw-detail-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.bw-detail-grid div{display:grid;gap:5px;padding:10px;background:#f7f9fc;border-radius:8px}.bw-detail-grid small{font-size:10px;color:#8d99a9}.bw-detail-grid b{font-size:11px;color:#455b77;overflow-wrap:anywhere}.bw-detail-panel h4{margin:8px 0 0;font-size:12px;color:#4d627d}.bw-mini-list{display:grid;gap:6px}.bw-mini-list>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px;border-bottom:1px solid #eff2f6;font-size:11px}.bw-mini-list b{color:#465a75}.bw-mini-list span{color:#929eae;font-size:10px}.bw-mini-list button{border:0;background:none;color:#315fca;font-size:10px}.bw-inline-form{display:flex;gap:8px;flex-wrap:wrap}.bw-inline-form input{flex:1;min-width:120px;border:1px solid #dfe6ef;border-radius:7px;padding:8px;font-size:10px}.bw-inline-form label{display:flex;align-items:center;gap:5px;font-size:10px;color:#76859a}.bw-attach-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bw-attach-row select{width:auto}.bw-attach-row input{flex:1;min-width:130px}.bw-upload{display:inline-flex;align-items:center;border:1px solid #dce4ef;border-radius:8px;padding:8px 12px;font-size:11px;color:#526c93;cursor:pointer}.bw-empty{padding:24px;text-align:center;color:#98a3b2;font-size:11px}.bw-message{padding:10px 12px;border-radius:8px;font-size:12px}.bw-message.error{background:#fff0ed;color:#a43e36}.bw-message.success{background:#e8f7ee;color:#2e754e}@media(max-width:720px){.bw-header{align-items:flex-start;flex-direction:column}.bw-form{grid-template-columns:1fr}.bw-form label.wide{grid-column:auto}.bw-detail-grid{grid-template-columns:repeat(2,1fr)}.bw-list-head{align-items:flex-start;flex-direction:column}}
+.business-workspace{display:grid;gap:15px}.bw-header{display:flex;justify-content:space-between;align-items:center;gap:15px}.bw-header h2{margin:4px 0;font-size:22px;color:#25364f}.bw-header p{margin:0;color:#8995a5;font-size:11px}.bw-primary{border:1px solid #315fca;background:#315fca;color:#fff;border-radius:8px;padding:9px 13px;font-size:11px;cursor:pointer}.bw-secondary{border:1px solid #dce4ef;background:#fff;color:#60738e;border-radius:8px;padding:9px 13px;font-size:11px}.bw-tabs{display:flex;gap:4px;padding:4px;background:#edf1f6;border-radius:10px}.bw-tabs button{border:0;background:transparent;padding:9px 14px;border-radius:7px;color:#6b7c92;font-size:11px;cursor:pointer}.bw-tabs button.active{background:#fff;color:#315fca;box-shadow:0 1px 4px #172b4d12}.bw-panel,.bw-list-panel,.bw-detail-panel{background:#fff;border:1px solid #e5ebf2;border-radius:14px;padding:17px;display:grid;gap:14px}.bw-panel-head,.bw-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.bw-panel-head h3,.bw-list-head h3{margin:0;font-size:14px;color:#3b4f69}.bw-panel-head button{border:0;background:none;color:#8a96a6;cursor:pointer}.bw-head-actions{display:flex;gap:10px;align-items:center}.bw-edit-form{padding:14px;background:#f8fafc;border-radius:10px}.bw-list-head small{display:block;color:#96a1af;font-size:10px;margin-top:4px}.bw-search{display:flex;gap:7px}.bw-search input{border:1px solid #e0e6ee;border-radius:8px;padding:8px 10px;font-size:11px}.bw-search button{border:1px solid #dfe6ef;background:#fff;border-radius:8px;padding:8px 12px;font-size:11px;color:#61748f}.bw-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.bw-form label{display:grid;gap:6px;color:#64758b;font-size:11px}.bw-form label.wide{grid-column:1/-1}.bw-form input,.bw-form select,.bw-form textarea,.bw-attach-row input,.bw-attach-row select{width:100%;box-sizing:border-box;border:1px solid #dfe6ef;border-radius:8px;padding:9px 10px;font:inherit;color:#3d4f68;background:#fff}.bw-form-actions{grid-column:1/-1;display:flex;gap:8px}.bw-form.compact{margin-top:12px}.bw-table-wrap{overflow:auto}.bw-table-wrap table{width:100%;border-collapse:collapse}.bw-table-wrap th,.bw-table-wrap td{padding:11px 9px;border-bottom:1px solid #edf0f4;text-align:left;font-size:11px;color:#5a6d85;white-space:nowrap}.bw-table-wrap th{color:#8d99a9;font-weight:600}.bw-table-wrap td b,.bw-table-wrap td small{display:block}.bw-table-wrap td small{font-size:10px;color:#96a1af;margin-top:4px}.bw-link{border:0;background:none;color:#315fca;cursor:pointer;font-size:11px}.bw-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:11px}.bw-project-card{border:1px solid #e7edf4;border-radius:11px;padding:14px;display:grid;gap:13px;cursor:pointer;transition:.15s}.bw-project-card:hover{border-color:#b8c9e7;box-shadow:0 4px 14px #1b33500d}.bw-project-card>div:first-child{display:grid;gap:5px}.bw-project-card span{font-size:10px;color:#6680b2}.bw-project-card b{font-size:13px;color:#354a66}.bw-project-card small{font-size:10px;color:#96a1af}.bw-card-meta,.bw-card-foot{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#8592a4}.bw-card-foot b{color:#315fca;font-size:10px}.bw-detail-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.bw-detail-grid div{display:grid;gap:5px;padding:10px;background:#f7f9fc;border-radius:8px}.bw-detail-grid small{font-size:10px;color:#8d99a9}.bw-detail-grid b{font-size:11px;color:#455b77;overflow-wrap:anywhere}.bw-detail-panel h4{margin:8px 0 0;font-size:12px;color:#4d627d}.bw-mini-list{display:grid;gap:6px}.bw-mini-list>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px;border-bottom:1px solid #eff2f6;font-size:11px}.bw-mini-list b{color:#465a75}.bw-mini-list span{color:#929eae;font-size:10px}.bw-mini-list button{border:0;background:none;color:#315fca;font-size:10px}.bw-inline-form{display:flex;gap:8px;flex-wrap:wrap}.bw-inline-form input{flex:1;min-width:120px;border:1px solid #dfe6ef;border-radius:7px;padding:8px;font-size:10px}.bw-inline-form label{display:flex;align-items:center;gap:5px;font-size:10px;color:#76859a}.bw-attach-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bw-attach-row select{width:auto}.bw-attach-row input{flex:1;min-width:130px}.bw-upload{display:inline-flex;align-items:center;border:1px solid #dce4ef;border-radius:8px;padding:8px 12px;font-size:11px;color:#526c93;cursor:pointer}.bw-empty{padding:24px;text-align:center;color:#98a3b2;font-size:11px}.bw-message{padding:10px 12px;border-radius:8px;font-size:12px}.bw-message.error{background:#fff0ed;color:#a43e36}.bw-message.success{background:#e8f7ee;color:#2e754e}@media(max-width:720px){.bw-header{align-items:flex-start;flex-direction:column}.bw-form{grid-template-columns:1fr}.bw-form label.wide{grid-column:auto}.bw-detail-grid{grid-template-columns:repeat(2,1fr)}.bw-list-head{align-items:flex-start;flex-direction:column}}
 </style>
