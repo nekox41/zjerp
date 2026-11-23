@@ -238,16 +238,20 @@ public class BusinessController {
     @PutMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> updateProject(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         Map<String,Object> existingProject=one("SELECT id,technical_lead_employee_id FROM erp_project WHERE id=?",id);
-        Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) {
+        Long manager=optionalLong(b,"managerEmployeeId");
+        if(b.containsKey("managerEmployeeId")&&manager!=null) {
             requireEngineer(manager);
             if(existingProject.get("technical_lead_employee_id")!=null&&((Number)existingProject.get("technical_lead_employee_id")).longValue()==manager)
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是不同人员");
         }
         BigDecimal progress=b.get("progress")==null?null:new BigDecimal(b.get("progress").toString());
         if(progress!=null && (progress.compareTo(BigDecimal.ZERO)<0||progress.compareTo(BigDecimal.valueOf(100))>0)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"进度必须在 0 到 100 之间");
-        jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=COALESCE(?,manager_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),progress=COALESCE(?,progress),status=COALESCE(?,status) WHERE id=?",
-            b.get("name"),b.get("description"),manager,b.get("plannedStart"),b.get("plannedEnd"),progress,b.get("status"),id);
-        audit(a,"project.updated","erp_project",id,"项目进度或资料更新");
+        jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),progress=COALESCE(?,progress),status=COALESCE(?,status) WHERE id=?",
+            b.get("name"),b.get("description"),progress,b.get("status"),id);
+        if(b.containsKey("managerEmployeeId")) jdbc.update("UPDATE erp_project SET manager_employee_id=? WHERE id=?",manager,id);
+        if(b.containsKey("plannedStart")) jdbc.update("UPDATE erp_project SET planned_start=? WHERE id=?",b.get("plannedStart"),id);
+        if(b.containsKey("plannedEnd")) jdbc.update("UPDATE erp_project SET planned_end=? WHERE id=?",b.get("plannedEnd"),id);
+        audit(a,"project.updated","erp_project",id,"项目资料更新");
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'updated',?)",id,actor(a),val(b,"log","项目资料更新"));
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
