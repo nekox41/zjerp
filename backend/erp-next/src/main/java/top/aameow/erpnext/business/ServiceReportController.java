@@ -58,6 +58,8 @@ public class ServiceReportController {
         r.put("versions",jdbc.queryForList("SELECT version_no,content_sha256,archive_manifest,created_by,created_at FROM erp_service_report_version WHERE report_id=? ORDER BY version_no DESC",id));
         r.put("attachments",jdbc.queryForList("SELECT a.id attachment_id,f.id file_id,f.original_name,f.media_type,f.byte_size file_size,f.sha256,a.version_no FROM erp_service_report_attachment a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? AND a.version_no=? ORDER BY a.id",id,r.get("current_version_no")));
         r.put("events",jdbc.queryForList("SELECT e.*,i.display_name actor_name FROM erp_service_report_event e JOIN erp_identity i ON i.id=e.actor_identity_id WHERE e.report_id=? ORDER BY e.id",id));
+        r.put("deliveries",jdbc.queryForList("SELECT * FROM erp_report_delivery WHERE report_id=? AND version_no=? ORDER BY created_at DESC",id,r.get("current_version_no")));
+        if(r.get("project_id")!=null) r.put("project",one("SELECT id,project_no,name,customer_id FROM erp_project WHERE id=?",r.get("project_id")));
         return r;
     }
     private Object parse(String s){try{return mapper.readValue(s,Object.class);}catch(Exception e){throw new IllegalStateException("Stored report JSON is invalid",e);}}
@@ -69,8 +71,28 @@ public class ServiceReportController {
     @GetMapping("/projects/{projectId}/reports") @PreAuthorize("hasAuthority('report:read')")
     public List<Map<String,Object>> byProject(@PathVariable long projectId){
         one("SELECT id FROM erp_project WHERE id=?",projectId);
-        return jdbc.queryForList("SELECT r.id,r.report_no,r.title,r.report_type,r.status,r.revision_no,r.current_version_no,r.updated_at,w.package_no,w.title work_package_title FROM erp_service_report r JOIN erp_service_work_package w ON w.id=r.work_package_id WHERE w.project_id=? ORDER BY r.updated_at DESC",projectId);
+        return jdbc.queryForList("""
+          SELECT r.id,r.project_id,r.work_package_id,r.report_no,r.title,r.report_type,r.status,
+                 r.revision_no,r.current_version_no,r.updated_at,w.package_no,w.title work_package_title
+          FROM erp_service_report r LEFT JOIN erp_service_work_package w ON w.id=r.work_package_id
+          WHERE r.project_id=? OR w.project_id=? ORDER BY r.updated_at DESC
+          """,projectId,projectId);
     }
+    @PostMapping("/projects/{projectId}/reports") @PreAuthorize("hasAuthority('report:write')") @Transactional
+    public Map<String,Object> createForProject(@PathVariable long projectId,@RequestBody Map<String,Object>b,Authentication a){
+        one("SELECT id FROM erp_project WHERE id=?",projectId);
+        String no=req(b,"reportNo"),title=req(b,"title"),type=b.get("reportType")==null?"inspection":b.get("reportType").toString();
+        if(!Set.of("service","inspection","maintenance").contains(type))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效报告类型");
+        Map<String,Object> data=b.get("content") instanceof Map<?,?> m?(Map<String,Object>)m:Map.of();
+        jdbc.update("INSERT INTO erp_service_report(report_no,project_id,title,report_type,created_by) VALUES(?,?,?,?,?)",
+            no,projectId,title,type,actor(a));
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        insertVersion(id,1,data,actor(a));
+        event(id,null,"draft",actor(a),"创建项目报告");
+        return detail(id);
+    }
+
     @GetMapping("/work-packages/{workPackageId}/reports") @PreAuthorize("hasAuthority('report:read')")
     public List<Map<String,Object>> byWorkPackage(@PathVariable long workPackageId){
         one("SELECT id FROM erp_service_work_package WHERE id=?",workPackageId);
