@@ -81,6 +81,8 @@ class DocxPhotoInserterTest {
             doc.createTable(2,2);
             doc.write(out); aliasTemplate=out.toByteArray();
         }
+        assertEquals(List.of("消防应急照明和疏散指示系统"),DocxPhotoInserter.inspectSystems(aliasTemplate));
+        assertEquals(List.of("火灾自动报警系统","消防给水系统"),DocxPhotoInserter.inspectSystems(template()));
         assertDoesNotThrow(()->DocxPhotoInserter.insert(aliasTemplate,List.of(aliasPhoto)));
         assertThrows(IllegalArgumentException.class,()->DocxPhotoInserter.insert(template(),
             List.of(new DocxPhotoInserter.Photo("消防电梯","elevator.png",image))));
