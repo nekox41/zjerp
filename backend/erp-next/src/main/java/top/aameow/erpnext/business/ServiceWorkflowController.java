@@ -83,7 +83,9 @@ public class ServiceWorkflowController {
     public Map<String,Object> linkIssue(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         one("SELECT id FROM erp_service_visit WHERE id=?",id);
         long issueId=Long.parseLong(req(b,"issueId"));
-        one("SELECT id FROM erp_project_issue WHERE id=?",issueId);
+        Map<String,Object> issue=one("SELECT i.id,i.project_id FROM erp_project_issue i WHERE i.id=?",issueId);
+        Long visitProject=jdbc.queryForObject("SELECT w.project_id FROM erp_service_visit v JOIN erp_service_work_package w ON w.id=v.work_package_id WHERE v.id=?",Long.class,id);
+        if(visitProject==null||((Number)issue.get("project_id")).longValue()!=visitProject)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"只能关联同一项目的问题清单");
         String relation=b.get("relationType")==null?"found":b.get("relationType").toString();
         if(!Set.of("found","reviewed","resolved").contains(relation))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效问题关联类型");
         jdbc.update("INSERT INTO erp_service_visit_issue(visit_id,issue_id,relation_type,notes) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE relation_type=VALUES(relation_type),notes=VALUES(notes)",id,issueId,relation,b.get("notes"));
