@@ -97,6 +97,7 @@ jobs:
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeId\":$EMP_ID,\"role\":\"负责人\"}" >/dev/null
           curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 员工'
           source scripts/erp-next-service-smoke.sh
+          source scripts/erp-next-partner-maintenance-smoke.sh
           source scripts/erp-next-report-smoke.sh
           source scripts/erp-next-expense-smoke.sh
           source scripts/erp-next-invoice-smoke.sh
