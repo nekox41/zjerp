@@ -141,7 +141,7 @@ onMounted(load)
           <label class="wide">服务结论<textarea v-model="form.conclusion" rows="3" :disabled="!editable"></textarea></label>
         </div>
         <div class="re-actions">
-          <button type="button" class="re-secondary" :disabled="busy" @click="openPhotos">整理并插入现场照片</button>
+          <button v-if="can('photo:read')" type="button" class="re-secondary" :disabled="busy" @click="openPhotos">整理并插入现场照片</button>
           <label v-if="editable && can('report:write')" class="re-upload">＋ 添加报告附件<input type="file" hidden accept=".docx,.pdf,.jpg,.jpeg,.png,.txt" @change="attach"></label>
         </div>
       </section>
