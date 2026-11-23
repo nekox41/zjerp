@@ -39,6 +39,18 @@ PARTNER_LINKS=$(curl -fsS "http://127.0.0.1:8090/api/business/contracts/$CONTRAC
 test "$PARTNER_LINKS" = "[]"
 
 
+# Contact profile changes include primary-contact promotion and removal.
+CI_CONTACT=$(curl -fsS -X POST "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/contacts" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"CI 待编辑联系人","phone":"111111"}')
+CI_CONTACT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CI_CONTACT")
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/contacts/$CI_CONTACT_ID" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"CI 已更新联系人","positionName":"负责人","phone":"222222","email":"ci@example.invalid","isPrimary":true}' | grep -q 'CI 已更新联系人'
+curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; rows=json.load(sys.stdin); assert sum(bool(x["is_primary"]) for x in rows)==1'
+curl -fsS -X DELETE "http://127.0.0.1:8090/api/business/contacts/$CI_CONTACT_ID" -H "Authorization: Bearer $TOKEN" >/dev/null
+curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" | grep -qv 'CI 已更新联系人'
+
 # A project may exist before a contract is linked; a later contract can cover it.
 UNCOVERED=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
