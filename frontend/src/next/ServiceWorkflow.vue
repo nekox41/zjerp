@@ -4,6 +4,12 @@ import { api, downloadFile } from './api'
 
 const props = defineProps({ permissions: { type: Array, default: () => [] }, userId: { type: Number, default: 0 } })
 const can = p => props.permissions.includes(p)
+const visibleTabs = computed(()=>[
+  {id:'visits',name:'现场服务',permission:'service:visit:read'},
+  {id:'issues',name:'问题清单',permission:'project:read'},
+  {id:'photos',name:'照片批次',permission:'report:photo:read'},
+  {id:'reports',name:'报告与交付',permission:'report:read'}
+].filter(x=>can(x.permission)))
 const projects = ref([]), packages = ref([]), employees = ref([]), issues = ref([])
 const visits = ref([]), batches = ref([]), reports = ref([]), deliveries = ref([])
 const project = ref(null), workPackage = ref(null), batch = ref(null), report = ref(null)
@@ -24,8 +30,8 @@ async function load() {
   try {
     const [p,e,s] = await Promise.all([
       api('/service-workflow/projects'),
-      api('/business/employees'),
-      api('/service-workflow/photo-systems')
+      can('employee:read')?api('/business/employees'):Promise.resolve([]),
+      can('report:photo:read')?api('/service-workflow/photo-systems'):Promise.resolve([])
     ])
     projects.value=p; employees.value=e; systems.value=s
     if(project.value) await selectProject(project.value.id)
@@ -44,10 +50,10 @@ async function selectPackage(id) {
   if(!id)return
   try {
     const [v,b,r,i]=await Promise.all([
-      api('/service-workflow/work-packages/'+id+'/visits'),
-      api('/service-workflow/work-packages/'+id+'/photo-batches'),
-      api('/business/work-packages/'+id+'/reports'),
-      api('/business/projects/'+project.value.id+'/issues')
+      can('service:visit:read')?api('/service-workflow/work-packages/'+id+'/visits'):Promise.resolve([]),
+      can('report:photo:read')?api('/service-workflow/work-packages/'+id+'/photo-batches'):Promise.resolve([]),
+      can('report:read')?api('/business/work-packages/'+id+'/reports'):Promise.resolve([]),
+      can('project:read')?api('/business/projects/'+project.value.id+'/issues'):Promise.resolve([])
     ])
     visits.value=v; batches.value=b; reports.value=r; issues.value=i
   } catch(e){error.value=e.message}
@@ -211,7 +217,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
   <div v-if="!workPackage" class="sw-empty">选择项目和服务工作包后，管理现场服务、问题、照片与报告。</div>
   <template v-else>
     <nav class="sw-tabs">
-      <button v-for="t in [{id:'visits',name:'现场服务'},{id:'issues',name:'问题清单'},{id:'photos',name:'照片批次'},{id:'reports',name:'报告与交付'}]" :key="t.id" :class="{active:tab===t.id}" @click="tab=t.id">{{ t.name }}</button>
+      <button v-for="t in visibleTabs" :key="t.id" :class="{active:tab===t.id}" @click="tab=t.id">{{ t.name }}</button>
     </nav>
 
     <div v-if="tab==='visits'" class="sw-panel">
