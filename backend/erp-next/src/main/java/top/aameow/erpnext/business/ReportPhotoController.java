@@ -188,7 +188,12 @@ public class ReportPhotoController {
           WHERE p.id=? AND p.batch_id=?
           """,photoId,id);
         jdbc.update("DELETE FROM erp_report_photo WHERE id=?",photoId);
-        Integer references=jdbc.queryForObject("SELECT COUNT(*) FROM erp_report_photo WHERE file_id=?",Integer.class,f.get("id"));
+        Integer references=jdbc.queryForObject("""
+          SELECT
+            (SELECT COUNT(*) FROM erp_report_photo WHERE file_id=?) +
+            (SELECT COUNT(*) FROM erp_service_report_attachment WHERE file_id=?) +
+            (SELECT COUNT(*) FROM erp_contract_attachment WHERE file_id=?)
+          """,Integer.class,f.get("id"),f.get("id"),f.get("id"));
         if(references==null||references==0) {
             jdbc.update("DELETE FROM erp_file_object WHERE id=?",f.get("id"));
             storage.deleteQuietly(f.get("storage_key").toString());
@@ -266,17 +271,19 @@ public class ReportPhotoController {
 
     private byte[] generate(long batchId,Map<String,Object>b,Authentication a) throws IOException {
         Map<String,Object> photoBatch=batch(batchId,false);
+        assertEditable(photoBatch);
         reportForInsertion(b,photoBatch,a);
         return buildDocx(batchId,b);
     }
 
     private Map<String,Object> reportForInsertion(Map<String,Object>b,Map<String,Object> photoBatch,Authentication a) {
         long reportId=Long.parseLong(req(b,"reportId"));
-        Map<String,Object> report=one("""
-          SELECT r.*,COALESCE(r.project_id,w.project_id) effective_project_id
-          FROM erp_service_report r LEFT JOIN erp_service_work_package w ON w.id=r.work_package_id
-          WHERE r.id=? FOR UPDATE
-          """,reportId);
+        Map<String,Object> report=one("SELECT * FROM erp_service_report WHERE id=? FOR UPDATE",reportId);
+        Object effectiveProject=report.get("project_id");
+        if(effectiveProject==null&&report.get("work_package_id")!=null)
+            effectiveProject=one("SELECT project_id FROM erp_service_work_package WHERE id=?",report.get("work_package_id")).get("project_id");
+        if(effectiveProject==null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"报告未关联项目");
+        report.put("effective_project_id",effectiveProject);
         if(!Set.of("draft","returned").contains(report.get("status").toString()))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿或退回状态的报告可以插入照片");
         if(((Number)report.get("effective_project_id")).longValue()!=((Number)photoBatch.get("project_id")).longValue())
