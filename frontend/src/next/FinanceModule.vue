@@ -21,7 +21,7 @@ onMounted(async()=>{await refresh();try{projectOptions.value=(await api('/financ
 </script>
 <template>
 <section class="panel finance-panel">
-  <div class="section-heading"><div><h2>费用报账与财务审批</h2><p>按项目归集费用，保留明细、附件与付款流水</p></div><button v-if="can('expense:write')" class="primary-button" @click="reset">新建报账</button></div>
+  <div class="section-heading"><div><h2>报账</h2><p>按项目归集费用，保留明细、附件与付款流水</p></div><button v-if="can('expense:write')" class="primary-button" @click="reset">新建报账</button></div>
   <p v-if="error" class="message error" role="alert">{{error}}</p><p v-if="notice" class="message success" role="status">{{notice}}</p>
   <div class="finance-toolbar"><select v-model="filter" @change="refresh"><option value="">全部状态</option><option v-for="s in ['draft','submitted','returned','approved','paid']" :key="s">{{s}}</option></select><button class="secondary-button" @click="refresh">刷新</button></div>
   <div class="table-wrap"><table><thead><tr><th>报账编号</th><th>标题</th><th>金额</th><th>状态</th><th>申请人</th><th>操作</th></tr></thead><tbody><tr v-for="x in items" :key="x.id"><td>{{x.claim_no}}</td><td>{{x.title}}</td><td>{{money(x.total_amount)}} {{x.currency}}</td><td>{{x.status}}</td><td>{{x.applicant_identity_id}}</td><td><button class="secondary-button" @click="open(x.id)">查看</button></td></tr><tr v-if="!items.length"><td colspan="6">暂无报账单</td></tr></tbody></table></div>
