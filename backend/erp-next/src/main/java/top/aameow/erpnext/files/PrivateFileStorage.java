@@ -6,6 +6,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
+import java.io.File;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -53,6 +56,27 @@ public class PrivateFileStorage {
         } catch(ResponseStatusException e) { throw e; }
         catch(Exception e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"文件保存失败",e); }
     }
+    public StoredFile storeBytes(byte[] bytes,String originalName,String mediaType) {
+        if(bytes==null||bytes.length==0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"生成文件为空");
+        return store(new MemoryMultipartFile(bytes,originalName,mediaType));
+    }
+    private static final class MemoryMultipartFile implements MultipartFile {
+        private final byte[] bytes;
+        private final String name;
+        private final String media;
+        MemoryMultipartFile(byte[] bytes,String name,String media) {
+            this.bytes=bytes.clone(); this.name=name; this.media=media;
+        }
+        @Override public String getName() { return "file"; }
+        @Override public String getOriginalFilename() { return name; }
+        @Override public String getContentType() { return media; }
+        @Override public boolean isEmpty() { return bytes.length==0; }
+        @Override public long getSize() { return bytes.length; }
+        @Override public byte[] getBytes() { return bytes.clone(); }
+        @Override public InputStream getInputStream() { return new ByteArrayInputStream(bytes); }
+        @Override public void transferTo(File dest) throws IOException { Files.write(dest.toPath(),bytes); }
+    }
+
     private boolean starts(byte[] b,int... values){if(b.length<values.length)return false;for(int i=0;i<values.length;i++)if((b[i]&255)!=values[i])return false;return true;}
     private boolean containsZero(byte[] b){for(byte x:b)if(x==0)return true;return false;}
     public Path resolve(String key) {
