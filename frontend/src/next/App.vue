@@ -2,10 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { api } from './api'
 import BusinessModule from './BusinessModule.vue'
-import FinanceModule from './FinanceModule.vue'
-import InvoiceModule from './InvoiceModule.vue'
 import DashboardModule from './DashboardModule.vue'
 import PhotoWorkbench from './PhotoWorkbench.vue'
+import MaintenanceModule from './MaintenanceModule.vue'
+import DeliveryModule from './DeliveryModule.vue'
 
 const loading = ref(true)
 const submitting = ref(false)
@@ -143,29 +143,28 @@ onMounted(refresh)
       <button :class="{active:tab==='overview'}" @click="tab='overview'"><span>⌂</span>工作台</button>
       <button v-if="can('project:read')" :class="{active:tab==='dashboard'}" @click="tab='dashboard'"><span>◫</span>经营驾驶舱</button>
       <div class="side-caption">业务管理</div>
-      <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务全生命周期</button>
-      <button v-if="can('report:write')" :class="{active:tab==='photo-workbench'}" @click="tab='photo-workbench'"><span>▧</span>现场照片整理</button>
-      <div class="side-caption">财务管理</div>
-      <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>
-      <button v-if="can('invoice:read')" :class="{active:tab==='invoices'}" @click="tab='invoices'"><span>▤</span>发票与应收应付</button>
+      <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务档案</button>
+      <button v-if="can('maintenance:read')" :class="{active:tab==='maintenance'}" @click="tab='maintenance'"><span>⌂</span>维护保养</button>
+      <button v-if="can('site_visit:read') || can('report:read')" :class="{active:tab==='delivery'}" @click="tab='delivery'"><span>▤</span>现场服务与报告</button>
+      <button v-if="can('report_photo:read')" :class="{active:tab==='photo-workbench'}" @click="tab='photo-workbench'"><span>▧</span>照片整理与报告插图</button>
       <div class="side-caption">系统管理</div>
       <button v-if="can('identity:read')" :class="{active:tab==='identities'}" @click="tab='identities'"><span>♙</span>账号与角色</button>
       <button v-if="can('audit:read')" :class="{active:tab==='audit'}" @click="tab='audit'"><span>◷</span>操作审计</button>
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='photo-workbench'?'现场照片整理':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='photo-workbench'?'照片整理与报告插图':tab==='dashboard'?'业务工作台':tab==='maintenance'?'维护保养':tab==='delivery'?'现场服务与报告':'业务档案' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
       <div class="content">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
         <template v-if="tab==='overview'">
-          <section class="welcome-card"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>你好，{{ user.displayName }}</h2><p>平台基础已经就绪。接下来将逐步开放客户、合同、项目与交付流程。</p></div><div class="welcome-symbol">众</div></section>
+          <section class="welcome-card"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>你好，{{ user.displayName }}</h2><p>客户、合同、项目、现场服务、整改与报告在同一工作空间中衔接。</p></div><div class="welcome-symbol">众</div></section>
           <div class="section-heading"><div><h2>平台状态</h2><p>当前已启用的基础能力</p></div><span class="status-pill"><i></i>运行中</span></div>
           <div class="stat-grid"><article class="stat-card"><span>当前账号</span><b>{{ user.username }}</b><small>身份认证已启用</small></article><article class="stat-card"><span>可用权限</span><b>{{ user.permissions?.length || 0 }}</b><small>由服务端角色授权</small></article><article class="stat-card"><span>账号档案</span><b>{{ identities.length || '—' }}</b><small>当前可查看的账号</small></article></div>
-          <section class="next-card"><div class="next-icon">✦</div><div><b>接下来会发生什么？</b><p>新版业务模块将按真实工作流程逐步上线。现阶段不会展示尚未实现的功能入口，也不会将旧系统数据误当作新系统数据。</p></div></section>
+          <section class="next-card"><div class="next-icon">✦</div><div><b>工作流程</b><p>从客户与合同建立项目，记录多次现场服务，跟进整改，再完成报告审核、插图、归档和邮寄。</p></div></section>
         </template>
         <template v-else-if="tab==='identities'">
-          <div class="section-heading"><div><h2>账号管理</h2><p>创建账号并分配角色；员工档案将在后续业务模块中独立管理。</p></div></div>
+          <div class="section-heading"><div><h2>账号管理</h2><p>创建账号并分配角色；员工档案与登录账号相互独立，按岗位和资格分配业务权限。</p></div></div>
           <section class="panel create-panel"><h3>新建账号</h3><form class="create-grid" @submit.prevent="createIdentity"><label>登录账号<input v-model="createForm.username" required maxlength="100"></label><label>显示名称<input v-model="createForm.displayName" required maxlength="200"></label><label>初始密码<input v-model="createForm.password" type="password" required minlength="12" maxlength="128"></label><label>分配角色<select v-model="createForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><button class="primary-button" :disabled="submitting">创建账号</button></form></section>
           <section class="panel"><h3>已有账号 <span>{{ identities.length }}</span></h3><div class="table-wrap"><table><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>状态</th></tr></thead><tbody><tr v-for="item in identities" :key="item.id"><td>{{ item.username }}</td><td>{{ item.display_name }}</td><td>{{ item.roles || '未分配' }}</td><td><span class="status-pill"><i></i>{{ item.status }}</span></td></tr></tbody></table><p v-if="!identities.length" class="empty">暂无账号数据</p></div></section>
         </template>
@@ -173,9 +172,9 @@ onMounted(refresh)
           <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
         </template>
         <PhotoWorkbench v-else-if="tab==='photo-workbench'" />
+        <MaintenanceModule v-else-if="tab==='maintenance'" />
+        <DeliveryModule v-else-if="tab==='delivery'" :permissions="user.permissions" />
         <DashboardModule v-else-if="tab==='dashboard'" />
-        <InvoiceModule v-else-if="tab==='invoices'" :permissions="user.permissions" />
-        <FinanceModule v-else-if="tab==='finance'" :permissions="user.permissions" :user-id="user.id" />
         <BusinessModule v-else />
       </div>
     </section>
