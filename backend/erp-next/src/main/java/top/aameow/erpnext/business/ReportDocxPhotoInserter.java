@@ -191,7 +191,10 @@ public class ReportDocxPhotoInserter {
     private static String normalize(String text) {
         if(text==null) return null;
         String value=PREFIX.matcher(text.trim()).replaceFirst("").trim();
-        if("消防应急照明及疏散指示系统".equals(value)) value="消防应急照明和疏散指示系统";
+        if("消防应急照明及疏散指示系统".equals(value)
+            || "应急照明和疏散指示系统".equals(value)
+            || "应急照明及疏散指示系统".equals(value))
+            value="消防应急照明和疏散指示系统";
         if("消防应急照明和疏散指示系统".equals(value) || "消防应急照明及疏散指示系统".equals(value)) return value;
         return SYSTEMS.contains(value)?value:null;
     }
