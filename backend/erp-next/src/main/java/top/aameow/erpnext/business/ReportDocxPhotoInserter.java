@@ -30,7 +30,9 @@ public class ReportDocxPhotoInserter {
 
     public Set<String> supportedSystems() { return new LinkedHashSet<>(SYSTEMS); }
 
-    public void insert(XWPFDocument document, List<Photo> photos) {
+    public void insert(XWPFDocument document, List<Photo> photos) { insert(document,photos,true); }
+
+    public void insert(XWPFDocument document, List<Photo> photos, boolean replaceExisting) {
         Map<String,List<Photo>> bySystem = new LinkedHashMap<>();
         for (Photo photo : photos) {
             String system = normalize(photo.system());
@@ -70,6 +72,24 @@ public class ReportDocxPhotoInserter {
             if (!blocks.containsKey(system) || blocks.get(system).isEmpty())
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "模板“"+system+"”章节没有可识别的现场照片表格，暂不能自动插入");
+        }
+
+        if(!replaceExisting) {
+            for(Map.Entry<String,List<Photo>> entry:bySystem.entrySet()) {
+                List<Block> found=blocks.get(entry.getKey());
+                if(found==null||found.isEmpty())throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "模板“"+entry.getKey()+"”章节没有可识别的现场照片表格，暂不能自动插入");
+                XWPFTable target=found.get(found.size()-1).table();
+                List<Photo> assigned=entry.getValue();
+                for(int i=0;i<assigned.size();) {
+                    XWPFTableRow row=target.createRow();
+                    ensureTwoCells(row);
+                    fillCell(row.getCell(0),assigned.get(i++));
+                    if(i<assigned.size())fillCell(row.getCell(1),assigned.get(i++));
+                    else clearCell(row.getCell(1));
+                }
+            }
+            return;
         }
 
         // Remove all unused photo groups first (descending indexes), then fill
