@@ -47,4 +47,4 @@
 
 ## CI 与人工验收
 
-GitHub Actions 的 ERP Next Schema and Smoke Test 会执行 V1–V9 迁移和全流程 Smoke Test。合并前需确认 Monorepo Build、Docker 构建及 Smoke Test 全部通过。真实 Word 样本的版式和打印效果仍需人工验收。
+GitHub Actions 的 ERP Next Schema and Smoke Test 会执行 V1–V10 迁移和全流程 Smoke Test。合并前需确认 Monorepo Build、Docker 构建及 Smoke Test 全部通过。真实 Word 样本的版式和打印效果仍需人工验收。
