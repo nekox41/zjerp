@@ -52,7 +52,12 @@ if [[ "$command_name" == start && ! -f "$ENV_FILE" ]]; then
     echo 'ERP_NEXT_WEB_PORT=8089'
   } > "$temp_file"
   chmod 600 "$temp_file"
-  mv -n -- "$temp_file" "$ENV_FILE"
+  if [[ -e "$ENV_FILE" ]]; then
+    echo "Concurrent startup created the environment file; keeping existing credentials." >&2
+  else
+    mv -n -- "$temp_file" "$ENV_FILE"
+  fi
+  rm -f -- "$temp_file"
   trap - EXIT
   echo "Created private secrets in erp-next/.env.local (saved for future starts)."
 fi
