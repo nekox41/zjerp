@@ -288,7 +288,7 @@ onMounted(load)
         <div v-else-if="section==='projects'" class="bw-cards">
           <article v-for="item in rows" :key="item.id" class="bw-project-card" @click="openProject(item.id)">
             <div><span>{{ item.project_no }}</span><b>{{ item.name }}</b><small>{{ item.customer_name }}</small></div>
-            <div class="bw-card-meta"><span>{{ item.contract_no || '未签合同' }}</span><span>{{ item.manager_name || '未分配负责人' }}</span></div>
+            <div class="bw-card-meta"><span>{{ item.contract_id ? '已关联合同' : '未签合同' }}</span><span>{{ item.manager_name || '未分配负责人' }}</span></div>
             <div class="bw-card-foot"><small>{{ item.status }}</small><b>进入项目 →</b></div>
           </article>
         </div>
