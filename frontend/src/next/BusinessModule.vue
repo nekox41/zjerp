@@ -17,6 +17,32 @@ const contracts = ref([])
 const projects = ref([])
 const selectedCustomer = ref(null)
 const contacts = ref([])
+const editingContactId=ref(null)
+const contactEdit=ref({name:'',positionName:'',phone:'',email:'',notes:'',isPrimary:false})
+function editContact(contact){
+  editingContactId.value=contact.id
+  contactEdit.value={name:contact.name||'',positionName:contact.position_name||'',phone:contact.phone||'',email:contact.email||'',notes:contact.notes||'',isPrimary:!!contact.is_primary}
+}
+async function saveContact(){
+  if(!editingContactId.value||!selectedCustomer.value)return
+  busy.value=true;error.value=''
+  try{
+    await api('/business/contacts/'+editingContactId.value,{method:'PUT',body:JSON.stringify(contactEdit.value)})
+    editingContactId.value=null
+    await openCustomer(selectedCustomer.value.id)
+    notice.value='联系人已更新'
+  }catch(e){error.value=e.message}finally{busy.value=false}
+}
+async function deleteContact(contact){
+  if(!selectedCustomer.value||!confirm('确定删除联系人「'+contact.name+'」？'))return
+  busy.value=true;error.value=''
+  try{
+    await api('/business/contacts/'+contact.id,{method:'DELETE'})
+    editingContactId.value=null
+    await openCustomer(selectedCustomer.value.id)
+    notice.value='联系人已删除'
+  }catch(e){error.value=e.message}finally{busy.value=false}
+}
 const forms = {
   employee: ref({employeeCode:'',fullName:'',identityId:'',positionName:'',phone:'',email:'',employeeType:'general'}),
   customer: ref({customerCode:'',name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',notes:''}),
@@ -224,7 +250,25 @@ onMounted(load)
             <label>状态<select v-model="customerEditForm.status"><option value="active">正常</option><option value="disabled">停用</option></select></label>
             <label>备注<input v-model="customerEditForm.notes"></label><button class="primary-button" :disabled="busy">保存客户资料</button>
           </form>
-          <h4>联系人</h4><p v-for="x in contacts" :key="x.id">{{x.name}} · {{x.phone||'无电话'}} · {{x.email||''}} <span v-if="x.is_primary">主要联系人</span></p><form class="create-grid compact" @submit.prevent="submit('contact')"><label>联系人姓名<input v-model="forms.contact.value.name" required></label><label>岗位<input v-model="forms.contact.value.positionName"></label><label>电话<input v-model="forms.contact.value.phone"></label><label>邮箱<input v-model="forms.contact.value.email"></label><label class="inline-check"><input type="checkbox" v-model="forms.contact.value.isPrimary">主要联系人</label><button class="primary-button">添加联系人</button></form></div>
+          <h4>联系人</h4>
+          <div v-for="x in contacts" :key="x.id" class="log-line">
+            {{x.name}} · {{x.position_name||'未填岗位'}} · {{x.phone||'无电话'}} · {{x.email||''}}
+            <b v-if="x.is_primary">主要联系人</b>
+            <button type="button" class="secondary-button" @click="editContact(x)">编辑</button>
+            <button type="button" class="secondary-button" @click="deleteContact(x)">删除</button>
+          </div>
+          <form v-if="editingContactId" class="create-grid compact" @submit.prevent="saveContact">
+            <h4>编辑联系人</h4>
+            <label>姓名<input v-model="contactEdit.name" required></label>
+            <label>岗位<input v-model="contactEdit.positionName"></label>
+            <label>电话<input v-model="contactEdit.phone"></label>
+            <label>邮箱<input v-model="contactEdit.email"></label>
+            <label>备注<input v-model="contactEdit.notes"></label>
+            <label class="inline-check"><input type="checkbox" v-model="contactEdit.isPrimary">主要联系人</label>
+            <button class="primary-button" :disabled="busy">保存联系人</button>
+            <button type="button" class="secondary-button" @click="editingContactId=null">取消</button>
+          </form>
+          <form class="create-grid compact" @submit.prevent="submit('contact')"><label>联系人姓名<input v-model="forms.contact.value.name" required></label><label>岗位<input v-model="forms.contact.value.positionName"></label><label>电话<input v-model="forms.contact.value.phone"></label><label>邮箱<input v-model="forms.contact.value.email"></label><label class="inline-check"><input type="checkbox" v-model="forms.contact.value.isPrimary">主要联系人</label><button class="primary-button">添加联系人</button></form></div>
       </template>
       <template v-else-if="section==='contracts'">
         <h3>新增合同</h3><form class="create-grid" @submit.prevent="submit('contract')"><label>合同编号<input v-model="forms.contract.value.contractNo" required></label><label>合同名称<input v-model="forms.contract.value.title" required></label><label>客户<select v-model="forms.contract.value.customerId" required><option value="">请选择客户</option><option v-for="x in customers" :value="x.id">{{x.name}}</option></select></label><label>合同类型<input v-model="forms.contract.value.contractType"></label><label>服务类型<select v-model="forms.contract.value.serviceType"><option value="maintenance">维护保养</option><option value="fire_inspection">消防检测</option><option value="fire_assessment">消防评定</option><option value="fire_evaluation">消防评估</option><option value="other">其他技术服务</option></select></label><label>金额<input v-model="forms.contract.value.amount" type="number" min="0" step=".01"></label><label>币种<input v-model="forms.contract.value.currency" maxlength="3"></label><label>签订日期<input v-model="forms.contract.value.signedOn" type="date"></label><label>开始日期<input v-model="forms.contract.value.startsOn" type="date"></label><label>结束日期<input v-model="forms.contract.value.endsOn" type="date"></label><label>负责人<select v-model="forms.contract.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><button class="primary-button">创建合同</button></form><div v-if="selectedContract" class="related-card">
