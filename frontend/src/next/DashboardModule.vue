@@ -1,17 +1,37 @@
 <script setup>
 import {onMounted,ref} from 'vue'
 import {api} from './api'
-const options=ref({customers:[],projects:[]}),data=ref(null),customerId=ref(''),projectId=ref(''),error=ref(''),busy=ref(false)
-async function load(){busy.value=true;error.value='';try{const params=new URLSearchParams();if(customerId.value)params.set('customerId',customerId.value);if(projectId.value)params.set('projectId',projectId.value);data.value=await api('/business/dashboard'+(params.size?'?'+params:''))}catch(e){error.value=e.message}finally{busy.value=false}}
-onMounted(async()=>{await Promise.all([load(),api('/finance/options').then(x=>options.value=x).catch(e=>error.value=e.message)])})
+const data=ref(null),busy=ref(false),error=ref('')
+const labels={planned:'计划中',in_progress:'进行中',paused:'暂停',completed:'已完成',cancelled:'已取消',open:'待整改',resolved:'待复核',closed:'已关闭',submitted:'待审核',reviewing:'审核中',returned:'已退回',approved:'已通过',issued:'已签发',archived:'已归档',draft:'草稿'}
+async function load(){busy.value=true;error.value='';try{data.value=await api('/business/dashboard')}catch(e){error.value=e.message}finally{busy.value=false}}
+onMounted(load)
 </script>
 <template>
-<section class="panel"><div class="section-heading"><div><h2>经营驾驶舱</h2><p>按客户、项目查看合同、执行进度及财务汇总</p></div><button class="secondary-button" @click="load" :disabled="busy">刷新指标</button></div>
-<form class="create-grid compact" @submit.prevent="load"><label>客户筛选<select v-model="customerId"><option value="">全部客户</option><option v-for="x in options.customers" :key="x.id" :value="x.id">{{x.name}}</option></select></label><label>项目筛选<select v-model="projectId"><option value="">全部项目</option><option v-for="x in options.projects.filter(x=>!customerId||x.customer_id===Number(customerId))" :key="x.id" :value="x.id">{{x.name}}</option></select></label><button class="primary-button">应用筛选</button></form>
-<p v-if="error" class="message error">{{error}}</p>
-<template v-if="data"><div class="stat-grid"><article class="stat-card"><span>合同数量</span><b>{{data.contracts.count}}</b><small>合同总额 {{data.contracts.total_amount}}</small></article><article class="stat-card"><span>项目数量</span><b>{{data.projects.count}}</b><small>执行中 {{data.projects.active_count||0}}</small></article><article class="stat-card"><span>项目平均进度</span><b>{{Number(data.projects.avg_progress||0).toFixed(1)}}%</b><small>按项目平均</small></article></div>
-<h3>应收与应付</h3><div class="table-wrap"><table><thead><tr><th>类型</th><th>币种</th><th>票据数</th><th>总额</th><th>已核销</th><th>未结</th><th>逾期</th></tr></thead><tbody><tr v-for="x in data.invoices||[]" :key="x.direction+x.currency"><td>{{x.direction==='receivable'?'应收':'应付'}}</td><td>{{x.currency}}</td><td>{{x.invoice_count}}</td><td>{{x.total_amount}}</td><td>{{x.settled_amount}}</td><td>{{x.outstanding_amount}}</td><td>{{x.overdue_count}}</td></tr><tr v-if="!data.invoices?.length"><td colspan="7">暂无可查看的财务指标</td></tr></tbody></table></div>
-<h3>费用报账</h3><div class="table-wrap"><table><thead><tr><th>币种</th><th>已批准报账数</th><th>费用总额</th><th>已支付</th></tr></thead><tbody><tr v-for="x in data.expenses||[]" :key="x.currency"><td>{{x.currency}}</td><td>{{x.claim_count}}</td><td>{{x.total_amount}}</td><td>{{x.paid_amount}}</td></tr><tr v-if="!data.expenses?.length"><td colspan="4">暂无可查看的费用指标</td></tr></tbody></table></div>
-<h3>项目状态</h3><p v-for="x in data.projectsByStatus" :key="x.status" class="log-line">{{x.status}}：{{x.count}} 个项目</p>
-</template></section>
+<section class="operations-dashboard">
+  <div class="dash-head"><div><span class="eyebrow">OPERATIONS OVERVIEW</span><h2>业务工作台</h2><p>关注项目执行、现场服务、整改、报告审核和维保资料。</p></div><button class="secondary-button" @click="load" :disabled="busy">刷新</button></div>
+  <p v-if="error" class="message error">{{error}}</p>
+  <template v-if="data">
+    <div class="stat-grid">
+      <article class="stat-card"><span>有效客户</span><b>{{data.summary.customers}}</b><small>客户档案</small></article>
+      <article class="stat-card"><span>合作方</span><b>{{data.summary.partners}}</b><small>独立合作方档案</small></article>
+      <article class="stat-card"><span>在职员工</span><b>{{data.summary.employees}}</b><small>员工与账号分离</small></article>
+      <article class="stat-card"><span>履行中合同</span><b>{{data.summary.active_contracts}}</b><small>合同期限独立保留</small></article>
+      <article class="stat-card"><span>进行中项目</span><b>{{data.summary.active_projects}}</b><small>跨合同持续跟踪</small></article>
+      <article class="stat-card"><span>计划现场服务</span><b>{{data.summary.planned_visits}}</b><small>等待执行</small></article>
+      <article class="stat-card"><span>未关闭整改</span><b>{{data.summary.open_issues}}</b><small>待整改或整改中</small></article>
+      <article class="stat-card"><span>报告审核队列</span><b>{{data.summary.reports_in_review}}</b><small>待审核或审核中</small></article>
+      <article class="stat-card"><span>待寄维保卡</span><b>{{data.summary.maintenance_cards_pending}}</b><small>需核对项目资料</small></article>
+    </div>
+    <div class="dash-grid">
+      <section class="panel"><h3>待处理整改</h3><div v-for="x in data.pendingIssues" :key="x.id" class="dash-row"><div><b>{{x.title}}</b><small>{{x.project_no}} · {{x.project_name}} · {{x.owner_name||'未分配'}}</small></div><span class="dash-severity" :class="x.severity">{{x.severity}} · {{labels[x.status]}}</span></div><p v-if="!data.pendingIssues.length" class="empty">没有待处理整改</p></section>
+      <section class="panel"><h3>报告审核与退回</h3><div v-for="x in data.reportsInQueue" :key="x.id" class="dash-row"><div><b>{{x.report_no}} · {{x.title}}</b><small>{{x.customer_name}} · {{x.project_name}}</small></div><span class="tag">{{labels[x.status]}}</span></div><p v-if="!data.reportsInQueue.length" class="empty">报告队列为空</p></section>
+      <section class="panel"><h3>计划现场服务</h3><div v-for="x in data.upcomingVisits" :key="x.id" class="dash-row"><div><b>{{x.title}}</b><small>{{x.project_no}} · {{x.project_name}}</small></div><time>{{x.performed_on}}</time></div><p v-if="!data.upcomingVisits.length" class="empty">没有待执行现场服务</p></section>
+      <section class="panel"><h3>维保资料提醒</h3><div v-for="x in data.maintenanceAttention" :key="x.id" class="dash-row"><div><b>{{x.project_no}} · {{x.name}}</b><small>{{x.customer_name}} · 合同结束 {{x.current_contract_end||'未关联'}}</small></div><span class="tag">{{!x.honeybee_uploaded?'小蜜蜂待上传':!x.documents_ready?'资料待完善':!x.maintenance_card_sent?'公示卡待寄':'合同临期'}}</span></div><p v-if="!data.maintenanceAttention.length" class="empty">没有待处理维保资料</p></section>
+    </div>
+    <div class="panel"><h3>业务状态分布</h3><div class="status-distribution"><div><b>项目</b><span v-for="x in data.projectStatuses" :key="x.status">{{labels[x.status]||x.status}}：{{x.count}}</span></div><div><b>问题整改</b><span v-for="x in data.issueStatuses" :key="x.status">{{labels[x.status]||x.status}}：{{x.count}}</span></div><div><b>报告</b><span v-for="x in data.reportStatuses" :key="x.status>{{labels[x.status]||x.status}}：{{x.count}}</span></div></div></div>
+  </template>
+</section>
 </template>
+<style scoped>
+.operations-dashboard{display:grid;gap:18px}.dash-head{display:flex;align-items:end;justify-content:space-between}.dash-head h2{margin:5px 0;font-size:23px;color:#203149}.dash-head p{font-size:12px;color:#7d889a;margin:0}.stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.dash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.panel h3{font-size:14px;margin:0 0 12px}.dash-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #edf0f5}.dash-row>div{display:grid;gap:5px;min-width:0}.dash-row b{font-size:11px;color:#3e4e66}.dash-row small,.dash-row time{font-size:10px;color:#929daf}.tag{font-size:10px;padding:5px 8px;border-radius:20px;background:#edf2fd;color:#315fca;white-space:nowrap}.dash-severity{font-size:10px;white-space:nowrap}.dash-severity.critical,.dash-severity.high{color:#b44343}.dash-severity.medium{color:#9a742e}.dash-severity.low{color:#468568}.status-distribution{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.status-distribution>div{display:grid;gap:8px}.status-distribution b{font-size:12px}.status-distribution span{font-size:11px;color:#7c889a}.empty{font-size:11px;color:#a0a9b6;text-align:center;padding:18px}@media(max-width:850px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-grid{grid-template-columns:1fr}.status-distribution{grid-template-columns:1fr}}
+</style>
