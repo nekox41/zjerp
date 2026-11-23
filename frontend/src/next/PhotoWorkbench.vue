@@ -326,13 +326,13 @@ onBeforeUnmount(clearUrls)
           <label class="pw-check"><input type="checkbox" v-model="photo.selected" @change="toggleSelected(photo)"  :disabled="!canEditPhotos"></label>
           <button class="pw-image" type="button" @click="focused=photo"><img v-if="photo.previewUrl" :src="photo.previewUrl" :alt="photo.original_name" loading="lazy"><span v-else>图片加载中</span></button>
           <div class="pw-card-body"><b :title="photo.original_name">{{ photo.original_name }}</b><small>{{ formatSize(photo.file_size) }}</small>
-            <select v-model="photo.system_code" :disabled="!editable"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select>
-            <div class="pw-card-actions"><button type="button" :disabled="!editable" @click="movePhoto(photo,-1)">↑ 上移</button><button type="button" :disabled="!editable" @click="movePhoto(photo,1)">↓ 下移</button><button type="button" :disabled="!editable" class="danger" @click="deletePhoto(photo)">移除</button></div>
+            <select v-model="photo.system_code" :disabled="!canEditPhotos"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select>
+            <div class="pw-card-actions"><button type="button" :disabled="!canEditPhotos" @click="movePhoto(photo,-1)">↑ 上移</button><button type="button" :disabled="!canEditPhotos" @click="movePhoto(photo,1)">↓ 下移</button><button type="button" :disabled="!canEditPhotos" class="danger" @click="deletePhoto(photo)">移除</button></div>
           </div>
         </article>
       </div>
       <div v-else class="pw-table-wrap"><table><thead><tr><th>选择</th><th>预览</th><th>文件名</th><th>大小</th><th>所属消防系统</th><th>排序</th><th></th></tr></thead><tbody>
-        <tr v-for="photo in filtered" :key="photo.photo_id"><td><input type="checkbox" v-model="photo.selected" @change="toggleSelected(photo)" :disabled="!editable"></td><td><img v-if="photo.previewUrl" :src="photo.previewUrl" @click="focused=photo"></td><td>{{ photo.original_name }}</td><td>{{ formatSize(photo.file_size) }}</td><td><select v-model="photo.system_code" :disabled="!editable"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></td><td><button @click="movePhoto(photo,-1)">↑</button><button @click="movePhoto(photo,1)">↓</button></td><td><button class="danger" @click="deletePhoto(photo)">移除</button></td></tr>
+        <tr v-for="photo in filtered" :key="photo.photo_id"><td><input type="checkbox" v-model="photo.selected" @change="toggleSelected(photo)" :disabled="!canEditPhotos"></td><td><img v-if="photo.previewUrl" :src="photo.previewUrl" @click="focused=photo"></td><td>{{ photo.original_name }}</td><td>{{ formatSize(photo.file_size) }}</td><td><select v-model="photo.system_code" :disabled="!canEditPhotos"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></td><td><button @click="movePhoto(photo,-1)">↑</button><button @click="movePhoto(photo,1)">↓</button></td><td><button class="danger" @click="deletePhoto(photo)">移除</button></td></tr>
       </tbody></table></div>
       <section class="pw-insert-panel">
         <div><h3>插入报告</h3><p>系统会在对应消防系统章节内寻找最后一个「现场检测照片」位置，并在其后插入新的 2×2 照片组。原有检测记录和原照片不会被删除。</p></div>
@@ -343,7 +343,7 @@ onBeforeUnmount(clearUrls)
       </section>
     </template>
     <div v-else class="pw-empty"><span>▧</span><b>选择项目并创建照片批次</b><p>每个批次独立保存照片、一级系统分类和排序。</p></div>
-    <div v-if="focused" class="pw-lightbox" role="dialog" aria-modal="true" @click.self="focused=null"><div class="pw-lightbox-card"><header><b>{{ focused.original_name }}</b><button type="button" @click="focused=null">✕</button></header><img :src="focused.previewUrl" :alt="focused.original_name"><label>所属消防系统<select v-model="focused.system_code" :disabled="!editable"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></label></div></div>
+    <div v-if="focused" class="pw-lightbox" role="dialog" aria-modal="true" @click.self="focused=null"><div class="pw-lightbox-card"><header><b>{{ focused.original_name }}</b><button type="button" @click="focused=null">✕</button></header><img :src="focused.previewUrl" :alt="focused.original_name"><label>所属消防系统<select v-model="focused.system_code" :disabled="!canEditPhotos"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></label></div></div>
   </section>
 </template>
 
