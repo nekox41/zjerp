@@ -71,7 +71,7 @@ class ReportDocxPhotoInserterTest {
             new ReportDocxPhotoInserter().insert(doc,List.of(
                 new ReportDocxPhotoInserter.Photo("火灾自动报警系统",png(),"new.png","2026-08-12","")
             ),false);
-            assertEquals(2,doc.getAllPictures().size());
+            assertEquals(2,pictureReferences(doc));
             assertEquals(3,doc.getTables().get(0).getRows().size());
             assertTrue(doc.getTables().get(0).getRow(0).getCell(0).getText().contains("模板旧内容"));
         }
