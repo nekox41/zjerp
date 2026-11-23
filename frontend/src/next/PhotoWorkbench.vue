@@ -129,6 +129,7 @@ async function selectReport() {
 }
 async function inspectTemplate() {
   templateSystems.value=[]
+  error.value=''
   if(!templateFileId.value) return
   templateInspecting.value=true
   try {
