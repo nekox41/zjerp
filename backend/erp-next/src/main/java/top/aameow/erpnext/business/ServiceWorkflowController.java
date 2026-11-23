@@ -227,6 +227,8 @@ public class ServiceWorkflowController {
         if(!Set.of("issued","archived").contains(report.get("status").toString()))throw new ResponseStatusException(HttpStatus.CONFLICT,"报告签发后才能登记交付");
         int version=b.get("versionNo")==null?((Number)report.get("current_version_no")).intValue():Integer.parseInt(b.get("versionNo").toString());
         one("SELECT report_id FROM erp_service_report_version WHERE report_id=? AND version_no=?",id,version);
+        Integer artifact=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_artifact WHERE report_id=? AND version_no=? AND artifact_type='docx'",Integer.class,id,version);
+        if(artifact==null||artifact==0)throw new ResponseStatusException(HttpStatus.CONFLICT,"当前报告版本尚未生成 DOCX 文件，不能登记正式交付");
         String method=b.get("deliveryMethod")==null?"courier":b.get("deliveryMethod").toString();
         if(!Set.of("courier","hand_delivery","electronic").contains(method))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效交付方式");
         jdbc.update("INSERT INTO erp_service_delivery(report_id,version_no,delivery_method,recipient_name,recipient_phone,recipient_organization,recipient_address,courier_name,tracking_no,status,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,'prepared',?,?)",
