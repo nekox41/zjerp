@@ -1,7 +1,9 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api, downloadFile } from './api'
 
+const props=defineProps({permissions:{type:Array,default:()=>[]}})
+const can=p=>props.permissions.includes(p)
 const section = ref('customers')
 const busy = ref(false)
 const error = ref('')
@@ -53,25 +55,30 @@ const forms = {
   amendment: ref({amendmentNo:'',title:'',changeSummary:'',revisedAmount:'',effectiveOn:''})
 }
 const rows = ref([])
-const config = {
+const allConfig = {
   employees:{title:'员工档案',endpoint:'/employees',form:'employee',permission:'employee:write'},
   customers:{title:'客户管理',endpoint:'/customers',form:'customer',permission:'customer:write'},
   contracts:{title:'合同管理',endpoint:'/contracts',form:'contract',permission:'contract:write'},
   projects:{title:'项目管理',endpoint:'/projects',form:'project',permission:'project:write'}
 }
+const config=computed(()=>Object.fromEntries(Object.entries(allConfig).filter(([k])=>can(allConfig[k].permission.replace(':write',':read')))))
+function ensureSection(){
+  if(!config.value[section.value])section.value=Object.keys(config.value)[0]||'customers'
+}
 async function load() {
   error.value=''; notice.value=''
   try {
+    ensureSection()
     const [e,c,ct,p,ids] = await Promise.all([
-      api('/business/employees').catch(()=>[]),
-      api('/business/customers').catch(()=>[]),
-      api('/business/contracts').catch(()=>[]),
-      api('/business/projects').catch(()=>[]),
-      api('/admin/identities').catch(()=>[])
+      can('employee:read')?api('/business/employees'):Promise.resolve([]),
+      can('customer:read')?api('/business/customers'):Promise.resolve([]),
+      can('contract:read')?api('/business/contracts'):Promise.resolve([]),
+      can('project:read')?api('/business/projects'):Promise.resolve([]),
+      can('identity:read')?api('/admin/identities'):Promise.resolve([])
     ])
     employees.value=e; customers.value=c; contracts.value=ct; projects.value=p; identities.value=ids
-    const cfg=config[section.value]
-    rows.value=cfg ? await api('/business'+cfg.endpoint+'?q='+encodeURIComponent(q.value)).catch(()=>[]) : []
+    const cfg=config.value[section.value]
+    rows.value=cfg ? await api('/business'+cfg.endpoint+'?q='+encodeURIComponent(q.value)) : []
   } catch(e) { error.value=e.message }
 }
 async function submit(kind) {
@@ -88,6 +95,8 @@ async function submit(kind) {
     else if(kind==='qualification'&&selectedEmployee.value) endpoint='/employees/'+selectedEmployee.value.id+'/qualifications'
     else if(kind==='amendment'&&selectedContract.value) endpoint='/contracts/'+selectedContract.value.id+'/amendments'
     if(!endpoint) throw new Error('请先选择对应的客户、员工或合同记录')
+    const required={employee:'employee:write',customer:'customer:write',contact:'customer:write',contract:'contract:write',amendment:'contract:write',project:'project:write',qualification:'employee:write'}[kind]
+    if(!required||!can(required))throw new Error('当前账号没有此项修改权限')
     await api('/business'+endpoint,{method:'POST',body:JSON.stringify(data)})
     notice.value='保存成功'; forms[kind].value=Object.fromEntries(Object.keys(forms[kind].value).map(k=>[k,typeof forms[kind].value[k]==='boolean'?false:'']))
     await load()
@@ -202,6 +211,7 @@ async function saveProject(){
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 watch(section,()=>{q.value='';load()})
+watch(()=>props.permissions,()=>{ensureSection();load()})
 onMounted(load)
 </script>
 
@@ -213,7 +223,7 @@ onMounted(load)
   <p v-if="error" class="message error">{{error}}</p><p v-if="notice" class="message success">{{notice}}</p>
   <div class="business-layout">
     <div class="business-list panel">
-      <div class="business-list-head"><div><h3>{{config[section].title}}</h3><p>统一维护业务主数据与关联记录</p></div><input v-model="q" placeholder="搜索名称或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
+      <div class="business-list-head"><div><h3>{{config[section]?.title||'业务管理'}}</h3><p>统一维护业务主数据与关联记录</p></div><input v-model="q" placeholder="搜索名称或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
       <div class="business-records">
         <button v-for="r in rows" :key="r.id" class="business-record" @click="section==='customers'?openCustomer(r.id):section==='projects'?openProject(r.id):section==='contracts'?openContract(r.id):section==='employees'?openEmployee(r.id):null">
           <b>{{r.name||r.full_name||r.title}}</b><small>{{r.customer_code||r.employee_code||r.contract_no||r.project_no||r.status||r.position_name}}</small>
@@ -222,7 +232,7 @@ onMounted(load)
         <p v-if="!rows.length" class="empty">暂无记录，使用下方表单创建第一条数据。</p>
       </div>
     </div>
-    <div class="business-forms panel">
+    <div v-if="can(allConfig[section]?.permission)" class="business-forms panel">
       <template v-if="section==='employees'">
         <h3>新增员工档案</h3><form class="create-grid" @submit.prevent="submit('employee')"><label>员工编号<input v-model="forms.employee.value.employeeCode"></label><label>姓名<input v-model="forms.employee.value.fullName" required></label><label>岗位<input v-model="forms.employee.value.positionName"></label><label>员工类型<select v-model="forms.employee.value.employeeType"><option value="general">普通员工</option><option value="operator">操作员</option><option value="engineer">工程师</option><option value="manager">管理人员</option></select></label><label>电话<input v-model="forms.employee.value.phone"></label><label>邮箱<input v-model="forms.employee.value.email" type="email"></label><label>关联登录账号<select v-model="forms.employee.value.identityId"><option value="">暂不关联</option><option v-for="x in identities" :value="x.id">{{x.username}} · {{x.display_name}}</option></select></label><button class="primary-button">创建员工</button></form>
       </template>
