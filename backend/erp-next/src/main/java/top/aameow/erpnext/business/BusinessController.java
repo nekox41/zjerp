@@ -65,12 +65,26 @@ public class BusinessController {
         String employeeType=b.get("employeeType")==null?existing.get("employee_type").toString():b.get("employeeType").toString();
         if(!Set.of("engineer","operator","employee","manager").contains(employeeType))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"员工类型无效");
-        Long identity=b.containsKey("identityId")?optionalLong(b,"identityId"):(existing.get("identity_id")==null?null:((Number)existing.get("identity_id")).longValue());
+        Long oldIdentity=existing.get("identity_id")==null?null:((Number)existing.get("identity_id")).longValue();
+        Long identity=b.containsKey("identityId")?optionalLong(b,"identityId"):oldIdentity;
         if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
+        if(b.containsKey("identityId")&&oldIdentity!=null&&!Objects.equals(oldIdentity,identity)) clearEmployeeRole(oldIdentity);
         jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),employee_type=?,identity_id=CASE WHEN ? THEN ? ELSE identity_id END,phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
           b.get("fullName"),employeeType,b.containsKey("identityId"),identity,b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
         if(identity!=null) syncEmployeeRole(identity,employeeType);
         audit(a,"employee.updated","erp_employee",id,"员工资料更新"); return employee(id);
+    }
+
+    private void clearEmployeeRole(long identityId) {
+        Integer isAdmin=jdbc.queryForObject("""
+          SELECT COUNT(*) FROM erp_identity_role ir JOIN erp_role r ON r.id=ir.role_id
+          WHERE ir.identity_id=? AND r.code='admin'
+          """,Integer.class,identityId);
+        if(isAdmin!=null&&isAdmin>0) return;
+        jdbc.update("""
+          DELETE ir FROM erp_identity_role ir JOIN erp_role r ON r.id=ir.role_id
+          WHERE ir.identity_id=? AND r.code IN ('employee','project_manager','finance','operator')
+          """,identityId);
     }
 
     private void syncEmployeeRole(long identityId,String employeeType) {
