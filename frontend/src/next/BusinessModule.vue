@@ -101,6 +101,8 @@ const customerEditOpen=ref(false),employeeEditOpen=ref(false),contractEditOpen=r
 const customerEditForm=ref({name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',status:'active',notes:''})
 const employeeEditForm=ref({fullName:'',employeeType:'general',identityId:'',positionName:'',phone:'',email:'',status:'active'})
 const contractEditForm=ref({title:'',contractType:'',serviceType:'other',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',status:'draft',notes:''})
+const projectEditOpen=ref(false)
+const projectEditForm=ref({name:'',description:'',managerEmployeeId:'',plannedStart:'',plannedEnd:'',status:'planned'})
 async function openEmployee(id) {
   try {
     selectedEmployee.value=employees.value.find(x=>x.id===id)
@@ -151,7 +153,27 @@ async function openProject(id) {
   try {
     selectedProject.value=await api('/business/projects/'+id)
     projectLogs.value=selectedProject.value.logs||[]
+    projectEditForm.value={
+      name:selectedProject.value.name||'',description:selectedProject.value.description||'',
+      managerEmployeeId:selectedProject.value.manager_employee_id||'',
+      plannedStart:selectedProject.value.planned_start||'',plannedEnd:selectedProject.value.planned_end||'',
+      status:selectedProject.value.status||'planned'
+    }
+    projectEditOpen.value=false
   } catch(e){error.value=e.message}
+}
+async function saveProject(){
+  if(!selectedProject.value)return
+  busy.value=true
+  try{
+    const body={...projectEditForm.value}
+    if(!body.managerEmployeeId)body.managerEmployeeId=null
+    if(!body.plannedStart)body.plannedStart=null
+    if(!body.plannedEnd)body.plannedEnd=null
+    await api('/business/projects/'+selectedProject.value.id,{method:'PUT',body:JSON.stringify(body)})
+    await load();await openProject(selectedProject.value.id)
+    projectEditOpen.value=false;notice.value='项目档案已更新'
+  }catch(e){error.value=e.message}finally{busy.value=false}
 }
 watch(section,()=>{q.value='';load()})
 onMounted(load)
@@ -235,7 +257,16 @@ onMounted(load)
           <button class="primary-button" :disabled="busy">创建项目</button>
         </form>
         <div v-if="selectedProject" class="related-card">
-          <h4>{{selectedProject.name}} · 项目档案</h4>
+          <div class="section-heading"><h4>{{selectedProject.name}} · 项目档案</h4><button class="secondary-button" @click="projectEditOpen=!projectEditOpen">{{projectEditOpen?'收起编辑':'编辑项目'}}</button></div>
+          <form v-if="projectEditOpen" class="create-grid compact" @submit.prevent="saveProject">
+            <label>项目名称<input v-model="projectEditForm.name" required></label>
+            <label>项目负责人<select v-model="projectEditForm.managerEmployeeId"><option value="">未分配</option><option v-for="x in employees.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_valid_qualification)" :value="x.id">{{x.full_name}}</option></select></label>
+            <label>计划开始<input v-model="projectEditForm.plannedStart" type="date"></label>
+            <label>计划结束<input v-model="projectEditForm.plannedEnd" type="date"></label>
+            <label>项目状态<select v-model="projectEditForm.status"><option value="planned">计划中</option><option value="in_progress">进行中</option><option value="paused">暂停</option><option value="completed">已完成</option><option value="cancelled">已取消</option></select></label>
+            <label>项目说明<input v-model="projectEditForm.description"></label>
+            <button class="primary-button" :disabled="busy">保存项目</button>
+          </form>
           <p>编号：{{selectedProject.project_no}} · 甲方：{{selectedProject.customer_name}}</p>
           <p>状态：{{selectedProject.status}} · 负责人：{{selectedProject.manager_name||'未分配'}} · 技术负责人：{{selectedProject.technical_lead_name||'未分配'}}</p>
           <p>{{selectedProject.description||'暂无项目说明'}}</p>
