@@ -45,7 +45,7 @@ public class ReportPhotoController {
         @RequestParam("categories") String categories
     ) throws IOException {
         if (template == null || template.isEmpty() || template.getSize() > 25L * 1024 * 1024 ||
-            !template.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".docx")) {
+            !Optional.ofNullable(template.getOriginalFilename()).orElse("").toLowerCase(Locale.ROOT).endsWith(".docx")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择 25MB 以内的 DOCX 报告");
         }
         if (photos == null || photos.isEmpty() || photos.size() > 300) {
@@ -130,10 +130,9 @@ public class ReportPhotoController {
                     .filename(name, StandardCharsets.UTF_8).build().toString())
                 .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
                 .body(output.toByteArray());
-        } catch (org.apache.poi.openxml4j.exceptions.InvalidFormatException | org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e) {
+        } catch (org.apache.poi.openxml4j.exceptions.InvalidFormatException |
+                 org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "DOCX 文件无效或已损坏", e);
-        } catch (org.apache.poi.openxml4j.exceptions.OLE2NotOfficeXmlFileException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请使用 DOCX 而不是旧版 DOC 格式", e);
         }
     }
 
