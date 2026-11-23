@@ -182,9 +182,11 @@ public class ServiceWorkflowController {
         if(!Set.of("draft","returned").contains(report.get("status").toString()))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿或退回状态的报告可以生成 DOCX");
         long templateId=Long.parseLong(req(b,"templateFileId"));
         Map<String,Object> template=one("SELECT * FROM erp_file_object WHERE id=?",templateId);
+        if(((Number)template.get("uploaded_by")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先上传自己有权使用的 DOCX 模板");
         if(!DOCX.equals(template.get("media_type"))||!template.get("original_name").toString().toLowerCase(Locale.ROOT).endsWith(".docx"))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"模板必须是 DOCX 文件");
         List<Long> batchIds=mapper.convertValue(b.get("batchIds"),new TypeReference<List<Long>>(){});
         if(batchIds==null||batchIds.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"至少选择一个已审核照片批次");
+        if(new HashSet<>(batchIds).size()!=batchIds.size())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片批次不能重复选择");
         int version=((Number)report.get("current_version_no")).intValue();
         List<ReportDocxPhotoInserter.Photo> photos=new ArrayList<>();
         for(Long batchId:batchIds){
