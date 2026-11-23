@@ -2,6 +2,7 @@ package top.aameow.erpnext.config;
 
 import top.aameow.erpnext.auth.TokenAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
+import jakarta.servlet.DispatcherType;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -35,7 +36,8 @@ public class SecurityConfig {
             .cors(Customizer.withDefaults())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login", "/api/bootstrap/**", "/actuator/health").permitAll()
+                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                .requestMatchers("/error", "/api/auth/login", "/api/bootstrap/**", "/actuator/health").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(tokenFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
