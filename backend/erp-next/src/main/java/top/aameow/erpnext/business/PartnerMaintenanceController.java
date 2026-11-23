@@ -62,8 +62,9 @@ public class PartnerMaintenanceController {
         java.math.BigDecimal remaining=jdbc.queryForObject(
             "SELECT COALESCE(SUM(share_percent),0) FROM erp_contract_partner WHERE contract_id=?",
             java.math.BigDecimal.class,id);
+        Integer count=jdbc.queryForObject("SELECT COUNT(*) FROM erp_contract_partner WHERE contract_id=?",Integer.class,id);
         jdbc.update("UPDATE erp_contract SET signing_source=?,partner_share_percent=? WHERE id=?",
-            remaining.signum()>0?"partner":"direct",remaining,id);
+            count!=null&&count>0?"partner":"direct",remaining,id);
         audit(actor(a),"contract.partner.unlinked","erp_contract",id,"partner="+partnerId);
         return one("SELECT id,signing_source,partner_share_percent FROM erp_contract WHERE id=?",id);
     }
