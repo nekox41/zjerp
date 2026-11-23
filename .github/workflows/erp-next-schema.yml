@@ -5,12 +5,14 @@ on:
       - 'erp-next/**'
       - 'backend/erp-next/**'
       - 'frontend/**'
+      - 'scripts/erp-next-*.sh'
       - '.github/workflows/erp-next-schema.yml'
   pull_request:
     paths:
       - 'erp-next/**'
       - 'backend/erp-next/**'
       - 'frontend/**'
+      - 'scripts/erp-next-*.sh'
       - '.github/workflows/erp-next-schema.yml'
 concurrency:
   group: erp-next-smoke-${{ github.head_ref || github.ref_name }}
@@ -29,7 +31,7 @@ jobs:
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml config --quiet
       - name: Start isolated MySQL
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d erp-next-mysql
-      - name: Apply schema V1 through V4
+      - name: Apply schema V1 through V5
         run: timeout 180 docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml run --rm erp-next-schema
       - name: Re-run migrations idempotently
         run: timeout 180 docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml run --rm erp-next-schema
@@ -37,10 +39,10 @@ jobs:
         run: |
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2','3','4') AND success = 1" | grep -qx 4
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2','3','4','5') AND success = 1" | grep -qx 5
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 23
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 27
       - name: Build and start API and web
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d --build
       - name: Collect container diagnostics
@@ -91,6 +93,7 @@ jobs:
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeId\":$EMP_ID,\"role\":\"负责人\"}" >/dev/null
           curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 员工'
           source scripts/erp-next-service-smoke.sh
+          source scripts/erp-next-report-smoke.sh
           if curl -fsS "http://127.0.0.1:8090/api/business/customers" >/dev/null; then echo 'Unauthenticated business request unexpectedly succeeded'; exit 1; fi
       - name: Stop isolated stack and remove CI-only volume
         if: always()
