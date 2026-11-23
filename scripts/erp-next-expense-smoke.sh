@@ -29,3 +29,11 @@ curl -fsS -X POST "http://127.0.0.1:8090/api/finance/expenses/$CLAIM_ID/pay" -H 
 DOUBLE_PAY=$(curl -sS -o /tmp/erp-expense-pay-repeat.json -w '%{http_code}' -X POST "http://127.0.0.1:8090/api/finance/expenses/$CLAIM_ID/pay" -H "Authorization: Bearer $FIN_TOKEN" -H 'Content-Type: application/json' -d '{"paymentReference":"CI-TRANSFER-1","paidAmount":"32.50"}')
 test "$DOUBLE_PAY" = "409"
 curl -fsS "http://127.0.0.1:8090/api/finance/expenses/$CLAIM_ID" -H "Authorization: Bearer $FIN_TOKEN" | grep -q 'CI-TRANSFER-1'
+
+# A second approved claim must not reuse an existing payment reference.
+SECOND=$(curl -fsS -X POST http://127.0.0.1:8090/api/finance/expenses -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"claimNo":"CI-EXP-002","title":"第二笔报账","lines":[{"description":"设备","category":"materials","incurredOn":"2026-11-20","amount":"1.00"}]}')
+SECOND_ID=$(python -c 'import json,sys;print(json.load(sys.stdin)["id"])' <<< "$SECOND")
+curl -fsS -X POST "http://127.0.0.1:8090/api/finance/expenses/$SECOND_ID/submit" -H "Authorization: Bearer $TOKEN" >/dev/null
+curl -fsS -X POST "http://127.0.0.1:8090/api/finance/expenses/$SECOND_ID/approve" -H "Authorization: Bearer $FIN_TOKEN" >/dev/null
+REUSED=$(curl -sS -o /tmp/erp-expense-reused-ref.json -w '%{http_code}' -X POST "http://127.0.0.1:8090/api/finance/expenses/$SECOND_ID/pay" -H "Authorization: Bearer $FIN_TOKEN" -H 'Content-Type: application/json' -d '{"paymentReference":"CI-TRANSFER-1","paidAmount":"1.00"}')
+test "$REUSED" = "409"
