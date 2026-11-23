@@ -9,6 +9,7 @@ const query = ref('')
 const rows = ref([])
 const customers = ref([])
 const employees = ref([])
+const identities = ref([])
 const intermediaries = ref([])
 const contracts = ref([])
 const selected = ref(null)
@@ -20,7 +21,7 @@ const attachmentForm = ref({ attachmentType:'signed_contract', title:'' })
 const forms = ref({
   customer:{ customerCode:'', name:'', creditCode:'', customerType:'enterprise', industry:'', phone:'', email:'', address:'', ownerEmployeeId:'', notes:'' },
   intermediary:{ intermediaryCode:'', name:'', contactName:'', phone:'', email:'', address:'', notes:'' },
-  employee:{ employeeCode:'', fullName:'', employeeType:'engineer', positionName:'', phone:'', email:'' },
+  employee:{ employeeCode:'', fullName:'', employeeType:'engineer', identityId:'', positionName:'', phone:'', email:'' },
   contract:{ contractNo:'', title:'', customerId:'', contractType:'maintenance', signingMode:'direct', intermediaryId:'', intermediarySharePercent:'', amount:'0', currency:'CNY', signedOn:'', startsOn:'', endsOn:'', ownerEmployeeId:'', notes:'' },
   project:{ projectNo:'', name:'', customerId:'', contractId:'', managerEmployeeId:'', technicalLeadEmployeeId:'', plannedStart:'', plannedEnd:'', description:'' }
 })
@@ -43,12 +44,12 @@ const engineers = computed(() => employees.value.filter(e=>e.employee_type==='en
 async function load() {
   loading.value=true; error.value=''
   try {
-    const [c,e,m,ct,p] = await Promise.all([
+    const [c,e,m,ct,p,ids] = await Promise.all([
       api('/business/customers').catch(()=>[]), api('/business/employees').catch(()=>[]),
       api('/business/intermediaries').catch(()=>[]), api('/business/contracts').catch(()=>[]),
-      api('/business/projects').catch(()=>[])
+      api('/business/projects').catch(()=>[]), api('/admin/identities').catch(()=>[])
     ])
-    customers.value=c; employees.value=e; intermediaries.value=m; contracts.value=ct
+    customers.value=c; employees.value=e; intermediaries.value=m; contracts.value=ct; identities.value=ids
     const allowed=sections.filter(x=>can(x.permission))
     if(!allowed.some(x=>x.id===section.value)) section.value=allowed[0]?.id || 'customers'
     await loadRows()
@@ -87,6 +88,7 @@ async function createRecord() {
       body.managerEmployeeId=body.managerEmployeeId ? Number(body.managerEmployeeId) : null
       body.technicalLeadEmployeeId=body.technicalLeadEmployeeId ? Number(body.technicalLeadEmployeeId) : null
     }
+    if(section.value==='employee') body.identityId=body.identityId ? Number(body.identityId) : null
     if(section.value==='contract') {
       body.customerId=Number(body.customerId)
       body.ownerEmployeeId=body.ownerEmployeeId ? Number(body.ownerEmployeeId) : null
@@ -182,6 +184,7 @@ onMounted(load)
           <template v-else-if="section==='employees'">
             <label>员工编号<input v-model="forms.employee.employeeCode" required></label><label>姓名<input v-model="forms.employee.fullName" required></label>
             <label>员工类型<select v-model="forms.employee.employeeType"><option value="engineer">工程师</option><option value="operator">操作员</option><option value="employee">普通员工</option><option value="manager">管理人员</option></select></label>
+            <label>关联登录账号（可选）<select v-model="forms.employee.identityId"><option value="">暂不关联账号</option><option v-for="i in identities" :key="i.id" :value="i.id">{{ i.display_name }} · {{ i.username }}</option></select></label>
             <label>岗位<input v-model="forms.employee.positionName"></label><label>联系电话<input v-model="forms.employee.phone"></label><label>邮箱<input v-model="forms.employee.email"></label>
           </template>
           <template v-else-if="section==='contracts'">
@@ -254,7 +257,7 @@ onMounted(load)
           <h4>关联合同</h4><div class="bw-mini-list"><div v-for="c in selected.contracts || []" :key="c.id"><b>{{ c.contract_no }} · {{ c.title }}</b><span>{{ c.customer_name }} · {{ c.intermediary_share_percent }}% · {{ c.status }}</span></div></div>
         </template>
         <template v-else-if="section==='employees'">
-          <div class="bw-detail-grid"><div><small>员工类型</small><b>{{ ({engineer:'工程师',operator:'操作员',employee:'普通员工',manager:'管理人员'})[selected.employee_type] }}</b></div><div><small>岗位</small><b>{{ selected.position_name || '—' }}</b></div><div><small>电话</small><b>{{ selected.phone || '—' }}</b></div><div><small>状态</small><b>{{ selected.status }}</b></div></div>
+          <div class="bw-detail-grid"><div><small>员工类型</small><b>{{ ({engineer:'工程师',operator:'操作员',employee:'普通员工',manager:'管理人员'})[selected.employee_type] }}</b></div><div><small>岗位</small><b>{{ selected.position_name || '—' }}</b></div><div><small>电话</small><b>{{ selected.phone || '—' }}</b></div><div><small>状态</small><b>{{ selected.status }}</b></div><div><small>登录账号</small><b>{{ selected.username || "未关联" }}</b></div></div>
           <h4>工程师资格记录</h4><div class="bw-mini-list"><div v-for="q in qualifications" :key="q.id"><b>{{ q.qualification_name }}</b><span>{{ q.certificate_no || '无证书编号' }} · 有效期至 {{ q.expires_on || '长期' }} · {{ q.effective_status || q.status }}</span></div></div>
           <form v-if="selected.employee_type==='engineer' && can('employee:write')" class="bw-form compact" @submit.prevent="addQualification">
             <label>资格名称<input v-model="qualificationForm.qualificationName" required></label><label>证书编号<input v-model="qualificationForm.certificateNo"></label><label>发证机关<input v-model="qualificationForm.issuingAuthority"></label><label>发证日期<input v-model="qualificationForm.issuedOn" type="date"></label><label>有效期至<input v-model="qualificationForm.expiresOn" type="date"></label><label>备注<input v-model="qualificationForm.notes"></label><button class="bw-primary">添加资格</button>
