@@ -1,11 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { api } from './api'
+import { api, downloadFile } from './api'
 const props=defineProps({permissions:{type:Array,default:()=>[]}})
 const can=p=>props.permissions.includes(p)
 const tab=ref('partners'),busy=ref(false),error=ref(''),notice=ref('')
 const partners=ref([]),contracts=ref([]),projects=ref([]),employees=ref([])
-const partner=ref(null),maintenance=ref(null)
+const partner=ref(null),maintenance=ref(null),contractDetail=ref(null)
 const partnerForm=ref({partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''})
 const linkForm=ref({contractId:'',partnerId:'',sharePercent:'',notes:'',fileType:'contract'})
 const projectLink=ref({projectId:'',contractId:'',relationType:'service'})
@@ -31,12 +31,16 @@ async function createPartner(){
   catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function openPartner(id){try{partner.value=await api('/business/partners/'+id)}catch(e){error.value=e.message}}
+async function openContractDetail(id){
+  if(!id){contractDetail.value=null;return}
+  try{contractDetail.value=await api('/business/contracts/'+id)}catch(e){error.value=e.message}
+}
 async function linkPartner(){
-  try{await api('/business/contracts/'+linkForm.value.contractId+'/partners',{method:'POST',body:JSON.stringify({partnerId:linkForm.value.partnerId,sharePercent:linkForm.value.sharePercent,notes:linkForm.value.notes})});notice.value='合同合作方及分成比例已保存';await load();if(partner.value)await openPartner(partner.value.id)}
+  try{await api('/business/contracts/'+linkForm.value.contractId+'/partners',{method:'POST',body:JSON.stringify({partnerId:linkForm.value.partnerId,sharePercent:linkForm.value.sharePercent,notes:linkForm.value.notes})});notice.value='合同合作方及分成比例已保存';await load();await openContractDetail(Number(linkForm.value.contractId));if(partner.value)await openPartner(partner.value.id)}
   catch(e){error.value=e.message}
 }
 async function linkProject(){
-  try{await api('/business/contracts/'+projectLink.value.contractId+'/projects',{method:'POST',body:JSON.stringify({projectId:projectLink.value.projectId,relationType:projectLink.value.relationType})});notice.value='合同与项目关联已保存'}
+  try{await api('/business/contracts/'+projectLink.value.contractId+'/projects',{method:'POST',body:JSON.stringify({projectId:projectLink.value.projectId,relationType:projectLink.value.relationType})});notice.value='合同与项目关联已保存';await openContractDetail(Number(projectLink.value.contractId))}
   catch(e){error.value=e.message}
 }
 async function saveLeadership(){
@@ -67,7 +71,7 @@ async function addMaintenanceVisit(){
 }
 async function uploadContractFile(event){
   const file=event.target.files?.[0];event.target.value='';if(!file||!linkForm.value.contractId)return
-  try{const fd=new FormData();fd.append('file',file);const uploaded=await api('/files',{method:'POST',body:fd});await api('/business/contracts/'+linkForm.value.contractId+'/files',{method:'POST',body:JSON.stringify({fileId:uploaded.id,fileType:linkForm.value.fileType})});notice.value='合同附件已保存'}
+  try{const fd=new FormData();fd.append('file',file);const uploaded=await api('/files',{method:'POST',body:fd});await api('/business/contracts/'+linkForm.value.contractId+'/files',{method:'POST',body:JSON.stringify({fileId:uploaded.id,fileType:linkForm.value.fileType})});notice.value='合同附件已保存';await openContractDetail(Number(linkForm.value.contractId))}
   catch(e){error.value=e.message}
 }
 onMounted(load)
@@ -92,7 +96,7 @@ onMounted(load)
 
   <div v-if="tab==='links'" class="pm-layout">
     <div class="pm-panel"><h3>合同介绍来源与分成</h3><form class="pm-form" @submit.prevent="linkPartner">
-      <label>合同<select v-model="linkForm.contractId" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
+      <label>合同<select v-model="linkForm.contractId" @change="openContractDetail(Number(linkForm.contractId))" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
       <label>合作方<select v-model="linkForm.partnerId" required><option value="">选择合作方</option><option v-for="p in partners" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
       <label>合同分成比例（%）<input v-model="linkForm.sharePercent" type="number" min="0" max="100" step="0.01" required></label><label>备注<input v-model="linkForm.notes"></label><button class="primary">保存合作关系</button>
     </form><p class="pm-note">一个合作方可以关联多份合同；每份合同可记录多个合作方，分成比例合计不得超过 100%。这里只记录约定比例，不登记实际付款。</p>
@@ -101,7 +105,14 @@ onMounted(load)
       <label>合同<select v-model="projectLink.contractId" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
       <label>项目<select v-model="projectLink.projectId" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
       <label>关联类型<select v-model="projectLink.relationType"><option value="service">服务合同</option><option value="renewal">年度续签</option><option value="supplement">补充合同</option><option value="other">其他</option></select></label><button class="primary">关联项目</button>
-    </form><p class="pm-note">项目可以先建立，后续再关联合同；一份合同可以覆盖多个项目，一个项目也可以保留多份年度合同历史。</p></div>
+    </form><p class="pm-note">项目可以先建立，后续再关联合同；一份合同可以覆盖多个项目，一个项目也可以保留多份年度合同历史。</p>
+      <div v-if="contractDetail" class="pm-detail"><h4>{{contractDetail.contract_no}} · 合同关联资料</h4>
+        <div v-if="contractDetail.partners?.length" class="pm-contract"><b>合作方与分成</b><small v-for="p in contractDetail.partners" :key="p.id">{{p.name}} · {{p.share_percent}}%</small></div>
+        <div v-if="contractDetail.projects?.length" class="pm-contract"><b>关联合同项目</b><small v-for="p in contractDetail.projects" :key="p.id">{{p.project_no}} · {{p.name}} · {{p.relation_type}}</small></div>
+        <div v-if="contractDetail.files?.length" class="pm-contract"><b>合同及项目附件</b><div v-for="f in contractDetail.files" :key="f.id" class="pm-file"><span>{{f.title||f.original_name}} · {{f.file_type}}</span><button type="button" @click="downloadFile(f.file_id,f.original_name)">下载</button></div></div>
+        <p v-if="!contractDetail.partners?.length&&!contractDetail.projects?.length&&!contractDetail.files?.length" class="pm-empty">暂无关联合作方、项目或附件</p>
+      </div>
+    </div>
   </div>
 
   <div v-if="tab==='leadership'" class="pm-panel"><h3>项目负责人及技术负责人</h3><form class="pm-form" @submit.prevent="saveLeadership">
@@ -109,7 +120,7 @@ onMounted(load)
     <label>项目负责人<select v-model="leadership.managerEmployeeId" required><option value="">选择工程师</option><option v-for="e in engineers" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
     <label>技术负责人<select v-model="leadership.technicalLeadEmployeeId" required><option value="">选择另一位工程师</option><option v-for="e in engineers.filter(x=>String(x.id)!==String(leadership.managerEmployeeId))" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
     <button class="primary">保存项目人员</button>
-  </form><p class="pm-note">前端只列出员工类型为工程师的人员；服务端还会校验两人不同、员工在职且具有有效资格记录。</p></div>
+  </form><p class="pm-note">前端只列出在职且具有有效资格记录的工程师；服务端还会校验两人不同并再次核验资格有效期。</p></div>
 
   <div v-if="tab==='maintenance'" class="pm-layout">
     <div class="pm-panel"><h3>选择维护保养项目</h3><div class="pm-list"><button v-for="p in projects" :key="p.id" @click="openMaintenance(p.id)" :class="{selected:String(maintenanceForm.projectId)===String(p.id)}"><b>{{p.name}}</b><small>{{p.project_no}} · {{p.customer_name}}</small></button></div></div>
@@ -136,5 +147,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.pm-module{display:grid;gap:16px;color:#293b55}.pm-head{display:flex;justify-content:space-between;align-items:flex-start}.pm-head h2{margin:4px 0;font-size:23px}.pm-head p{font-size:12px;color:#8390a2;margin:0}.pm-kicker{font-size:10px;letter-spacing:.14em;color:#587bb8;font-weight:700}.pm-head button,.pm-tabs button{border:1px solid #dfe6ef;border-radius:8px;padding:8px 12px;background:white;color:#60718a;font-size:12px}.pm-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #e6ebf2;padding-bottom:10px}.pm-tabs button.active{background:#edf3ff;border-color:#c8d7fa;color:#315bb3}.pm-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px}.pm-panel{background:#fff;border:1px solid #e6ebf2;border-radius:12px;padding:17px;display:grid;gap:14px;align-content:start}.pm-panel h3{font-size:15px;margin:0;color:#405675}.pm-form{display:grid;grid-template-columns:1fr 1fr;gap:11px}.pm-form label{display:grid;gap:5px;font-size:11px;color:#75849a}.pm-form .wide{grid-column:1/-1}.pm-form input,.pm-form select,.pm-form textarea{border:1px solid #dfe6ef;border-radius:8px;padding:9px;font:inherit;font-size:12px;color:#34465e;background:white;min-width:0}.pm-form select[multiple]{min-height:80px}.pm-form .check{display:flex;align-items:center;gap:8px}.pm-form .check input{width:auto}.primary{background:#315fca;color:white;border:0;border-radius:8px;padding:10px 14px;font-size:12px}.pm-list{display:grid;gap:7px;max-height:360px;overflow:auto}.pm-list button{display:grid;text-align:left;gap:4px;border:1px solid #e8edf4;background:white;border-radius:9px;padding:11px}.pm-list button.selected{border-color:#8da9e3;background:#f5f8ff}.pm-list b,.pm-contract b{font-size:12px}.pm-list small,.pm-contract small{font-size:10px;color:#8491a3}.pm-detail{border-top:1px solid #edf0f5;padding-top:12px;display:grid;gap:9px}.pm-detail h4{margin:0;font-size:12px}.pm-contract{display:grid;gap:3px;padding:8px 10px;border:1px solid #edf0f5;border-radius:8px}.pm-note{font-size:11px;color:#8290a3;line-height:1.7}.pm-upload{justify-self:start;background:#eef3fc;color:#4166aa;padding:9px 12px;border-radius:8px;font-size:11px;cursor:pointer}.pm-msg{padding:10px 13px;border-radius:8px;font-size:12px}.pm-msg.error{background:#fff0ed;color:#a33}.pm-msg.success{background:#eaf7ef;color:#287449}.pm-empty{font-size:11px;color:#9aa5b4;text-align:center;padding:18px}.pm-divider{height:1px;background:#edf0f5}.@media(max-width:800px){.pm-layout{grid-template-columns:1fr}}@media(max-width:520px){.pm-form{grid-template-columns:1fr}.pm-form .wide{grid-column:auto}}
+.pm-module{display:grid;gap:16px;color:#293b55}.pm-head{display:flex;justify-content:space-between;align-items:flex-start}.pm-head h2{margin:4px 0;font-size:23px}.pm-head p{font-size:12px;color:#8390a2;margin:0}.pm-kicker{font-size:10px;letter-spacing:.14em;color:#587bb8;font-weight:700}.pm-head button,.pm-tabs button{border:1px solid #dfe6ef;border-radius:8px;padding:8px 12px;background:white;color:#60718a;font-size:12px}.pm-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #e6ebf2;padding-bottom:10px}.pm-tabs button.active{background:#edf3ff;border-color:#c8d7fa;color:#315bb3}.pm-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px}.pm-panel{background:#fff;border:1px solid #e6ebf2;border-radius:12px;padding:17px;display:grid;gap:14px;align-content:start}.pm-panel h3{font-size:15px;margin:0;color:#405675}.pm-form{display:grid;grid-template-columns:1fr 1fr;gap:11px}.pm-form label{display:grid;gap:5px;font-size:11px;color:#75849a}.pm-form .wide{grid-column:1/-1}.pm-form input,.pm-form select,.pm-form textarea{border:1px solid #dfe6ef;border-radius:8px;padding:9px;font:inherit;font-size:12px;color:#34465e;background:white;min-width:0}.pm-form select[multiple]{min-height:80px}.pm-form .check{display:flex;align-items:center;gap:8px}.pm-form .check input{width:auto}.primary{background:#315fca;color:white;border:0;border-radius:8px;padding:10px 14px;font-size:12px}.pm-list{display:grid;gap:7px;max-height:360px;overflow:auto}.pm-list button{display:grid;text-align:left;gap:4px;border:1px solid #e8edf4;background:white;border-radius:9px;padding:11px}.pm-list button.selected{border-color:#8da9e3;background:#f5f8ff}.pm-list b,.pm-contract b{font-size:12px}.pm-list small,.pm-contract small{font-size:10px;color:#8491a3}.pm-file{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#667891}.pm-file button{border:1px solid #dfe6ef;background:#fff;border-radius:6px;padding:5px 8px;color:#4166aa;font-size:10px}.pm-detail{border-top:1px solid #edf0f5;padding-top:12px;display:grid;gap:9px}.pm-detail h4{margin:0;font-size:12px}.pm-contract{display:grid;gap:3px;padding:8px 10px;border:1px solid #edf0f5;border-radius:8px}.pm-note{font-size:11px;color:#8290a3;line-height:1.7}.pm-upload{justify-self:start;background:#eef3fc;color:#4166aa;padding:9px 12px;border-radius:8px;font-size:11px;cursor:pointer}.pm-msg{padding:10px 13px;border-radius:8px;font-size:12px}.pm-msg.error{background:#fff0ed;color:#a33}.pm-msg.success{background:#eaf7ef;color:#287449}.pm-empty{font-size:11px;color:#9aa5b4;text-align:center;padding:18px}.pm-divider{height:1px;background:#edf0f5}.@media(max-width:800px){.pm-layout{grid-template-columns:1fr}}@media(max-width:520px){.pm-form{grid-template-columns:1fr}.pm-form .wide{grid-column:auto}}
 </style>
