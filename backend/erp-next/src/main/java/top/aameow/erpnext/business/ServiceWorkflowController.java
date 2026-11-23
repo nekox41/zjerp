@@ -187,11 +187,14 @@ public class ServiceWorkflowController {
         List<Long> batchIds=mapper.convertValue(b.get("batchIds"),new TypeReference<List<Long>>(){});
         if(batchIds==null||batchIds.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"至少选择一个已审核照片批次");
         if(new HashSet<>(batchIds).size()!=batchIds.size())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片批次不能重复选择");
+        String photoMode=b.get("photoMode")==null?"append":b.get("photoMode").toString();
+        if(!Set.of("append","replace").contains(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效照片插入模式");
         int version=((Number)report.get("current_version_no")).intValue();
         List<ReportDocxPhotoInserter.Photo> photos=new ArrayList<>();
         for(Long batchId:batchIds){
             Map<String,Object> batch=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",batchId);
             if(!"reviewed".equals(batch.get("status"))&&!"locked".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"照片批次尚未通过审核");
+            if("append".equals(photoMode)&&"locked".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"追加模式不能重复使用已生成过的照片批次；如需重做请选择替换模式，或以上一版 DOCX 作为模板追加新批次");
             if(batch.get("report_id")!=null&&((Number)batch.get("report_id")).longValue()!=id)throw new ResponseStatusException(HttpStatus.CONFLICT,"照片批次已关联其他报告");
             if(((Number)batch.get("work_package_id")).longValue()!=((Number)report.get("work_package_id")).longValue())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片批次与报告不属于同一服务工作包");
             List<Map<String,Object>> rows=jdbc.queryForList("SELECT p.*,f.storage_key,f.original_name FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.batch_id=? ORDER BY p.system_code,p.sort_order,p.id",batchId);
@@ -204,8 +207,6 @@ public class ServiceWorkflowController {
         byte[] templateBytes=Files.readAllBytes(storage.resolve(template.get("storage_key").toString()));
         byte[] output;
         try(XWPFDocument doc=new XWPFDocument(new ByteArrayInputStream(templateBytes));java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
-            String photoMode=b.get("photoMode")==null?"append":b.get("photoMode").toString();
-            if(!Set.of("append","replace").contains(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效照片插入模式");
             inserter.insert(doc,photos,"replace".equals(photoMode));
             doc.write(out);output=out.toByteArray();
         } catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){
