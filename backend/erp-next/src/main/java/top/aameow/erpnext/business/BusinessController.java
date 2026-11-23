@@ -212,6 +212,11 @@ public class BusinessController {
             if(!Set.of("maintenance","fire_inspection","fire_assessment","fire_evaluation","other").contains(serviceType))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同服务类型无效");
         }
+        if("active".equals(b.get("status"))||"completed".equals(b.get("status"))) {
+            Integer projects=jdbc.queryForObject("SELECT COUNT(*) FROM erp_contract_project WHERE contract_id=?",Integer.class,id);
+            if(projects==null||projects==0)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同生效前至少应关联一个项目");
+        }
         jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),contract_type=COALESCE(?,contract_type),service_type=COALESCE(?,service_type),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
             b.get("title"),b.get("contractType"),b.get("serviceType"),b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
         if(b.containsKey("ownerEmployeeId")) jdbc.update("UPDATE erp_contract SET owner_employee_id=? WHERE id=?",owner,id);
