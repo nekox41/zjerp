@@ -43,12 +43,22 @@ async function linkProject(){
   try{await api('/business/contracts/'+projectLink.value.contractId+'/projects',{method:'POST',body:JSON.stringify({projectId:projectLink.value.projectId,relationType:projectLink.value.relationType})});notice.value='合同与项目关联已保存';await openContractDetail(Number(projectLink.value.contractId))}
   catch(e){error.value=e.message}
 }
+async function loadLeadership(id){
+  if(!id){leadership.value.managerEmployeeId='';leadership.value.technicalLeadEmployeeId='';return}
+  try{
+    const p=await api('/business/projects/'+id)
+    leadership.value.managerEmployeeId=p.manager_employee_id||''
+    leadership.value.technicalLeadEmployeeId=p.technical_lead_employee_id||''
+  }catch(e){error.value=e.message}
+}
 async function saveLeadership(){
   try{await api('/business/projects/'+leadership.value.projectId+'/leadership',{method:'PUT',body:JSON.stringify({managerEmployeeId:leadership.value.managerEmployeeId,technicalLeadEmployeeId:leadership.value.technicalLeadEmployeeId})});notice.value='项目负责人和技术负责人已保存'}
   catch(e){error.value=e.message}
 }
 async function openMaintenance(id){
   maintenanceForm.value.projectId=String(id)
+  visitForm.value.contractId=''
+  visitForm.value.employeeIds=[]
   try{
     maintenance.value=await api('/business/projects/'+id+'/maintenance')
     Object.assign(maintenanceForm.value,{
@@ -116,7 +126,7 @@ onMounted(load)
   </div>
 
   <div v-if="tab==='leadership'" class="pm-panel"><h3>项目负责人及技术负责人</h3><form class="pm-form" @submit.prevent="saveLeadership">
-    <label>项目<select v-model="leadership.projectId" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
+    <label>项目<select v-model="leadership.projectId" @change="loadLeadership(Number(leadership.projectId))" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
     <label>项目负责人<select v-model="leadership.managerEmployeeId" required><option value="">选择工程师</option><option v-for="e in engineers" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
     <label>技术负责人<select v-model="leadership.technicalLeadEmployeeId" required><option value="">选择另一位工程师</option><option v-for="e in engineers.filter(x=>String(x.id)!==String(leadership.managerEmployeeId))" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
     <button class="primary">保存项目人员</button>
