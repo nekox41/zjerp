@@ -62,8 +62,11 @@ public class BusinessController {
     @PutMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> updateEmployee(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_employee WHERE id=?",id);
-        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),organization_id=COALESCE(?,organization_id),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
-          b.get("fullName"),optionalLong(b,"organizationId"),b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
+        String employeeType=b.get("employeeType")==null?null:b.get("employeeType").toString();
+        if(employeeType!=null&&!Set.of("engineer","operator","employee","manager").contains(employeeType))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"员工类型无效");
+        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),employee_type=COALESCE(?,employee_type),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
+          b.get("fullName"),employeeType,b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
         audit(a,"employee.updated","erp_employee",id,"员工资料更新"); return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
 
@@ -71,7 +74,7 @@ public class BusinessController {
     public List<Map<String,Object>> employees(@RequestParam(defaultValue="") String q) {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
-          SELECT e.id,e.employee_code,e.full_name,e.organization_id,o.name organization_name,e.identity_id,
+          SELECT e.id,e.employee_code,e.full_name,e.employee_type,e.organization_id,o.name organization_name,e.identity_id,
                  e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on
           FROM erp_employee e LEFT JOIN erp_organization o ON o.id=e.organization_id
           WHERE ?='' OR e.full_name LIKE ? OR e.employee_code LIKE ? OR e.phone LIKE ?
@@ -80,11 +83,13 @@ public class BusinessController {
     }
     @PostMapping("/employees") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> createEmployee(@RequestBody Map<String,Object>b,Authentication a) {
-        String name=required(b,"fullName"); Long org=optionalLong(b,"organizationId"), identity=optionalLong(b,"identityId");
-        if(org!=null) one("SELECT id FROM erp_organization WHERE id=?",org);
+        String name=required(b,"fullName"); Long identity=optionalLong(b,"identityId");
+        String employeeType=val(b,"employeeType","employee");
+        if(!Set.of("engineer","operator","employee","manager").contains(employeeType))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"员工类型无效");
         if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
-        jdbc.update("INSERT INTO erp_employee(employee_code,full_name,organization_id,identity_id,phone,email,position_name,status) VALUES(?,?,?,?,?,?,?,'active')",
-            b.get("employeeCode"),name,org,identity,b.get("phone"),b.get("email"),b.get("positionName"));
+        jdbc.update("INSERT INTO erp_employee(employee_code,full_name,employee_type,identity_id,phone,email,position_name,status) VALUES(?,?,?,?,?,?,?,'active')",
+            b.get("employeeCode"),name,employeeType,identity,b.get("phone"),b.get("email"),b.get("positionName"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"employee.created","erp_employee",id,name);
         return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
@@ -126,6 +131,7 @@ public class BusinessController {
         audit(a,"customer.updated","erp_customer",id,"客户资料更新"); return customer(id);
     }
     private String val(Map<String,Object>b,String k,String d) { Object v=b.get(k); return v==null?d:v.toString(); }
+    private Long optionalLong(Map<String,Object>b,String k) { Object v=b.get(k); return v==null||v.toString().isBlank()?null:Long.valueOf(v.toString()); }
 
     @GetMapping("/customers/{id}/contacts") @PreAuthorize("hasAuthority('customer:read')")
     public List<Map<String,Object>> contacts(@PathVariable long id) { one("SELECT id FROM erp_customer WHERE id=?",id); return jdbc.queryForList("SELECT * FROM erp_customer_contact WHERE customer_id=? ORDER BY is_primary DESC,id",id); }
@@ -157,30 +163,60 @@ public class BusinessController {
     public List<Map<String,Object>> contracts(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String status) {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
-          SELECT ct.*,c.name customer_name,e.full_name owner_name FROM erp_contract ct
-          JOIN erp_customer c ON c.id=ct.customer_id LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id
-          WHERE (?='' OR ct.title LIKE ? OR ct.contract_no LIKE ? OR c.name LIKE ?)
+          SELECT ct.*,c.name customer_name,e.full_name owner_name,m.name intermediary_name
+          FROM erp_contract ct
+          JOIN erp_customer c ON c.id=ct.customer_id
+          LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id
+          LEFT JOIN erp_intermediary m ON m.id=ct.intermediary_id
+          WHERE (?='' OR ct.title LIKE ? OR ct.contract_no LIKE ? OR c.name LIKE ? OR m.name LIKE ?)
             AND (?='' OR ct.status=?) ORDER BY ct.id DESC LIMIT 500
-          """,q.trim(),term,term,term,status,status);
+          """,q.trim(),term,term,term,term,status,status);
     }
     @PostMapping("/contracts") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> createContract(@RequestBody Map<String,Object>b,Authentication a) {
         String no=required(b,"contractNo"), title=required(b,"title"); Long customer=Long.valueOf(required(b,"customerId")), owner=optionalLong(b,"ownerEmployeeId");
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
+        String contractType=val(b,"contractType","other");
+        if(!Set.of("maintenance","fire_inspection","fire_evaluation","fire_assessment","other").contains(contractType))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同类型无效");
+        String signingMode=val(b,"signingMode","direct");
+        Long intermediary=optionalLong(b,"intermediaryId");
+        BigDecimal share=b.get("intermediarySharePercent")==null?null:new BigDecimal(b.get("intermediarySharePercent").toString());
+        String intermediaryName=null;
+        if("intermediary".equals(signingMode)){
+            if(intermediary==null||share==null||share.signum()<0||share.compareTo(BigDecimal.valueOf(100))>0)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"中间人合同必须选择中间人并填写 0–100 的分成比例");
+            intermediaryName=one("SELECT name FROM erp_intermediary WHERE id=? AND status='active'",intermediary).get("name").toString();
+        } else if(!"direct".equals(signingMode)||intermediary!=null||share!=null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"直接签约合同不能关联中间人或分成比例");
+        }
         BigDecimal amount=new BigDecimal(val(b,"amount","0")); if(amount.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
         jdbc.update("""
-          INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-          """,no,title,customer,b.get("contractType"),amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
+          INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,signing_mode,intermediary_id,intermediary_name_snapshot,intermediary_share_percent,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          """,no,title,customer,contractType,signingMode,intermediary,intermediaryName,share,amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"contract.created","erp_contract",id,no+" "+title);
-        return one("SELECT ct.*,c.name customer_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id WHERE ct.id=?",id);
+        return contract(id);
     }
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> updateContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_contract WHERE id=?",id);
-        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
-            b.get("title"),b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
-        audit(a,"contract.updated","erp_contract",id,"合同资料更新"); return one("SELECT * FROM erp_contract WHERE id=?",id);
+        String signingMode=b.get("signingMode")==null?null:b.get("signingMode").toString();
+        if(signingMode!=null&&!Set.of("direct","intermediary").contains(signingMode))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"签约方式无效");
+        Long intermediary=optionalLong(b,"intermediaryId");
+        BigDecimal share=b.get("intermediarySharePercent")==null?null:new BigDecimal(b.get("intermediarySharePercent").toString());
+        String intermediaryName=null;
+        if("intermediary".equals(signingMode)||intermediary!=null||share!=null){
+            if(!"intermediary".equals(signingMode)||intermediary==null||share==null||share.signum()<0||share.compareTo(BigDecimal.valueOf(100))>0)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"中间人合同必须完整填写中间人与分成比例");
+            intermediaryName=one("SELECT name FROM erp_intermediary WHERE id=? AND status='active'",intermediary).get("name").toString();
+        } else if("direct".equals(signingMode)){
+            intermediary=null;share=null;intermediaryName=null;
+        }
+        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),contract_type=COALESCE(?,contract_type),signing_mode=COALESCE(?,signing_mode),intermediary_id=?,intermediary_name_snapshot=?,intermediary_share_percent=?,amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
+            b.get("title"),b.get("contractType"),signingMode,intermediary,intermediaryName,share,b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
+        audit(a,"contract.updated","erp_contract",id,"合同资料更新"); return contract(id);
     }
 
     @GetMapping("/projects") @PreAuthorize("hasAuthority('project:read')")
@@ -199,34 +235,94 @@ public class BusinessController {
         String no=required(b,"projectNo"), name=required(b,"name"); long customer=Long.parseLong(required(b,"customerId"));
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); Long contract=optionalLong(b,"contractId");
         if(contract!=null) { Map<String,Object> ct=one("SELECT id,customer_id FROM erp_contract WHERE id=?",contract); if(((Number)ct.get("customer_id")).longValue()!=customer) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同客户与项目客户不一致"); }
-        Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) one("SELECT id FROM erp_employee WHERE id=?",manager);
-        jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,progress,status) VALUES(?,?,?,?,?,?,?,?,0,'planned')",
-            no,name,contract,customer,b.get("description"),manager,b.get("plannedStart"),b.get("plannedEnd"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.created","erp_project",id,no+" "+name);
+        Long manager=optionalLong(b,"managerEmployeeId"), technicalLead=optionalLong(b,"technicalLeadEmployeeId");
+        if(manager!=null) assertQualifiedEngineer(manager,"项目负责人");
+        if(technicalLead!=null) assertQualifiedEngineer(technicalLead,"技术负责人");
+        if(manager!=null&&manager.equals(technicalLead)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是不同人员");
+        jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,actual_start,actual_end,progress,status,honeybee_uploaded,documents_ready,maintenance_card_sent) VALUES(?,?,?,?,?,?,?,?,?,0,'planned',?,?,?)",
+            no,name,contract,customer,b.get("description"),manager,technicalLead,b.get("actualStart"),b.get("actualEnd"),
+            Boolean.parseBoolean(val(b,"honeybeeUploaded","false")),Boolean.parseBoolean(val(b,"documentsReady","false")),Boolean.parseBoolean(val(b,"maintenanceCardSent","false")));
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        if(contract!=null) jdbc.update("INSERT INTO erp_project_contract(project_id,contract_id,relation_type,is_current) VALUES(?,?,'initial',TRUE)",id,contract);
+        audit(a,"project.created","erp_project",id,no+" "+name);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
-        return one("SELECT * FROM erp_project WHERE id=?",id);
+        return project(id);
     }
     @PutMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> updateProject(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_project WHERE id=?",id);
         BigDecimal progress=b.get("progress")==null?null:new BigDecimal(b.get("progress").toString());
         if(progress!=null && (progress.compareTo(BigDecimal.ZERO)<0||progress.compareTo(BigDecimal.valueOf(100))>0)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"进度必须在 0 到 100 之间");
-        jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=COALESCE(?,manager_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),progress=COALESCE(?,progress),status=COALESCE(?,status) WHERE id=?",
-            b.get("name"),b.get("description"),optionalLong(b,"managerEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),progress,b.get("status"),id);
-        audit(a,"project.updated","erp_project",id,"项目进度或资料更新");
+        Long manager=optionalLong(b,"managerEmployeeId"),technicalLead=optionalLong(b,"technicalLeadEmployeeId");
+        if(b.containsKey("managerEmployeeId")&&manager!=null) assertQualifiedEngineer(manager,"项目负责人");
+        if(b.containsKey("technicalLeadEmployeeId")&&technicalLead!=null) assertQualifiedEngineer(technicalLead,"技术负责人");
+        Long finalManager=b.containsKey("managerEmployeeId")?manager:optionalLong(one("SELECT manager_employee_id FROM erp_project WHERE id=?",id),"manager_employee_id");
+        Long finalLead=b.containsKey("technicalLeadEmployeeId")?technicalLead:optionalLong(one("SELECT technical_lead_employee_id FROM erp_project WHERE id=?",id),"technical_lead_employee_id");
+        if(finalManager!=null&&finalManager.equals(finalLead)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是不同人员");
+        jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=?,technical_lead_employee_id=?,actual_start=CASE WHEN ? THEN ? ELSE actual_start END,actual_end=CASE WHEN ? THEN ? ELSE actual_end END,progress=COALESCE(?,progress),status=COALESCE(?,status),honeybee_uploaded=COALESCE(?,honeybee_uploaded),documents_ready=COALESCE(?,documents_ready),maintenance_card_sent=COALESCE(?,maintenance_card_sent) WHERE id=?",
+            b.get("name"),b.get("description"),finalManager,finalLead,b.containsKey("actualStart"),blankToNull(b.get("actualStart")),b.containsKey("actualEnd"),blankToNull(b.get("actualEnd")),
+            progress,b.get("status"),b.get("honeybeeUploaded"),b.get("documentsReady"),b.get("maintenanceCardSent"),id);
+        audit(a,"project.updated","erp_project",id,"项目资料更新");
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'updated',?)",id,actor(a),val(b,"log","项目资料更新"));
-        return one("SELECT * FROM erp_project WHERE id=?",id);
+        return project(id);
     }
     @GetMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:read')")
-    public Map<String,Object> contract(@PathVariable long id) {
-        return one("SELECT ct.*,c.name customer_name,e.full_name owner_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id WHERE ct.id=?",id);
+    public Map<String,Object> contract(@PathVariable long id) { return contractDetail(id); }
+
+    private Map<String,Object> contract(long id) { return contractDetail(id); }
+    private Map<String,Object> contractDetail(long id) {
+        Map<String,Object> result=new LinkedHashMap<>(one("""
+          SELECT ct.*,c.name customer_name,e.full_name owner_name,m.name intermediary_name
+          FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id
+          LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id
+          LEFT JOIN erp_intermediary m ON m.id=ct.intermediary_id WHERE ct.id=?
+          """,id));
+        result.put("projects",jdbc.queryForList("""
+          SELECT p.id,p.project_no,p.name,pc.relation_type,pc.is_current
+          FROM erp_project_contract pc JOIN erp_project p ON p.id=pc.project_id
+          WHERE pc.contract_id=? ORDER BY pc.is_current DESC,p.id DESC
+          """,id));
+        result.put("attachments",jdbc.queryForList("""
+          SELECT a.id attachment_id,a.attachment_type,a.title,a.created_at,f.id file_id,f.original_name,f.media_type,f.byte_size file_size,f.sha256
+          FROM erp_contract_attachment a JOIN erp_file_object f ON f.id=a.file_id
+          WHERE a.contract_id=? ORDER BY a.created_at DESC
+          """,id));
+        return result;
     }
 
     @GetMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:read')")
-    public Map<String,Object> project(@PathVariable long id) {
-        Map<String,Object> result=new LinkedHashMap<>(one("SELECT p.*,c.name customer_name,ct.contract_no,ct.title contract_title,e.full_name manager_name FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id LEFT JOIN erp_contract ct ON ct.id=p.contract_id LEFT JOIN erp_employee e ON e.id=p.manager_employee_id WHERE p.id=?",id));
-        result.put("members",members(id)); result.put("milestones",milestones(id)); result.put("logs",logs(id)); return result;
+    public Map<String,Object> project(@PathVariable long id) { return projectDetail(id); }
+    private Map<String,Object> project(long id) { return projectDetail(id); }
+    private Map<String,Object> projectDetail(long id) {
+        Map<String,Object> result=new LinkedHashMap<>(one("""
+          SELECT p.*,c.name customer_name,ct.contract_no,ct.title contract_title,
+                 e.full_name manager_name,te.full_name technical_lead_name
+          FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id
+          LEFT JOIN erp_contract ct ON ct.id=p.contract_id
+          LEFT JOIN erp_employee e ON e.id=p.manager_employee_id
+          LEFT JOIN erp_employee te ON te.id=p.technical_lead_employee_id WHERE p.id=?
+          """,id));
+        result.put("contracts",jdbc.queryForList("""
+          SELECT pc.id,pc.contract_id,pc.relation_type,pc.is_current,ct.contract_no,ct.title,ct.contract_type,
+                 ct.starts_on,ct.ends_on,ct.status,ct.signing_mode,ct.intermediary_name_snapshot,ct.intermediary_share_percent
+          FROM erp_project_contract pc JOIN erp_contract ct ON ct.id=pc.contract_id
+          WHERE pc.project_id=? ORDER BY pc.is_current DESC,ct.starts_on DESC,pc.id DESC
+          """,id));
+        result.put("scopeUnits",jdbc.queryForList("SELECT * FROM erp_project_scope_unit WHERE project_id=? ORDER BY id",id));
+        result.put("members",members(id)); result.put("logs",logs(id)); return result;
     }
+
+    private void assertQualifiedEngineer(long employeeId,String label) {
+        Map<String,Object> employee=one("SELECT id,employee_type,status FROM erp_employee WHERE id=?",employeeId);
+        if(!"active".equals(employee.get("status"))||!"engineer".equals(employee.get("employee_type")))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,label+"必须选择在职工程师");
+        Integer count=jdbc.queryForObject("""
+          SELECT COUNT(*) FROM erp_employee_qualification
+          WHERE employee_id=? AND status='valid' AND (expires_on IS NULL OR expires_on>=CURRENT_DATE)
+          """,Integer.class,employeeId);
+        if(count==null||count==0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,label+"必须具有有效的工程师资格记录");
+    }
+    private String blankToNull(Object value) { return value==null||value.toString().isBlank()?null:value.toString(); }
 
     @PutMapping("/projects/{id}/members/{employeeId}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public void updateMember(@PathVariable long id,@PathVariable long employeeId,@RequestBody Map<String,Object>b,Authentication a) {
