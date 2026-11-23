@@ -8,6 +8,7 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblGrid;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTrPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTcPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -185,8 +186,8 @@ public final class DocxPhotoInserter {
     }
 
     private static void copyTableStyle(XWPFTable source,XWPFTable target) {
-        if(source.getCTTbl().isSetTblPr()) target.getCTTbl().setTblPr((CTTblPr)source.getCTTbl().getTblPr().copy());
-        if(source.getCTTbl().isSetTblGrid()) target.getCTTbl().setTblGrid((CTTblGrid)source.getCTTbl().getTblGrid().copy());
+        if(source.getCTTbl().getTblPr()!=null) target.getCTTbl().setTblPr((CTTblPr)source.getCTTbl().getTblPr().copy());
+        if(source.getCTTbl().getTblGrid()!=null) target.getCTTbl().setTblGrid((CTTblGrid)source.getCTTbl().getTblGrid().copy());
     }
 
     private static void copyRowStyle(XWPFTable source,int sourceIndex,XWPFTableRow target) {
@@ -210,7 +211,7 @@ public final class DocxPhotoInserter {
     private static void copyRunStyle(XWPFParagraph source,XWPFRun target) {
         if(source.getRuns().isEmpty()) return;
         XWPFRun original=source.getRuns().get(0);
-        if(original.getCTR().isSetRPr()) target.getCTR().setRPr(original.getCTR().getRPr().copy());
+        if(original.getCTR().isSetRPr()) target.getCTR().setRPr((CTRPr)original.getCTR().getRPr().copy());
     }
 
     private record ImageSize(int width,int height) { }
