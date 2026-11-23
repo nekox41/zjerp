@@ -35,6 +35,18 @@ mvn -B -f backend/erp-next/pom.xml verify
 cd frontend && npm ci && npm run build:prod
 ```
 
+## Codespaces 一键启动新版 ERP（推荐测试）
+
+在 GitHub Codespaces 打开仓库后，直接运行：
+
+```bash
+bash start.sh
+```
+
+脚本首次运行会生成独立随机数据库密码和管理员初始化令牌，保存到被 Git 忽略的 `erp-next/.env.local`，自动构建并启动新版 MySQL、Flyway、API 和 Web，完成健康检查后输出访问地址。**Codespaces 的 8089 转发端口请始终设为 Private**。首次打开 `/next.html` 时，从本地 `erp-next/.env.local` 获取 `ERP_BOOTSTRAP_TOKEN` 初始化管理员，密码至少 12 位。
+
+再次运行 `bash start.sh` 可升级/重建应用，保留已有密码、数据库和附件卷；`bash start.sh status` 查看状态，`bash start.sh logs` 查看日志，`bash start.sh stop` 安全停止（不删除持久化数据）。请勿运行 `docker compose down -v`。该入口专用于 `erp_next` 新库，不连接旧生产系统；Codespaces 用于验收测试，不代表已完成生产 HTTPS/备份恢复演练。
+
 ## 启动新版 ERP
 
 ```bash
@@ -47,7 +59,7 @@ docker compose --env-file erp-next/.env.local -f erp-next/compose.yaml up -d --b
 
 ## 旧版部署
 
-原有 RuoYi 部署配置仍位于 backend/，与新版 ERP Compose 分离。不要将旧版部署文件当作新版生产部署，也不要把旧版生产数据库指向 erp_next。新版部署目前处于早期平台开发阶段，尚未完成备份恢复演练与生产上线验收。
+原有 RuoYi 部署配置仍位于 backend/，与新版 ERP Compose 分离。不要将旧版部署文件当作新版生产部署，也不要把旧版生产数据库指向 erp_next。新版尚未完成生产 HTTPS、恢复演练与完整浏览器验收；现有 CI 仅证明自动化检查通过。
 
 ## 仓库历史
 
