@@ -54,6 +54,20 @@ public class PartnerMaintenanceController {
         audit(actor(a),"contract.partner.linked","erp_contract",id,"partner="+partner+",share="+share);
         return one("SELECT * FROM erp_contract_partner WHERE contract_id=? AND partner_id=?",id,partner);
     }
+    @DeleteMapping("/contracts/{id}/partners/{partnerId}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
+    public Map<String,Object> unlinkPartner(@PathVariable long id,@PathVariable long partnerId,Authentication a){
+        one("SELECT id FROM erp_contract WHERE id=?",id);
+        int removed=jdbc.update("DELETE FROM erp_contract_partner WHERE contract_id=? AND partner_id=?",id,partnerId);
+        if(removed==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"合同合作关系不存在");
+        java.math.BigDecimal remaining=jdbc.queryForObject(
+            "SELECT COALESCE(SUM(share_percent),0) FROM erp_contract_partner WHERE contract_id=?",
+            java.math.BigDecimal.class,id);
+        jdbc.update("UPDATE erp_contract SET signing_source=?,partner_share_percent=? WHERE id=?",
+            remaining.signum()>0?"partner":"direct",remaining,id);
+        audit(actor(a),"contract.partner.unlinked","erp_contract",id,"partner="+partnerId);
+        return one("SELECT id,signing_source,partner_share_percent FROM erp_contract WHERE id=?",id);
+    }
+
     @GetMapping("/contracts/{id}/partners") @PreAuthorize("hasAuthority('contract:read')")
     public List<Map<String,Object>> contractPartners(@PathVariable long id){
         return jdbc.queryForList("SELECT p.*,cp.share_percent,cp.notes FROM erp_contract_partner cp JOIN erp_partner p ON p.id=cp.partner_id WHERE cp.contract_id=? ORDER BY p.name",id);
