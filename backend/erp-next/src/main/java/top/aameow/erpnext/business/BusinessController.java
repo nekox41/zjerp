@@ -62,8 +62,8 @@ public class BusinessController {
     @PutMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> updateEmployee(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_employee WHERE id=?",id);
-        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),organization_id=COALESCE(?,organization_id),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
-          b.get("fullName"),optionalLong(b,"organizationId"),b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
+        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),organization_id=COALESCE(?,organization_id),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),employee_type=COALESCE(?,employee_type),status=COALESCE(?,status) WHERE id=?",
+          b.get("fullName"),optionalLong(b,"organizationId"),b.get("phone"),b.get("email"),b.get("positionName"),b.get("employeeType"),b.get("status"),id);
         audit(a,"employee.updated","erp_employee",id,"员工资料更新"); return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
 
@@ -178,8 +178,8 @@ public class BusinessController {
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> updateContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_contract WHERE id=?",id);
-        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
-            b.get("title"),b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
+        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),service_type=COALESCE(?,service_type),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
+            b.get("title"),b.get("serviceType"),b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
         audit(a,"contract.updated","erp_contract",id,"合同资料更新"); return one("SELECT * FROM erp_contract WHERE id=?",id);
     }
 
