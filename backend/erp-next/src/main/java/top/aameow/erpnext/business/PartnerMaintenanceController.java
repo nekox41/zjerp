@@ -164,13 +164,26 @@ public class PartnerMaintenanceController {
             Map<String,Object> currentContract=one("SELECT c.id,c.status,c.starts_on,c.ends_on FROM erp_contract c JOIN erp_contract_project cp ON cp.contract_id=c.id WHERE c.id=? AND cp.project_id=? AND c.service_type='maintenance'",current,id);
             if(!"active".equals(currentContract.get("status")))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"当前有效维保合同必须处于履行中状态");
-            jdbc.update("UPDATE erp_project SET planned_start=?,planned_end=? WHERE id=?",
-                currentContract.get("starts_on"),currentContract.get("ends_on"),id);
+            if(currentContract.get("starts_on")!=null&&currentContract.get("ends_on")!=null)
+                jdbc.update("UPDATE erp_project SET planned_start=?,planned_end=? WHERE id=?",
+                    currentContract.get("starts_on"),currentContract.get("ends_on"),id);
         }
-        String card=b.get("publicCardStatus")==null?"not_started":b.get("publicCardStatus").toString();
+        Map<String,Object> previous=jdbc.queryForList("SELECT * FROM erp_maintenance_project WHERE project_id=?",id)
+            .stream().findFirst().orElse(Map.of());
+        String card=b.get("publicCardStatus")==null?Objects.toString(previous.get("public_card_status"),"not_started"):b.get("publicCardStatus").toString();
+        boolean uploaded=b.containsKey("honeybeeContractUploaded")
+            ?Boolean.parseBoolean(Objects.toString(b.get("honeybeeContractUploaded"),"false"))
+            :Boolean.TRUE.equals(previous.get("honeybee_contract_uploaded"))||Integer.valueOf(1).equals(previous.get("honeybee_contract_uploaded"));
+        boolean created=b.containsKey("honeybeeProjectCreated")
+            ?Boolean.parseBoolean(Objects.toString(b.get("honeybeeProjectCreated"),"false"))
+            :Boolean.TRUE.equals(previous.get("honeybee_project_created"))||Integer.valueOf(1).equals(previous.get("honeybee_project_created"));
+        boolean materials=b.containsKey("projectMaterialsCompleted")
+            ?Boolean.parseBoolean(Objects.toString(b.get("projectMaterialsCompleted"),"false"))
+            :Boolean.TRUE.equals(previous.get("project_materials_completed"))||Integer.valueOf(1).equals(previous.get("project_materials_completed"));
         if(!Set.of("not_started","preparing","sent","delivered").contains(card))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效公示卡状态");
         jdbc.update("INSERT INTO erp_maintenance_project(project_id,honeybee_contract_uploaded,honeybee_project_created,project_materials_completed,public_card_status,current_contract_id,notes,updated_by) VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE honeybee_contract_uploaded=VALUES(honeybee_contract_uploaded),honeybee_project_created=VALUES(honeybee_project_created),project_materials_completed=VALUES(project_materials_completed),public_card_status=VALUES(public_card_status),current_contract_id=VALUES(current_contract_id),notes=VALUES(notes),updated_by=VALUES(updated_by)",
-            id,Boolean.parseBoolean(Objects.toString(b.get("honeybeeContractUploaded"),"false")),Boolean.parseBoolean(Objects.toString(b.get("honeybeeProjectCreated"),"false")),Boolean.parseBoolean(Objects.toString(b.get("projectMaterialsCompleted"),"false")),card,current,b.get("notes"),actor(a));
+            id,uploaded,created,materials,card,b.containsKey("currentContractId")?current:previous.get("current_contract_id"),
+            b.containsKey("notes")?b.get("notes"):previous.get("notes"),actor(a));
         audit(actor(a),"maintenance.project.updated","erp_maintenance_project",id,card);
         return maintenance(id);
     }
