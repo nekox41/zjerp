@@ -211,7 +211,7 @@ onMounted(refresh)
         <DashboardModule v-else-if="tab==='dashboard'" />
         <InvoiceModule v-else-if="tab==='invoices'" :permissions="user.permissions" />
         <FinanceModule v-else-if="tab==='finance'" :permissions="user.permissions" :user-id="user.id" />
-        <BusinessModule v-else />
+        <BusinessModule v-else :permissions="user.permissions" />
       </div>
     </section>
   </main>
