@@ -6,6 +6,7 @@ import FinanceModule from './FinanceModule.vue'
 import InvoiceModule from './InvoiceModule.vue'
 import DashboardModule from './DashboardModule.vue'
 import PhotoWorkbench from './PhotoWorkbench.vue'
+import ServiceWorkflow from './ServiceWorkflow.vue'
 
 const loading = ref(true)
 const submitting = ref(false)
@@ -144,6 +145,7 @@ onMounted(refresh)
       <button v-if="can('project:read')" :class="{active:tab==='dashboard'}" @click="tab='dashboard'"><span>◫</span>经营驾驶舱</button>
       <div class="side-caption">业务管理</div>
       <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务全生命周期</button>
+      <button v-if="can('service:read')" :class="{active:tab==='service-workflow'}" @click="tab='service-workflow'"><span>◈</span>技术服务交付</button>
       <button v-if="can('report:write')" :class="{active:tab==='photo-workbench'}" @click="tab='photo-workbench'"><span>▧</span>现场照片整理</button>
       <div class="side-caption">财务管理</div>
       <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>
@@ -154,7 +156,7 @@ onMounted(refresh)
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='photo-workbench'?'现场照片整理':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='service-workflow'?'技术服务交付':tab==='photo-workbench'?'现场照片整理':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
       <div class="content">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
@@ -172,6 +174,7 @@ onMounted(refresh)
         <template v-else-if="tab==='audit'">
           <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
         </template>
+        <ServiceWorkflow v-else-if="tab==='service-workflow'" :permissions="user.permissions" :user-id="user.id" />
         <PhotoWorkbench v-else-if="tab==='photo-workbench'" />
         <DashboardModule v-else-if="tab==='dashboard'" />
         <InvoiceModule v-else-if="tab==='invoices'" :permissions="user.permissions" />
