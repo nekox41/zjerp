@@ -205,7 +205,9 @@ public class BusinessController {
         Long manager=optionalLong(b,"managerEmployeeId"), technicalLead=optionalLong(b,"technicalLeadEmployeeId"); if(manager!=null) one("SELECT id FROM erp_employee WHERE id=?",manager); if(technicalLead!=null) one("SELECT id FROM erp_employee WHERE id=?",technicalLead);
         jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,actual_start,actual_end,progress,status,honeybee_uploaded,documents_ready,maintenance_card_sent) VALUES(?,?,?,?,?,?,?,?,?,0,'planned',?,?,?)",
             no,name,contract,customer,b.get("description"),manager,technicalLead,b.get("actualStart"),b.get("actualEnd"),Boolean.parseBoolean(val(b,"honeybeeUploaded","false")),Boolean.parseBoolean(val(b,"documentsReady","false")),Boolean.parseBoolean(val(b,"maintenanceCardSent","false")));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.created","erp_project",id,no+" "+name);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        if(contract!=null) jdbc.update("INSERT INTO erp_project_contract(project_id,contract_id,relation_type,is_current) VALUES(?,?,'initial',TRUE)",id,contract);
+        audit(a,"project.created","erp_project",id,no+" "+name);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
@@ -228,7 +230,40 @@ public class BusinessController {
     @GetMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:read')")
     public Map<String,Object> project(@PathVariable long id) {
         Map<String,Object> result=new LinkedHashMap<>(one("SELECT p.*,c.name customer_name,ct.contract_no,ct.title contract_title,e.full_name manager_name,te.full_name technical_lead_name FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id LEFT JOIN erp_contract ct ON ct.id=p.contract_id LEFT JOIN erp_employee e ON e.id=p.manager_employee_id LEFT JOIN erp_employee te ON te.id=p.technical_lead_employee_id WHERE p.id=?",id));
-        result.put("members",members(id)); result.put("milestones",milestones(id)); result.put("logs",logs(id)); return result;
+        result.put("contracts",projectContracts(id)); return result;
+    }
+
+    private List<Map<String,Object>> projectContracts(long projectId) {
+        return jdbc.queryForList("""
+          SELECT pc.id,pc.project_id,pc.contract_id,pc.relation_type,pc.is_current,pc.linked_at,
+                 ct.contract_no,ct.title,ct.contract_type,ct.amount,ct.currency,ct.starts_on,ct.ends_on,ct.status
+          FROM erp_project_contract pc JOIN erp_contract ct ON ct.id=pc.contract_id
+          WHERE pc.project_id=? ORDER BY pc.is_current DESC,ct.starts_on DESC,pc.id DESC
+          """,projectId);
+    }
+
+    @GetMapping("/projects/{id}/contracts") @PreAuthorize("hasAuthority('project:read')")
+    public List<Map<String,Object>> projectContractsEndpoint(@PathVariable long id) {
+        one("SELECT id FROM erp_project WHERE id=?",id); return projectContracts(id);
+    }
+
+    @PostMapping("/projects/{id}/contracts") @PreAuthorize("hasAuthority('project:write')") @Transactional
+    public List<Map<String,Object>> linkProjectContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
+        Map<String,Object> project=one("SELECT id,customer_id FROM erp_project WHERE id=?",id);
+        long contractId=Long.parseLong(required(b,"contractId"));
+        Map<String,Object> contract=one("SELECT id,customer_id FROM erp_contract WHERE id=?",contractId);
+        if(((Number)project.get("customer_id")).longValue()!=((Number)contract.get("customer_id")).longValue())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同客户与项目客户不一致");
+        String relation=val(b,"relationType","renewal");
+        if(!List.of("initial","renewal","supplemental").contains(relation))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同关联类型无效");
+        boolean current=Boolean.parseBoolean(val(b,"isCurrent","false"));
+        if(current) jdbc.update("UPDATE erp_project_contract SET is_current=FALSE WHERE project_id=?",id);
+        jdbc.update("INSERT INTO erp_project_contract(project_id,contract_id,relation_type,is_current) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE relation_type=VALUES(relation_type),is_current=VALUES(is_current)",
+            id,contractId,relation,current);
+        if(current) jdbc.update("UPDATE erp_project SET contract_id=? WHERE id=?",contractId,id);
+        audit(a,"project.contract.linked","erp_project",id,"关联合同 "+contractId+(current?"（当前合同）":""));
+        return projectContracts(id);
     }
 
     @PutMapping("/projects/{id}/members/{employeeId}") @PreAuthorize("hasAuthority('project:write')") @Transactional
