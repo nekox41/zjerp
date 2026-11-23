@@ -74,6 +74,16 @@ public final class DocxPhotoInserter {
         }
     }
 
+    public static List<String> inspectSystems(byte[] source) throws IOException {
+        if(source==null||source.length==0) throw new IllegalArgumentException("DOCX 模板为空");
+        try(XWPFDocument document=new XWPFDocument(new ByteArrayInputStream(source))) {
+            Map<String,Anchor> anchors=findAnchors(document);
+            return SYSTEMS.stream().filter(anchors::containsKey).toList();
+        } catch(org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
+            throw new IOException("DOCX 模板格式无效",e);
+        }
+    }
+
     private static Map<String,Anchor> findAnchors(XWPFDocument document) {
         Map<String,Anchor> anchors=new HashMap<>();
         String activeSystem=null;
