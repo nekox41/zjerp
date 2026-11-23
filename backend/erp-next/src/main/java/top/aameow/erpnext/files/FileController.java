@@ -32,6 +32,11 @@ public class FileController {
             Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment WHERE file_id=?",Integer.class,f.get("id"));
             if(linked!=null&&linked>0)return;
         }
+        boolean photoRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:photo:read")||x.getAuthority().equals("report:photo:write"));
+        if(photoRead){
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_report_photo p JOIN erp_report_photo_batch b ON b.id=p.batch_id WHERE p.file_id=?",Integer.class,f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
         boolean expenseRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("expense:read"));
         if(expenseRead){
             boolean finance=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("expense:approve")||x.getAuthority().equals("expense:pay"));
