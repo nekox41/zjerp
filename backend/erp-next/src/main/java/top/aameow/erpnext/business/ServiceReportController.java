@@ -123,6 +123,7 @@ public class ServiceReportController {
     public Map<String,Object> submit(@PathVariable long id,Authentication a){
         Map<String,Object> r=report(id);if(!"draft".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿报告可以提交");
         Map<String,Object> v=content(id,r);Map<String,Object> data=mapper.convertValue(parse(v.get("content_json").toString()),new TypeReference<Map<String,Object>>(){});
+        requireEngineerReviewer(actor(a));
         checkContent(data);jdbc.update("UPDATE erp_service_report SET status='submitted',reviewer_id=NULL,return_reason=NULL WHERE id=?",id);
         event(id,"draft","submitted",actor(a),"提交审核");return detail(id);
     }
