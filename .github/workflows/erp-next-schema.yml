@@ -31,7 +31,7 @@ jobs:
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml config --quiet
       - name: Start isolated MySQL
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d erp-next-mysql
-      - name: Apply schema V1 through V6
+      - name: Apply schema V1 through V7
         run: timeout 180 docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml run --rm erp-next-schema
       - name: Re-run migrations idempotently
         run: timeout 180 docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml run --rm erp-next-schema
@@ -39,10 +39,10 @@ jobs:
         run: |
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2','3','4','5','6') AND success = 1" | grep -qx 6
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2','3','4','5','6','7') AND success = 1" | grep -qx 7
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 31
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 34
       - name: Build and start API and web
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d --build
       - name: Collect container diagnostics
