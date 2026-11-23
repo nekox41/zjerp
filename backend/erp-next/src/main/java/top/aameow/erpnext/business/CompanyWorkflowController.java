@@ -135,6 +135,39 @@ public class CompanyWorkflowController {
         return projectContracts(id);
     }
 
+    @GetMapping("/contracts/{id}/attachments") @PreAuthorize("hasAuthority('contract:read')")
+    public List<Map<String,Object>> contractAttachments(@PathVariable long id) {
+        one("SELECT id FROM erp_contract WHERE id=?",id);
+        return jdbc.queryForList("""
+          SELECT a.*,f.original_name,f.media_type,f.byte_size file_size,f.sha256,i.display_name created_by_name
+          FROM erp_contract_attachment a JOIN erp_file_object f ON f.id=a.file_id
+          LEFT JOIN erp_identity i ON i.id=a.created_by
+          WHERE a.contract_id=? ORDER BY a.created_at DESC
+          """,id);
+    }
+    @PostMapping("/contracts/{id}/attachments") @PreAuthorize("hasAuthority('contract:write')") @Transactional
+    public Map<String,Object> attachContractFile(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
+        one("SELECT id FROM erp_contract WHERE id=?",id);
+        long fileId=Long.parseLong(req(b,"fileId"));
+        Map<String,Object> file=one("SELECT id,uploaded_by FROM erp_file_object WHERE id=?",fileId);
+        if(!(file.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能关联自己上传的文件");
+        String type=val(b,"attachmentType","other");
+        if(!Set.of("signed_contract","amendment","maintenance_card","other").contains(type))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同附件类型无效");
+        jdbc.update("INSERT INTO erp_contract_attachment(contract_id,file_id,attachment_type,title,created_by) VALUES(?,?,?,?,?)",
+            id,fileId,type,b.get("title"),actor(a));
+        long attachmentId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        audit(a,"contract.attachment.added","erp_contract_attachment",attachmentId,type);
+        return one("SELECT a.*,f.original_name,f.media_type,f.byte_size file_size,f.sha256 FROM erp_contract_attachment a JOIN erp_file_object f ON f.id=a.file_id WHERE a.id=?",attachmentId);
+    }
+    @DeleteMapping("/contracts/{id}/attachments/{attachmentId}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
+    public void removeContractFile(@PathVariable long id,@PathVariable long attachmentId,Authentication a) {
+        one("SELECT id FROM erp_contract_attachment WHERE id=? AND contract_id=?",attachmentId,id);
+        jdbc.update("DELETE FROM erp_contract_attachment WHERE id=?",attachmentId);
+        audit(a,"contract.attachment.removed","erp_contract_attachment",attachmentId,"移除合同附件");
+    }
+
     // Buildings, parking phases and shared facilities can all be represented as project scope units.
     @GetMapping("/projects/{id}/scope-units") @PreAuthorize("hasAuthority('project:scope:read')")
     public List<Map<String,Object>> scopeUnits(@PathVariable long id) {
