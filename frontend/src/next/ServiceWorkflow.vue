@@ -123,6 +123,21 @@ async function savePhoto(photo) {
     await openBatch(batch.value.id);notice.value='照片信息已保存'
   }catch(e){error.value=e.message}
 }
+async function movePhoto(photo,delta) {
+  const ordered=[...batch.value.photos].sort((a,b)=>a.sort_order-b.sort_order)
+  const index=ordered.findIndex(x=>x.id===photo.id),target=index+delta
+  if(target<0||target>=ordered.length)return
+  const other=ordered[target]
+  const a=photoDrafts.value[photo.id],b=photoDrafts.value[other.id]
+  const current=a.sortOrder;a.sortOrder=b.sortOrder;b.sortOrder=current
+  try {
+    await Promise.all([
+      api('/service-workflow/photos/'+photo.id,{method:'PUT',body:JSON.stringify({...a,confirmed:a.confirmed})}),
+      api('/service-workflow/photos/'+other.id,{method:'PUT',body:JSON.stringify({...b,confirmed:b.confirmed})})
+    ])
+    await openBatch(batch.value.id)
+  } catch(e){error.value=e.message}
+}
 async function removePhoto(photo) {
   if(!confirm('确定从当前批次移除这张照片？'))return
   try{await api('/service-workflow/photos/'+photo.id,{method:'DELETE'});await openBatch(batch.value.id)}catch(e){error.value=e.message}
@@ -257,7 +272,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
                 <label>拍摄日期<input v-model="photoDrafts[p.id].takenOn" type="date"></label>
                 <label>照片说明<input v-model="photoDrafts[p.id].caption" placeholder="可选"></label>
                 <label class="confirm"><input v-model="photoDrafts[p.id].confirmed" type="checkbox"> 已人工核对</label>
-                <div class="sw-row-actions"><button @click="savePhoto(p)">保存</button><button class="danger" @click="removePhoto(p)">移除</button></div>
+                <div class="sw-row-actions"><button @click="movePhoto(p,-1)">↑</button><button @click="movePhoto(p,1)">↓</button><button @click="savePhoto(p)">保存</button><button class="danger" @click="removePhoto(p)">移除</button></div>
               </template>
               <template v-else><small>{{ p.system_code||'未分类' }} · {{ p.taken_on||'无日期' }}</small><small>{{ p.confirmation_status==='confirmed'?'人工已确认':'未确认' }}</small></template>
             </div>
@@ -268,7 +283,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
           <td v-if="batch.status==='collecting'"><select v-model="photoDrafts[p.id].systemCode"><option value="">未分类</option><option v-for="x in systems" :key="x" :value="x">{{x}}</option></select></td><td v-else>{{p.system_code||'未分类'}}</td>
           <td v-if="batch.status==='collecting'"><input v-model="photoDrafts[p.id].takenOn" type="date"></td><td v-else>{{p.taken_on||'—'}}</td>
           <td v-if="batch.status==='collecting'"><input v-model="photoDrafts[p.id].confirmed" type="checkbox"></td><td v-else>{{p.confirmation_status==='confirmed'?'已确认':'未确认'}}</td>
-          <td v-if="batch.status==='collecting'"><button @click="savePhoto(p)">保存</button> <button @click="removePhoto(p)">移除</button></td><td v-else>—</td></tr>
+          <td v-if="batch.status==='collecting'"><button @click="movePhoto(p,-1)">↑</button> <button @click="movePhoto(p,1)">↓</button> <button @click="savePhoto(p)">保存</button> <button @click="removePhoto(p)">移除</button></td><td v-else>—</td></tr>
         </tbody></table></div>
         <div v-if="batch.status==='collecting'" class="sw-bottom-actions"><button class="primary" @click="submitBatch">提交照片审核</button><small>所有照片必须完成分类、日期和人工确认。</small></div>
         <div v-if="batch.status==='submitted'&&can('report:review')&&Number(batch.created_by)!==props.userId" class="sw-bottom-actions"><button class="primary" @click="reviewBatch">审核通过照片批次</button></div>
