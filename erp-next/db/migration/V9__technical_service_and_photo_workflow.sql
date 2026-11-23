@@ -120,6 +120,20 @@ CREATE TABLE erp_service_report_delivery (
   CONSTRAINT ck_erp_report_delivery_status CHECK (delivery_status IN ('pending','sent','delivered','returned'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE erp_service_report_delivery_event (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  delivery_id BIGINT NOT NULL,
+  from_status VARCHAR(24) NULL,
+  to_status VARCHAR(24) NOT NULL,
+  note VARCHAR(1000) NULL,
+  actor_identity_id BIGINT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY idx_erp_report_delivery_event (delivery_id,created_at),
+  CONSTRAINT fk_erp_report_delivery_event_delivery FOREIGN KEY (delivery_id) REFERENCES erp_service_report_delivery(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_erp_report_delivery_event_actor FOREIGN KEY (actor_identity_id) REFERENCES erp_identity(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- Each batch is tied to one project/report and keeps its original DOCX template and source photos private.
 CREATE TABLE erp_report_photo_batch (
   id BIGINT NOT NULL AUTO_INCREMENT,
