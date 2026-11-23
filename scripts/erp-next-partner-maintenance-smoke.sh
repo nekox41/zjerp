@@ -22,6 +22,12 @@ OVER_SHARE=$(curl -sS -o /tmp/erp-partner-over-share.json -w '%{http_code}' -X P
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"partnerId\":$PARTNER_2_ID,\"sharePercent\":90}")
 test "$OVER_SHARE" = "400"
+UNLINKED=$(curl -fsS -X DELETE "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID/partners/$PARTNER_ID" -H "Authorization: Bearer $TOKEN")
+echo "$UNLINKED" | grep -q '"signing_source":"direct"'
+echo "$UNLINKED" | grep -q '"partner_share_percent":0'
+PARTNER_LINKS=$(curl -fsS "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID/partners" -H "Authorization: Bearer $TOKEN")
+test "$PARTNER_LINKS" = "[]"
+
 
 # A project may exist before a contract is linked; a later contract can cover it.
 UNCOVERED=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects \
