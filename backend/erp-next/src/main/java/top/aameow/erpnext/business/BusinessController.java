@@ -290,8 +290,8 @@ public class BusinessController {
     public List<Map<String,Object>> projects(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String status) {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
-          SELECT p.*,c.name customer_name,ct.contract_no,e.full_name manager_name
-          FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id LEFT JOIN erp_contract ct ON ct.id=p.contract_id
+          SELECT p.*,c.name customer_name,e.full_name manager_name
+          FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id
           LEFT JOIN erp_employee e ON e.id=p.manager_employee_id
           WHERE (?='' OR p.name LIKE ? OR p.project_no LIKE ? OR c.name LIKE ?)
             AND (?='' OR p.status=?) ORDER BY p.id DESC LIMIT 500
