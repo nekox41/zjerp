@@ -227,7 +227,9 @@ public class ServiceWorkflowController {
 
     @GetMapping("/reports/{id}/deliveries") @PreAuthorize("hasAuthority('delivery:read')")
     public List<Map<String,Object>> deliveries(@PathVariable long id){
-        return jdbc.queryForList("SELECT d.*,i.display_name creator_name FROM erp_service_delivery d JOIN erp_identity i ON i.id=d.created_by WHERE d.report_id=? ORDER BY d.created_at DESC",id);
+        List<Map<String,Object>> result=jdbc.queryForList("SELECT d.*,i.display_name creator_name FROM erp_service_delivery d JOIN erp_identity i ON i.id=d.created_by WHERE d.report_id=? ORDER BY d.created_at DESC",id);
+        for(Map<String,Object> delivery:result)delivery.put("events",jdbc.queryForList("SELECT e.*,i.display_name actor_name FROM erp_service_delivery_event e JOIN erp_identity i ON i.id=e.actor_identity_id WHERE e.delivery_id=? ORDER BY e.id",delivery.get("id")));
+        return result;
     }
     @PostMapping("/reports/{id}/deliveries") @PreAuthorize("hasAuthority('delivery:write')") @Transactional
     public Map<String,Object> createDelivery(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
