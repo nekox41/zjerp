@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { api } from './api'
+import { api, uploadFile } from './api'
 import ReportEditor from './ReportEditor.vue'
 import PhotoWorkbench from './PhotoWorkbench.vue'
 
@@ -158,6 +158,20 @@ async function showIssueHistory(issue) {
   try { issueEvents.value=await api('/business/issues/'+issue.id+'/events') }
   catch(e) { error.value=e.message }
 }
+async function uploadMaintenanceCard(event) {
+  const file=event.target.files?.[0]; event.target.value=''
+  if(!file) return
+  if(!project.value?.contract_id) { error.value='请先为项目设置当前合同'; return }
+  busy.value=true; error.value=''
+  try {
+    const saved=await uploadFile(file)
+    await api('/business/contracts/'+project.value.contract_id+'/attachments',{
+      method:'POST',body:JSON.stringify({fileId:saved.id,attachmentType:'maintenance_card',title:file.name})
+    })
+    notice.value='维护公示卡文件已归档到当前合同。'
+  } catch(e) { error.value=e.message }
+  finally { busy.value=false }
+}
 async function createMaintenanceVisit() {
   await run('维保现场记录已保存。', async () => {
     await api('/business/projects/' + props.projectId + '/maintenance-visits', {
@@ -296,6 +310,7 @@ onMounted(loadAll)
           <label><input type="checkbox" v-model="project.documents_ready"> 项目资料已准备</label>
           <label><input type="checkbox" v-model="project.maintenance_card_sent"> 公示卡已寄送</label>
         </div>
+        <div class="pw-panel-title"><div><h3>维护公示卡文件</h3><p>文件归档到项目当前合同；寄送状态由上方人工确认。</p></div><label v-if="project.contract_id && can('contract:write')" class="pw-secondary">上传公示卡<input type="file" hidden accept=".docx,.pdf,.jpg,.jpeg,.png" @change="uploadMaintenanceCard"></label></div>
         <div class="pw-panel-title"><div><h3>维保现场记录</h3><p>仅在确有外地现场服务时记录，不强制按月填报。</p></div></div>
         <form class="pw-form" @submit.prevent="createMaintenanceVisit">
           <label>到场日期<input v-model="maintenanceForm.visitedOn" type="date" required></label>
