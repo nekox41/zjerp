@@ -230,17 +230,29 @@ public class BusinessController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"直接签约合同不能关联中间人或分成比例");
         }
         BigDecimal amount=new BigDecimal(val(b,"amount","0")); if(amount.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
+        String initialStatus=val(b,"status","draft");
+        if(!Set.of("draft","active","completed","terminated").contains(initialStatus))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同状态无效");
+        if("active".equals(initialStatus))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同必须先关联合同项目，再启用");
         jdbc.update("""
           INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,signing_mode,intermediary_id,intermediary_name_snapshot,intermediary_share_percent,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          """,no,title,customer,contractType,signingMode,intermediary,intermediaryName,share,amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
+          """,no,title,customer,contractType,signingMode,intermediary,intermediaryName,share,amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),initialStatus,owner,b.get("notes"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"contract.created","erp_contract",id,no+" "+title);
         return contractDetail(id);
     }
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> updateContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_contract WHERE id=?",id);
-        Map<String,Object> existing=one("SELECT signing_mode,intermediary_id,intermediary_share_percent FROM erp_contract WHERE id=?",id);
+        Map<String,Object> existing=one("SELECT signing_mode,intermediary_id,intermediary_share_percent,status FROM erp_contract WHERE id=?",id);
+        String nextStatus=b.get("status")==null?existing.get("status").toString():b.get("status").toString();
+        if(!Set.of("draft","active","completed","terminated").contains(nextStatus))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同状态无效");
+        if("active".equals(nextStatus)) {
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_project_contract WHERE contract_id=?",Integer.class,id);
+            if(linked==null||linked==0) throw new ResponseStatusException(HttpStatus.CONFLICT,"合同必须先关联至少一个项目，才能启用");
+        }
         String signingMode=b.containsKey("signingMode")?b.get("signingMode").toString():existing.get("signing_mode").toString();
         if(!Set.of("direct","intermediary").contains(signingMode))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"签约方式无效");
