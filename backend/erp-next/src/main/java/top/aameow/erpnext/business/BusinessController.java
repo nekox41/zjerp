@@ -131,7 +131,6 @@ public class BusinessController {
         audit(a,"customer.updated","erp_customer",id,"客户资料更新"); return customer(id);
     }
     private String val(Map<String,Object>b,String k,String d) { Object v=b.get(k); return v==null?d:v.toString(); }
-    private Long optionalLong(Map<String,Object>b,String k) { Object v=b.get(k); return v==null||v.toString().isBlank()?null:Long.valueOf(v.toString()); }
 
     @GetMapping("/customers/{id}/contacts") @PreAuthorize("hasAuthority('customer:read')")
     public List<Map<String,Object>> contacts(@PathVariable long id) { one("SELECT id FROM erp_customer WHERE id=?",id); return jdbc.queryForList("SELECT * FROM erp_customer_contact WHERE customer_id=? ORDER BY is_primary DESC,id",id); }
@@ -196,27 +195,29 @@ public class BusinessController {
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           """,no,title,customer,contractType,signingMode,intermediary,intermediaryName,share,amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"contract.created","erp_contract",id,no+" "+title);
-        return contract(id);
+        return contractDetail(id);
     }
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> updateContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_contract WHERE id=?",id);
-        String signingMode=b.get("signingMode")==null?null:b.get("signingMode").toString();
-        if(signingMode!=null&&!Set.of("direct","intermediary").contains(signingMode))
+        Map<String,Object> existing=one("SELECT signing_mode,intermediary_id,intermediary_share_percent FROM erp_contract WHERE id=?",id);
+        String signingMode=b.containsKey("signingMode")?b.get("signingMode").toString():existing.get("signing_mode").toString();
+        if(!Set.of("direct","intermediary").contains(signingMode))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"签约方式无效");
-        Long intermediary=optionalLong(b,"intermediaryId");
-        BigDecimal share=b.get("intermediarySharePercent")==null?null:new BigDecimal(b.get("intermediarySharePercent").toString());
+        Long intermediary=b.containsKey("intermediaryId")?optionalLong(b,"intermediaryId"):(existing.get("intermediary_id")==null?null:((Number)existing.get("intermediary_id")).longValue());
+        BigDecimal share=b.containsKey("intermediarySharePercent")?(b.get("intermediarySharePercent")==null?null:new BigDecimal(b.get("intermediarySharePercent").toString())):
+            (existing.get("intermediary_share_percent")==null?null:new BigDecimal(existing.get("intermediary_share_percent").toString()));
         String intermediaryName=null;
-        if("intermediary".equals(signingMode)||intermediary!=null||share!=null){
-            if(!"intermediary".equals(signingMode)||intermediary==null||share==null||share.signum()<0||share.compareTo(BigDecimal.valueOf(100))>0)
+        if("intermediary".equals(signingMode)){
+            if(intermediary==null||share==null||share.signum()<0||share.compareTo(BigDecimal.valueOf(100))>0)
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"中间人合同必须完整填写中间人与分成比例");
             intermediaryName=one("SELECT name FROM erp_intermediary WHERE id=? AND status='active'",intermediary).get("name").toString();
-        } else if("direct".equals(signingMode)){
+        } else {
             intermediary=null;share=null;intermediaryName=null;
         }
         jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),contract_type=COALESCE(?,contract_type),signing_mode=COALESCE(?,signing_mode),intermediary_id=?,intermediary_name_snapshot=?,intermediary_share_percent=?,amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
             b.get("title"),b.get("contractType"),signingMode,intermediary,intermediaryName,share,b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
-        audit(a,"contract.updated","erp_contract",id,"合同资料更新"); return contract(id);
+        audit(a,"contract.updated","erp_contract",id,"合同资料更新"); return contractDetail(id);
     }
 
     @GetMapping("/projects") @PreAuthorize("hasAuthority('project:read')")
@@ -246,7 +247,7 @@ public class BusinessController {
         if(contract!=null) jdbc.update("INSERT INTO erp_project_contract(project_id,contract_id,relation_type,is_current) VALUES(?,?,'initial',TRUE)",id,contract);
         audit(a,"project.created","erp_project",id,no+" "+name);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
-        return project(id);
+        return projectDetail(id);
     }
     @PutMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> updateProject(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
@@ -269,7 +270,6 @@ public class BusinessController {
     @GetMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:read')")
     public Map<String,Object> contract(@PathVariable long id) { return contractDetail(id); }
 
-    private Map<String,Object> contract(long id) { return contractDetail(id); }
     private Map<String,Object> contractDetail(long id) {
         Map<String,Object> result=new LinkedHashMap<>(one("""
           SELECT ct.*,c.name customer_name,e.full_name owner_name,m.name intermediary_name
@@ -292,7 +292,6 @@ public class BusinessController {
 
     @GetMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:read')")
     public Map<String,Object> project(@PathVariable long id) { return projectDetail(id); }
-    private Map<String,Object> project(long id) { return projectDetail(id); }
     private Map<String,Object> projectDetail(long id) {
         Map<String,Object> result=new LinkedHashMap<>(one("""
           SELECT p.*,c.name customer_name,ct.contract_no,ct.title contract_title,
