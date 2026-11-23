@@ -4,6 +4,10 @@ import org.apache.poi.util.Units;
 import org.apache.poi.xwpf.usermodel.*;
 import org.apache.xmlbeans.XmlCursor;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblGrid;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTrPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTcPr;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -29,7 +33,7 @@ public final class DocxPhotoInserter {
     );
 
     public record Photo(String systemCode,String filename,byte[] bytes) { }
-    private record Anchor(XWPFParagraph heading,IBodyElement after,int originalIndex) { }
+    private record Anchor(XWPFParagraph heading,XWPFTable tableStyle,XWPFParagraph noteStyle,IBodyElement after,int originalIndex) { }
 
     private DocxPhotoInserter() { }
 
@@ -59,7 +63,7 @@ public final class DocxPhotoInserter {
                 List<Photo> systemPhotos=entry.getValue();
                 for(int offset=0;offset<systemPhotos.size();offset+=4) {
                     int end=Math.min(offset+4,systemPhotos.size());
-                    cursorAfter=insertPhotoGroup(document,cursorAfter,anchor.heading(),systemPhotos.subList(offset,end));
+                    cursorAfter=insertPhotoGroup(document,cursorAfter,anchor.heading(),anchor.tableStyle(),anchor.noteStyle(),systemPhotos.subList(offset,end));
                 }
             }
             document.write(output);
@@ -81,12 +85,18 @@ public final class DocxPhotoInserter {
             if(system!=null) activeSystem=system;
             if(activeSystem==null||!isPhotoHeading(text)) continue;
             IBodyElement after=element;
-            if(i+1<body.size()&&body.get(i+1) instanceof XWPFTable) {
-                after=body.get(i+1);
+            XWPFTable tableStyle=null;
+            XWPFParagraph noteStyle=null;
+            if(i+1<body.size()&&body.get(i+1) instanceof XWPFTable table) {
+                tableStyle=table;
+                after=table;
                 if(i+2<body.size()&&body.get(i+2) instanceof XWPFParagraph note &&
-                    note.getText()!=null&&note.getText().trim().startsWith("注：")) after=note;
+                    note.getText()!=null&&note.getText().trim().startsWith("注：")) {
+                    noteStyle=note;
+                    after=note;
+                }
             }
-            anchors.put(activeSystem,new Anchor(paragraph,after,i));
+            if(tableStyle!=null) anchors.put(activeSystem,new Anchor(paragraph,tableStyle,noteStyle,after,i));
         }
         return anchors;
     }
@@ -104,7 +114,8 @@ public final class DocxPhotoInserter {
     }
 
     private static IBodyElement insertPhotoGroup(XWPFDocument document,IBodyElement after,
-                                                   XWPFParagraph styleSource,List<Photo> photos)
+                                                   XWPFParagraph styleSource,XWPFTable tableStyle,
+                                                   XWPFParagraph noteStyle,List<Photo> photos)
         throws IOException,org.apache.poi.openxml4j.exceptions.InvalidFormatException {
         XWPFParagraph heading;
         try(XmlCursor cursor=afterCursor(after)) {
@@ -121,17 +132,21 @@ public final class DocxPhotoInserter {
             table=document.insertNewTbl(cursor);
         }
         if(table==null) throw new IOException("无法在报告系统章节中插入照片表格");
-        table.setWidth("100%");
+        copyTableStyle(tableStyle,table);
         XWPFTableRow first=table.getRow(0);
         ensureTwoCells(first);
         XWPFTableRow second=table.createRow();
         ensureTwoCells(second);
         List<XWPFTableRow> rows=List.of(first,second);
+        copyRowStyle(tableStyle,0,first);
+        copyRowStyle(tableStyle,Math.min(1,tableStyle.getNumberOfRows()-1),second);
         for(int i=0;i<4;i++) {
             XWPFTableCell cell=rows.get(i/2).getCell(i%2);
-            cell.setWidth("50%");
+            XWPFTableCell sourceCell=tableStyle.getRow(Math.min(i/2,tableStyle.getNumberOfRows()-1)).getCell(Math.min(i%2,tableStyle.getRow(Math.min(i/2,tableStyle.getNumberOfRows()-1)).getTableCells().size()-1));
+            if(sourceCell.getCTTc().isSetTcPr()) cell.getCTTc().setTcPr((CTTcPr)sourceCell.getCTTc().getTcPr().copy());
             cell.setVerticalAlignment(XWPFTableCell.XWPFVertAlign.CENTER);
             XWPFParagraph paragraph=cell.getParagraphs().isEmpty()?cell.addParagraph():cell.getParagraphs().get(0);
+            if(!sourceCell.getParagraphs().isEmpty()) copyParagraphStyle(sourceCell.getParagraphs().get(0),paragraph);
             for(int p=paragraph.getRuns().size()-1;p>=0;p--) paragraph.removeRun(p);
             paragraph.setAlignment(ParagraphAlignment.CENTER);
             if(i<photos.size()) {
@@ -150,7 +165,12 @@ public final class DocxPhotoInserter {
             note=document.insertNewParagraph(cursor);
         }
         if(note==null) throw new IOException("无法插入照片说明");
-        note.createRun().setText(NOTE);
+        if(noteStyle!=null) {
+            copyParagraphStyle(noteStyle,note);
+            XWPFRun noteRun=note.createRun();
+            copyRunStyle(noteStyle,noteRun);
+            noteRun.setText(NOTE);
+        } else note.createRun().setText(NOTE);
         return note;
     }
 
@@ -162,6 +182,17 @@ public final class DocxPhotoInserter {
         cursor.toEndToken();
         cursor.toNextToken();
         return cursor;
+    }
+
+    private static void copyTableStyle(XWPFTable source,XWPFTable target) {
+        if(source.getCTTbl().isSetTblPr()) target.getCTTbl().setTblPr((CTTblPr)source.getCTTbl().getTblPr().copy());
+        if(source.getCTTbl().isSetTblGrid()) target.getCTTbl().setTblGrid((CTTblGrid)source.getCTTbl().getTblGrid().copy());
+    }
+
+    private static void copyRowStyle(XWPFTable source,int sourceIndex,XWPFTableRow target) {
+        if(source.getNumberOfRows()==0) return;
+        XWPFTableRow original=source.getRow(Math.min(sourceIndex,source.getNumberOfRows()-1));
+        if(original.getCtRow().isSetTrPr()) target.getCtRow().setTrPr((CTTrPr)original.getCtRow().getTrPr().copy());
     }
 
     private static void ensureTwoCells(XWPFTableRow row) {
