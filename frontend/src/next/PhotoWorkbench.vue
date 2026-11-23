@@ -215,7 +215,8 @@ async function saveClassification() {
     photos.value=(batch.value.photos || []).map(p=>({...p,previewUrl:photos.value.find(x=>x.photo_id===p.photo_id)?.previewUrl || '',selected:false}))
     selectedIds.value=[]
     notice.value = ready.value ? '分类和排序已保存，可以预览 DOCX。' : '分类已保存，还有照片尚未分类。'
-  } catch(e) { error.value=e.message }
+    return true
+  } catch(e) { error.value=e.message; return false }
   finally { busy.value=false }
 }
 async function deletePhoto(photo) {
@@ -255,7 +256,7 @@ function saveBlob(blob,filename) {
 async function previewDocx() {
   busy.value=true; error.value=''; notice.value=''
   try {
-    await saveClassification()
+    if(!(await saveClassification())) return
     const blob=await apiBlob('/report-photos/batches/'+batchId.value+'/preview',{method:'POST',body:JSON.stringify(insertionBody())})
     saveBlob(blob,(report.value.report_no || 'report')+'-照片预览.docx')
     notice.value='预览文档已生成。请用 Word 检查每个系统的照片位置、分页和版式。'
@@ -266,7 +267,7 @@ async function insertDocx() {
   if(!confirm('确认将照片插入报告并生成一个新的不可变报告版本？原始 DOCX 和原始照片不会被覆盖。')) return
   busy.value=true; error.value=''; notice.value=''
   try {
-    await saveClassification()
+    if(!(await saveClassification())) return
     const result=await api('/report-photos/batches/'+batchId.value+'/insert',{method:'POST',body:JSON.stringify(insertionBody())})
     await loadProjectData()
     batchId.value=String(result.batchId)
