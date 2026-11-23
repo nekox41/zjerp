@@ -161,7 +161,11 @@ public class PartnerMaintenanceController {
         one("SELECT id FROM erp_project WHERE id=?",id);
         Long current=opt(b,"currentContractId");
         if(current!=null){
-            one("SELECT c.id FROM erp_contract c JOIN erp_contract_project cp ON cp.contract_id=c.id WHERE c.id=? AND cp.project_id=? AND c.service_type='maintenance'",current,id);
+            Map<String,Object> currentContract=one("SELECT c.id,c.status,c.starts_on,c.ends_on FROM erp_contract c JOIN erp_contract_project cp ON cp.contract_id=c.id WHERE c.id=? AND cp.project_id=? AND c.service_type='maintenance'",current,id);
+            if(!"active".equals(currentContract.get("status")))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"当前有效维保合同必须处于履行中状态");
+            jdbc.update("UPDATE erp_project SET planned_start=?,planned_end=? WHERE id=?",
+                currentContract.get("starts_on"),currentContract.get("ends_on"),id);
         }
         String card=b.get("publicCardStatus")==null?"not_started":b.get("publicCardStatus").toString();
         if(!Set.of("not_started","preparing","sent","delivered").contains(card))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效公示卡状态");
