@@ -93,6 +93,17 @@ PROJECT_HISTORY=$(curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVE
 echo "$PROJECT_HISTORY" | grep -q 'CI-CT-001'
 echo "$PROJECT_HISTORY" | grep -q 'CI-RENEWAL-001'
 curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/maintenance" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; data=json.load(sys.stdin); assert len(data["contractHistory"])>=2; assert data["current_contract_id"]==int(sys.argv[1])' "$CONTRACT_ID"
+# Draft renewals cannot silently become the active maintenance contract.
+DRAFT_CURRENT=$(curl -sS -o /tmp/erp-renewal-draft-current.json -w '%{http_code}' -X PUT "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/maintenance" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"currentContractId\":$RENEWAL_ID,\"publicCardStatus\":\"not_started\"}")
+test "$DRAFT_CURRENT" = "400"
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"active"}' >/dev/null
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/maintenance" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"currentContractId\":$RENEWAL_ID,\"publicCardStatus\":\"preparing\"}" | grep -q 'CI-RENEWAL-001'
+curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; p=json.load(sys.stdin); assert str(p["planned_start"])=="2027-01-01"; assert str(p["planned_end"])=="2027-12-31"'
+
 
 # Contract originals, public cards and project materials use the private file store.
 printf 'CI maintenance attachment.\\n' > /tmp/erp-maintenance-ci.txt
