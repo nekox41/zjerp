@@ -169,7 +169,7 @@ async function reportAction(action) {
   if(!report.value)return
   const body=action==='return'||action==='withdraw'?{reason:prompt('请填写原因：')||''}:{}
   if(['return','withdraw'].includes(action)&&!body.reason)return
-  try{const r=await api('/business/reports/'+report.value.id+'/'+action,{method:'POST',body:JSON.stringify(body)});await openReport(r.id);await selectPackage(workPackage.value.id);notice.value='报告状态已更新'}
+  try{const reportId=report.value.id;await api('/business/reports/'+reportId+'/'+action,{method:'POST',body:JSON.stringify(body)});await selectPackage(workPackage.value.id);await openReport(reportId);notice.value='报告状态已更新'}
   catch(e){error.value=e.message}
 }
 async function chooseTemplate(event) {
