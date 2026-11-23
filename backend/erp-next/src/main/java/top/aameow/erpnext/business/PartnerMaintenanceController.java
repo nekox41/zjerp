@@ -106,6 +106,47 @@ public class PartnerMaintenanceController {
         if(q==null||q==0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"工程师员工必须有有效资格记录");
     }
 
+    @PostMapping("/projects/{id}/maintenance-renewals")
+    @PreAuthorize("hasAuthority('contract:write') and hasAuthority('maintenance:write')")
+    @Transactional
+    public Map<String,Object> renewMaintenance(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
+        Map<String,Object> project=one("SELECT id,customer_id FROM erp_project WHERE id=?",id);
+        Integer previous=jdbc.queryForObject("""
+            SELECT COUNT(*) FROM erp_contract_project cp JOIN erp_contract c ON c.id=cp.contract_id
+            WHERE cp.project_id=? AND c.service_type='maintenance'
+            """,Integer.class,id);
+        if(previous==null||previous==0)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"此项目尚无维保合同，首次签约请使用普通合同流程");
+
+        String contractNo=req(b,"contractNo"),title=req(b,"title"),startsOn=req(b,"startsOn"),endsOn=req(b,"endsOn");
+        java.time.LocalDate start,end;
+        try{
+            start=java.time.LocalDate.parse(startsOn);
+            end=java.time.LocalDate.parse(endsOn);
+        }catch(java.time.format.DateTimeParseException ex){
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同起止日期格式必须为 YYYY-MM-DD");
+        }
+        if(end.isBefore(start))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同结束日期不能早于开始日期");
+        java.math.BigDecimal amount;
+        try{amount=new java.math.BigDecimal(Objects.toString(b.get("amount"),"0"));}
+        catch(NumberFormatException ex){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额格式错误");}
+        if(amount.signum()<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
+        Object signedOn=b.get("signedOn");
+        if(signedOn!=null&&!signedOn.toString().isBlank()){
+            try{java.time.LocalDate.parse(signedOn.toString());}
+            catch(java.time.format.DateTimeParseException ex){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"签订日期格式错误");}
+        }
+        jdbc.update("""
+            INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,service_type,amount,currency,signed_on,starts_on,ends_on,status,notes,signing_source,partner_share_percent)
+            VALUES(?,?,?,'renewal','maintenance',?,'CNY',?,?,?,'draft',?,'direct',0)
+            """,contractNo,title,project.get("customer_id"),amount,
+            signedOn==null||signedOn.toString().isBlank()?null:signedOn,start,end,b.get("notes"));
+        long contractId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'renewal')",contractId,id);
+        audit(actor(a),"maintenance.contract.renewed","erp_contract",contractId,"project="+id);
+        return one("SELECT * FROM erp_contract WHERE id=?",contractId);
+    }
+
     @GetMapping("/projects/{id}/maintenance") @PreAuthorize("hasAuthority('maintenance:read')")
     public Map<String,Object> maintenance(@PathVariable long id){
         Map<String,Object> p=one("SELECT * FROM erp_project WHERE id=?",id);
