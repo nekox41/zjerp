@@ -22,6 +22,7 @@ curl -fsS -X PUT "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID" -H "
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID/amendments" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"amendmentNo":"CI-AMD-001","title":"CI 合同金额调整","changeSummary":"测试合同变更记录","revisedAmount":6500,"effectiveOn":"2026-11-23"}' | grep -q '6500'
 curl -fsS "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID/amendments" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-AMD-001'
 
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/maintenance" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"honeybeeUploaded":true,"honeybeeProjectCreated":true,"documentsReady":true,"maintenanceCardPrepared":true,"maintenanceCardSent":true}' | grep -q '"honeybee_project_created":true'
 curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/scope-units" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"unitName":"一期地下车库","unitType":"parking_phase","isSharedFacility":true,"serviceScope":"地下车库一期及共用消防设施"}' | grep -q '一期地下车库'
