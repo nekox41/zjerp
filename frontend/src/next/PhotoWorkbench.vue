@@ -12,6 +12,7 @@ const template = ref(null)
 const activeFilter = ref('全部')
 const viewMode = ref('cards')
 const busy = ref(false)
+const focused = ref(null)
 const error = ref('')
 const notice = ref('')
 const selectedCount = computed(() => photos.value.filter(p => p.selected).length)
@@ -40,10 +41,12 @@ function addPhotos(event) {
 function removePhoto(item) {
   URL.revokeObjectURL(item.preview)
   photos.value = photos.value.filter(p => p.id !== item.id)
+  if (focused.value?.id === item.id) focused.value = null
 }
 function clearPhotos() {
   photos.value.forEach(p => URL.revokeObjectURL(p.preview))
   photos.value = []
+  focused.value = null
   activeFilter.value = '全部'
   notice.value = ''
 }
@@ -179,7 +182,7 @@ onBeforeUnmount(() => { photos.value.forEach(p => URL.revokeObjectURL(p.preview)
     <div v-else-if="viewMode === 'cards'" class="pw-grid">
       <article v-for="photo in filtered" :key="photo.id" class="pw-card" :class="{ selected: photo.selected }">
         <label class="pw-checkbox"><input type="checkbox" v-model="photo.selected" aria-label="选择照片"></label>
-        <img :src="photo.preview" :alt="photo.file.name" loading="lazy">
+        <img :src="photo.preview" :alt="photo.file.name" loading="lazy" @click="focused = photo" title="点击放大预览" class="pw-zoomable">
         <div class="pw-card-body">
           <div class="pw-filename" :title="photo.file.name">{{ photo.file.name }}</div>
           <select v-model="photo.category" :aria-label="'分类：'+photo.file.name">
@@ -193,15 +196,28 @@ onBeforeUnmount(() => { photos.value.forEach(p => URL.revokeObjectURL(p.preview)
       <table class="pw-table"><thead><tr><th>选择</th><th>预览</th><th>文件</th><th>消防系统</th><th>操作</th></tr></thead>
         <tbody><tr v-for="photo in filtered" :key="photo.id">
           <td><input type="checkbox" v-model="photo.selected" aria-label="选择照片"></td>
-          <td><img :src="photo.preview" :alt="photo.file.name" loading="lazy"></td><td>{{ photo.file.name }}</td>
+          <td><img :src="photo.preview" :alt="photo.file.name" loading="lazy" @click="focused = photo" title="点击放大预览" class="pw-zoomable"></td><td>{{ photo.file.name }}</td>
           <td><select v-model="photo.category"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></td>
           <td><button class="pw-remove" type="button" @click="removePhoto(photo)">移除</button></td>
         </tr></tbody>
       </table>
     </div>
+    <div v-if="focused" class="pw-lightbox" role="dialog" aria-modal="true" aria-label="查看原始照片" @click.self="focused = null">
+      <div class="pw-lightbox-content">
+        <div class="pw-lightbox-heading">
+          <span :title="focused.file.name">{{ focused.file.name }}</span>
+          <button type="button" @click="focused = null" aria-label="关闭图片预览">✕</button>
+        </div>
+        <img :src="focused.preview" :alt="focused.file.name">
+        <label>所属系统
+          <select v-model="focused.category"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select>
+        </label>
+      </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.photo-workbench{display:grid;gap:19px}.pw-heading h2{margin:5px 0;font-size:23px;color:#203149}.pw-heading p,.pw-help{font-size:12px;color:#7d889a;line-height:1.8;margin:4px 0}.pw-eyebrow{font-size:10px;letter-spacing:.15em;color:#5079c4;font-weight:700}.pw-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:18px;background:#fff;border:1px solid #e6ecf3;border-radius:14px}.pw-upload,.pw-template,.pw-export{border:1px solid #d7e1ef;border-radius:9px;padding:10px 14px;font-size:12px;cursor:pointer;white-space:nowrap}.pw-upload,.pw-export{background:#315fca;border-color:#315fca;color:white;font-weight:700}.pw-template{background:#f5f8fd;color:#365578}.pw-export{margin-left:auto}.pw-export:disabled{opacity:.5;cursor:not-allowed}.pw-template-name{font-size:11px;color:#7b8798;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pw-statline{display:flex;flex-wrap:wrap;gap:8px}.pw-statline span{padding:9px 15px;background:white;border:1px solid #e5eaf1;border-radius:10px;font-size:12px;color:#506178}.pw-controls,.pw-actions,.pw-filter{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pw-controls{justify-content:space-between}.pw-controls button,.pw-remove{background:#fff;border:1px solid #dfe6f0;border-radius:8px;padding:8px 11px;color:#546379;font-size:11px}.pw-filter button.chosen{color:#2856b7;background:#ecf2fe;border-color:#bdd0fa}.pw-actions .danger,.pw-remove{color:#bd5151}.pw-batch{background:#ebf2ff;border:1px solid #c8d9fa;border-radius:10px;padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px;color:#365b8f}.pw-batch label{display:flex;align-items:center;gap:9px}.pw-batch select,.pw-card select,.pw-table select{min-width:0;width:100%;padding:8px;border:1px solid #dce3ef;border-radius:7px;font:inherit;font-size:12px;background:white;color:#4d6078}.pw-empty{background:#fff;text-align:center;padding:65px 15px;border:1px dashed #cdd6e5;border-radius:14px;color:#8b98aa}.pw-empty span{font-size:44px;color:#adc1df}.pw-empty h3{margin:8px 0;font-size:16px;color:#53647e}.pw-empty p{font-size:12px}.pw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:15px}.pw-card{background:#fff;border:1px solid #e1e8f0;border-radius:12px;overflow:hidden;position:relative;min-width:0}.pw-card.selected{border-color:#5b82d9;box-shadow:0 0 0 2px #5b82d924}.pw-card>img{width:100%;height:154px;object-fit:contain;background:#eef1f5}.pw-checkbox{position:absolute;top:9px;left:9px;background:white;border-radius:6px;padding:5px;box-shadow:0 1px 7px #0002}.pw-checkbox input{display:block}.pw-card-body{display:grid;gap:9px;padding:11px}.pw-filename{font-size:11px;color:#374966;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pw-remove{justify-self:end;border:none}.pw-table-wrap{overflow:auto;background:#fff;border-radius:12px;border:1px solid #e5eaf2}.pw-table{width:100%;border-collapse:collapse}.pw-table td,.pw-table th{padding:10px;border-bottom:1px solid #edf0f5;text-align:left;font-size:11px}.pw-table img{height:70px;width:95px;object-fit:contain;background:#f0f2f6}.pw-table select{min-width:190px}.pw-alert{padding:12px 14px;font-size:12px;border-radius:8px}.pw-error{background:#fff0ed;color:#a83232}.pw-success{background:#e7f8ee;color:#257448}@media(max-width:650px){.pw-export{margin-left:0}.pw-toolbar>*{flex:1}.pw-template-name{flex-basis:100%}}
+.photo-workbench{display:grid;gap:19px}.pw-heading h2{margin:5px 0;font-size:23px;color:#203149}.pw-heading p,.pw-help{font-size:12px;color:#7d889a;line-height:1.8;margin:4px 0}.pw-eyebrow{font-size:10px;letter-spacing:.15em;color:#5079c4;font-weight:700}.pw-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:18px;background:#fff;border:1px solid #e6ecf3;border-radius:14px}.pw-upload,.pw-template,.pw-export{border:1px solid #d7e1ef;border-radius:9px;padding:10px 14px;font-size:12px;cursor:pointer;white-space:nowrap}.pw-upload,.pw-export{background:#315fca;border-color:#315fca;color:white;font-weight:700}.pw-template{background:#f5f8fd;color:#365578}.pw-export{margin-left:auto}.pw-export:disabled{opacity:.5;cursor:not-allowed}.pw-template-name{font-size:11px;color:#7b8798;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pw-statline{display:flex;flex-wrap:wrap;gap:8px}.pw-statline span{padding:9px 15px;background:white;border:1px solid #e5eaf1;border-radius:10px;font-size:12px;color:#506178}.pw-controls,.pw-actions,.pw-filter{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pw-controls{justify-content:space-between}.pw-controls button,.pw-remove{background:#fff;border:1px solid #dfe6f0;border-radius:8px;padding:8px 11px;color:#546379;font-size:11px}.pw-filter button.chosen{color:#2856b7;background:#ecf2fe;border-color:#bdd0fa}.pw-actions .danger,.pw-remove{color:#bd5151}.pw-batch{background:#ebf2ff;border:1px solid #c8d9fa;border-radius:10px;padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px;color:#365b8f}.pw-batch label{display:flex;align-items:center;gap:9px}.pw-batch select,.pw-card select,.pw-table select{min-width:0;width:100%;padding:8px;border:1px solid #dce3ef;border-radius:7px;font:inherit;font-size:12px;background:white;color:#4d6078}.pw-empty{background:#fff;text-align:center;padding:65px 15px;border:1px dashed #cdd6e5;border-radius:14px;color:#8b98aa}.pw-empty span{font-size:44px;color:#adc1df}.pw-empty h3{margin:8px 0;font-size:16px;color:#53647e}.pw-empty p{font-size:12px}.pw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:15px}.pw-card{background:#fff;border:1px solid #e1e8f0;border-radius:12px;overflow:hidden;position:relative;min-width:0}.pw-card.selected{border-color:#5b82d9;box-shadow:0 0 0 2px #5b82d924}.pw-zoomable{cursor:zoom-in}.pw-card>img{width:100%;height:154px;object-fit:contain;background:#eef1f5}.pw-checkbox{position:absolute;top:9px;left:9px;background:white;border-radius:6px;padding:5px;box-shadow:0 1px 7px #0002}.pw-checkbox input{display:block}.pw-card-body{display:grid;gap:9px;padding:11px}.pw-filename{font-size:11px;color:#374966;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pw-remove{justify-self:end;border:none}.pw-table-wrap{overflow:auto;background:#fff;border-radius:12px;border:1px solid #e5eaf2}.pw-table{width:100%;border-collapse:collapse}.pw-table td,.pw-table th{padding:10px;border-bottom:1px solid #edf0f5;text-align:left;font-size:11px}.pw-table img{height:70px;width:95px;object-fit:contain;background:#f0f2f6}.pw-table select{min-width:190px}.pw-alert{padding:12px 14px;font-size:12px;border-radius:8px}.pw-error{background:#fff0ed;color:#a83232}.pw-success{background:#e7f8ee;color:#257448}@media(max-width:650px){.pw-export{margin-left:0}.pw-toolbar>*{flex:1}.pw-template-name{flex-basis:100%}}
+.pw-lightbox{position:fixed;inset:0;background:#142036ce;display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}.pw-lightbox-content{background:#fff;padding:16px;border-radius:14px;max-width:min(100%,1000px);width:100%;max-height:95vh;display:flex;flex-direction:column;gap:12px}.pw-lightbox-heading{display:flex;justify-content:space-between;align-items:center;gap:15px;font-size:13px;color:#384962}.pw-lightbox-heading span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pw-lightbox-heading button{border:0;background:#edf2fa;border-radius:8px;padding:8px 12px}.pw-lightbox-content>img{width:100%;min-height:0;object-fit:contain;flex:1;background:#f2f4f8}.pw-lightbox-content label{display:flex;align-items:center;gap:12px;font-size:12px;color:#64748b}.pw-lightbox-content select{max-width:350px;flex:1;padding:9px;border:1px solid #dce3ee;border-radius:8px}
 </style>
