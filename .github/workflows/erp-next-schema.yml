@@ -34,7 +34,7 @@ jobs:
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml config --quiet
       - name: Start isolated MySQL
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d erp-next-mysql
-      - name: Apply schema V1 through V7
+      - name: Apply schema V1 through V9
         run: timeout 180 docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml run --rm erp-next-schema
       - name: Re-run migrations idempotently
         run: timeout 180 docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml run --rm erp-next-schema
@@ -45,7 +45,7 @@ jobs:
             "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2','3','4','5','6','7') AND success = 1" | grep -qx 7
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 34
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name LIKE 'erp_%'" | grep -qx 48
       - name: Build and start API and web
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d --build
       - name: Collect container diagnostics
@@ -78,8 +78,9 @@ jobs:
 
           ORG=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/organizations -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 业务部"}')
           ORG_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$ORG")
-          EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeCode\":\"CI-001\",\"fullName\":\"CI 员工\",\"organizationId\":$ORG_ID}")
+          EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeCode\":\"CI-001\",\"fullName\":\"CI 工程师\",\"employeeType\":\"engineer\",\"organizationId\":$ORG_ID}")
           EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$EMP")
+          curl -fsS -X POST "http://127.0.0.1:8090/api/business/employees/$EMP_ID/qualifications" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"qualificationName":"CI 工程师资格","qualificationType":"engineer","expiresOn":"2099-12-31"}' >/dev/null
           CUSTOMER=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"customerCode\":\"CI-C-001\",\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
           CUSTOMER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CUSTOMER")
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 联系人","phone":"123456"}' >/dev/null
