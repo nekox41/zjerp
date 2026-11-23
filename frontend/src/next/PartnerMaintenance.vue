@@ -7,6 +7,8 @@ const tab=ref('partners'),busy=ref(false),error=ref(''),notice=ref('')
 const partners=ref([]),contracts=ref([]),projects=ref([]),employees=ref([])
 const partner=ref(null),maintenance=ref(null),contractDetail=ref(null)
 const partnerForm=ref({partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''})
+const partnerEditOpen=ref(false)
+const partnerEditForm=ref({name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:'',status:'active'})
 const linkForm=ref({contractId:'',partnerId:'',sharePercent:'',notes:'',fileType:'contract'})
 const projectLink=ref({projectId:'',contractId:'',relationType:'service'})
 const leadership=ref({projectId:'',managerEmployeeId:'',technicalLeadEmployeeId:''})
@@ -30,7 +32,29 @@ async function createPartner(){
   try{await api('/business/partners',{method:'POST',body:JSON.stringify(partnerForm.value)});partnerForm.value={partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''};await load();notice.value='合作方档案已创建'}
   catch(e){error.value=e.message}finally{busy.value=false}
 }
-async function openPartner(id){try{partner.value=await api('/business/partners/'+id)}catch(e){error.value=e.message}}
+async function openPartner(id){
+  try{
+    partner.value=await api('/business/partners/'+id)
+    partnerEditForm.value={
+      name:partner.value.name||'',partnerType:partner.value.partner_type||'introducer',
+      contactName:partner.value.contact_name||'',phone:partner.value.phone||'',
+      email:partner.value.email||'',address:partner.value.address||'',
+      notes:partner.value.notes||'',status:partner.value.status||'active'
+    }
+    partnerEditOpen.value=false
+  }catch(e){error.value=e.message}
+}
+async function savePartner(){
+  if(!partner.value)return
+  busy.value=true;error.value=''
+  try{
+    partner.value=await api('/business/partners/'+partner.value.id,{method:'PUT',body:JSON.stringify(partnerEditForm.value)})
+    partnerEditOpen.value=false
+    await load()
+    await openPartner(partner.value.id)
+    notice.value='合作方档案已更新'
+  }catch(e){error.value=e.message}finally{busy.value=false}
+}
 async function openContractDetail(id){
   if(!id){contractDetail.value=null;return}
   try{contractDetail.value=await api('/business/contracts/'+id)}catch(e){error.value=e.message}
@@ -100,7 +124,19 @@ onMounted(load)
       <label>电话<input v-model="partnerForm.phone"></label><label>邮箱<input v-model="partnerForm.email"></label><label class="wide">地址<input v-model="partnerForm.address"></label><label class="wide">备注<textarea v-model="partnerForm.notes"></textarea></label><button class="primary" :disabled="busy">创建合作方</button>
     </form></div>
     <div class="pm-panel"><h3>合作方列表</h3><div class="pm-list"><button v-for="p in partners" :key="p.id" @click="openPartner(p.id)" :class="{selected:partner?.id===p.id}"><b>{{p.name}}</b><small>{{p.partner_code}} · {{p.contract_count}} 份关联合同</small></button><p v-if="!partners.length" class="pm-empty">暂无合作方</p></div>
-      <div v-if="partner" class="pm-detail"><h4>{{partner.name}} · 关联合同</h4><div v-for="c in partner.contracts||[]" :key="c.id" class="pm-contract"><b>{{c.title}}</b><small>{{c.contract_no}} · 分成 {{c.share_percent}}% · {{c.status}}</small></div><p v-if="!partner.contracts?.length" class="pm-empty">尚未关联合同</p></div>
+      <div v-if="partner" class="pm-detail">
+        <div class="pm-detail-head"><h4>{{partner.name}} · 合作方档案</h4><button class="secondary-button" @click="partnerEditOpen=!partnerEditOpen">{{partnerEditOpen?'收起编辑':'编辑档案'}}</button></div>
+        <p>编号：{{partner.partner_code}} · 状态：{{partner.status==='active'?'启用':'停用'}}</p>
+        <form v-if="partnerEditOpen" class="pm-form" @submit.prevent="savePartner">
+          <label>名称<input v-model="partnerEditForm.name" required></label>
+          <label>类型<select v-model="partnerEditForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label>
+          <label>联系人<input v-model="partnerEditForm.contactName"></label><label>电话<input v-model="partnerEditForm.phone"></label>
+          <label>邮箱<input v-model="partnerEditForm.email"></label><label>状态<select v-model="partnerEditForm.status"><option value="active">启用</option><option value="disabled">停用</option></select></label>
+          <label class="wide">地址<input v-model="partnerEditForm.address"></label><label class="wide">备注<textarea v-model="partnerEditForm.notes"></textarea></label>
+          <button class="primary" :disabled="busy">保存档案</button>
+        </form>
+        <h4>关联合同</h4><div v-for="c in partner.contracts||[]" :key="c.id" class="pm-contract"><b>{{c.title}}</b><small>{{c.contract_no}} · 分成 {{c.share_percent}}% · {{c.status}}</small></div><p v-if="!partner.contracts?.length" class="pm-empty">尚未关联合同</p>
+      </div>
     </div>
   </div>
 
