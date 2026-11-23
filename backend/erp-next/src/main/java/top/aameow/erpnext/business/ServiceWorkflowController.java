@@ -202,7 +202,9 @@ public class ServiceWorkflowController {
         byte[] templateBytes=Files.readAllBytes(storage.resolve(template.get("storage_key").toString()));
         byte[] output;
         try(XWPFDocument doc=new XWPFDocument(new ByteArrayInputStream(templateBytes));java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
-            inserter.insert(doc,photos);
+            String photoMode=b.get("photoMode")==null?"append":b.get("photoMode").toString();
+            if(!Set.of("append","replace").contains(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效照片插入模式");
+            inserter.insert(doc,photos,"replace".equals(photoMode));
             doc.write(out);output=out.toByteArray();
         } catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 模板无效或损坏",e);
@@ -217,7 +219,7 @@ public class ServiceWorkflowController {
             jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
             for(Long batchId:batchIds)jdbc.update("UPDATE erp_report_photo_batch SET report_id=?,status='locked',locked_at=CURRENT_TIMESTAMP(3) WHERE id=?",id,batchId);
             audit(actor(a),"report.docx.generated","erp_service_report",id,"version="+version+",photos="+photos.size());
-            return Map.of("reportId",id,"versionNo",version,"artifactRevisionNo",artifactRevision,"fileId",fileId,"filename",filename,"sha256",stored.sha256(),"photoCount",photos.size());
+            return Map.of("reportId",id,"versionNo",version,"artifactRevisionNo",artifactRevision,"fileId",fileId,"filename",filename,"sha256",stored.sha256(),"photoCount",photos.size(),"photoMode",b.get("photoMode")==null?"append":b.get("photoMode").toString());
         } catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }
 
