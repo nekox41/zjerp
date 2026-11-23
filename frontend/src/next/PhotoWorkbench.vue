@@ -61,8 +61,8 @@ async function loadProjectData() {
   if (!currentProjectId.value || !can('photo:write')) return
   const id = currentProjectId.value
   const [projectReports, photoBatches, visits] = await Promise.all([
-    api('/business/projects/' + id + '/reports'),
-    api('/report-photos/batches?projectId=' + id),
+    api('/business/projects/' + id + '/reports').catch(() => []),
+    api('/report-photos/batches?projectId=' + id).catch(() => []),
     api('/business/projects/' + id + '/service-visits').catch(() => [])
   ])
   reports.value = projectReports
