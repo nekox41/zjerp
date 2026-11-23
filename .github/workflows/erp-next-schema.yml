@@ -76,9 +76,7 @@ jobs:
           test -n "$TOKEN"
           curl -fsS http://127.0.0.1:8089/next-api/auth/me -H "Authorization: Bearer $TOKEN" | grep -q 'CI Admin'
 
-          ORG=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/organizations -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 业务部"}')
-          ORG_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$ORG")
-          EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeCode\":\"CI-001\",\"fullName\":\"CI 员工\",\"organizationId\":$ORG_ID}")
+          EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"employeeCode":"CI-001","fullName":"CI 员工","employeeType":"engineer"}')
           EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$EMP")
           CUSTOMER=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"customerCode\":\"CI-C-001\",\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
           CUSTOMER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CUSTOMER")
@@ -87,6 +85,12 @@ jobs:
           CONTRACT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CONTRACT")
           PROJECT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectNo\":\"CI-P-001\",\"name\":\"CI 项目\",\"customerId\":$CUSTOMER_ID,\"contractId\":$CONTRACT_ID,\"managerEmployeeId\":$EMP_ID}")
           PROJECT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$PROJECT")
+          PROJECT_NO_CONTRACT=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectNo\":\"CI-P-002\",\"name\":\"CI 无合同项目\",\"customerId\":$CUSTOMER_ID}")
+          echo "$PROJECT_NO_CONTRACT" | grep -q '"contract_id":null'
+          RENEWAL=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/contracts -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractNo\":\"CI-CT-002\",\"title\":\"CI 续签合同\",\"customerId\":$CUSTOMER_ID,\"contractType\":\"maintenance\",\"signingMode\":\"intermediary\",\"intermediaryName\":\"CI 中间人\",\"intermediarySharePercent\":20,\"amount\":1200}")
+          RENEWAL_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$RENEWAL")
+          curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/contracts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractId\":$RENEWAL_ID,\"relationType\":\"renewal\",\"isCurrent\":true}" | grep -q 'CI 续签合同'
+          curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'intermediary_share_percent'
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"title":"CI 里程碑"}' >/dev/null
           curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 里程碑'
           MILESTONE_ID=$(curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
