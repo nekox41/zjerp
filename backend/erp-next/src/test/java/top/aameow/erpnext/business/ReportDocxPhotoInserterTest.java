@@ -90,6 +90,16 @@ class ReportDocxPhotoInserterTest {
         }
     }
     @Test
+    void recognizesTheAbbreviatedEmergencyLightingHeadingInTheZhenggaoTemplate() throws Exception {
+        try(XWPFDocument doc=new XWPFDocument()){
+            section(doc,"（四）应急照明和疏散指示系统",1);
+            new ReportDocxPhotoInserter().insert(doc,List.of(
+                new ReportDocxPhotoInserter.Photo("消防应急照明和疏散指示系统",png(),"lighting.png","2026-08-11","")
+            ));
+            assertEquals(1,pictureReferences(doc));
+        }
+    }
+    @Test
     void refusesCategoriesMissingFromTheSelectedTemplate() throws Exception {
         try(XWPFDocument doc=new XWPFDocument()){
             section(doc,"火灾自动报警系统",1);
