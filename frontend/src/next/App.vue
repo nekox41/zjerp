@@ -158,7 +158,7 @@ onMounted(refresh)
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='invoices'?'财务台账':tab==='finance'?'报账':'业务' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
       <div class="content">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
