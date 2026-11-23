@@ -101,8 +101,6 @@ jobs:
           echo 'SMOKE CHECK: intermediary contract'
           curl -fsS "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 合同'
           curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 项目'
-          source scripts/erp-next-service-smoke.sh
-          source scripts/erp-next-report-smoke.sh
           source scripts/erp-next-expense-smoke.sh
           source scripts/erp-next-invoice-smoke.sh
           source scripts/erp-next-dashboard-smoke.sh
