@@ -37,7 +37,7 @@ CREATE TABLE erp_contract_partner (
  PRIMARY KEY(contract_id,partner_id),
  CONSTRAINT fk_erp_contract_partner_contract FOREIGN KEY(contract_id) REFERENCES erp_contract(id) ON DELETE RESTRICT,
  CONSTRAINT fk_erp_contract_partner_partner FOREIGN KEY(partner_id) REFERENCES erp_partner(id) ON DELETE RESTRICT,
- CONSTRAINT ck_erp_contract_partner_share CHECK(share_percent>=0 AND share_percent<=100)
+ CONSTRAINT ck_erp_contract_partner_link_share CHECK(share_percent>=0 AND share_percent<=100)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE erp_contract_project (
