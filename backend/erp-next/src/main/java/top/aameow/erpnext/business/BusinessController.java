@@ -166,6 +166,9 @@ public class BusinessController {
     @PostMapping("/contracts") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> createContract(@RequestBody Map<String,Object>b,Authentication a) {
         String no=required(b,"contractNo"), title=required(b,"title"); Long customer=Long.valueOf(required(b,"customerId")), owner=optionalLong(b,"ownerEmployeeId");
+        String signingMode=val(b,"signingMode","direct");
+        if(!List.of("direct","intermediary").contains(signingMode)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"签约方式无效");
+        if("intermediary".equals(signingMode)) { required(b,"intermediaryName"); BigDecimal share=new BigDecimal(required(b,"intermediarySharePercent")); if(share.compareTo(BigDecimal.ZERO)<0||share.compareTo(BigDecimal.valueOf(100))>0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"分成比例必须在 0 到 100 之间"); }
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
         BigDecimal amount=new BigDecimal(val(b,"amount","0")); if(amount.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
         jdbc.update("""
