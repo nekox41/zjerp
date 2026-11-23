@@ -28,7 +28,7 @@ onMounted(load)
       <section class="panel"><h3>计划现场服务</h3><div v-for="x in data.upcomingVisits" :key="x.id" class="dash-row"><div><b>{{x.title}}</b><small>{{x.project_no}} · {{x.project_name}}</small></div><time>{{x.performed_on}}</time></div><p v-if="!data.upcomingVisits.length" class="empty">没有待执行现场服务</p></section>
       <section class="panel"><h3>维保资料提醒</h3><div v-for="x in data.maintenanceAttention" :key="x.id" class="dash-row"><div><b>{{x.project_no}} · {{x.name}}</b><small>{{x.customer_name}} · 合同结束 {{x.current_contract_end||'未关联'}}</small></div><span class="tag">{{!x.honeybee_uploaded?'小蜜蜂待上传':!x.documents_ready?'资料待完善':!x.maintenance_card_sent?'公示卡待寄':'合同临期'}}</span></div><p v-if="!data.maintenanceAttention.length" class="empty">没有待处理维保资料</p></section>
     </div>
-    <div class="panel"><h3>业务状态分布</h3><div class="status-distribution"><div><b>项目</b><span v-for="x in data.projectStatuses" :key="x.status">{{labels[x.status]||x.status}}：{{x.count}}</span></div><div><b>问题整改</b><span v-for="x in data.issueStatuses" :key="x.status">{{labels[x.status]||x.status}}：{{x.count}}</span></div><div><b>报告</b><span v-for="x in data.reportStatuses" :key="x.status>{{labels[x.status]||x.status}}：{{x.count}}</span></div></div></div>
+    <div class="panel"><h3>业务状态分布</h3><div class="status-distribution"><div><b>项目</b><span v-for="x in data.projectStatuses" :key="x.status">{{labels[x.status]||x.status}}：{{x.count}}</span></div><div><b>问题整改</b><span v-for="x in data.issueStatuses" :key="x.status">{{labels[x.status]||x.status}}：{{x.count}}</span></div><div><b>报告</b><span v-for="x in data.reportStatuses"  :key="x.status">{{labels[x.status]||x.status}}：{{x.count}}</span></div></div></div>
   </template>
 </section>
 </template>
