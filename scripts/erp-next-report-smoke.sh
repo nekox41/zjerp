@@ -8,6 +8,8 @@ ADMIN_ROLE_ID=$(python -c 'import json,sys; print(next(x["id"] for x in json.loa
 REVIEWER=$(curl -fsS -X POST http://127.0.0.1:8090/api/admin/identities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"username\":\"ci-reviewer\",\"displayName\":\"CI Reviewer\",\"password\":\"ci-reviewer-password-123\",\"roleIds\":[$PM_ROLE_ID]}") 
 REVIEWER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REVIEWER")
+curl -fsS -X PUT "http://127.0.0.1:8090/api/admin/identities/$REVIEWER_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"displayName\":\"CI Reviewer Updated\",\"status\":\"active\",\"roleIds\":[$PM_ROLE_ID]}" | grep -q 'CI Reviewer Updated'
 REVIEWER_EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"employeeCode\":\"CI-REVIEWER\",\"fullName\":\"CI Reviewer\",\"identityId\":$REVIEWER_ID,\"employeeType\":\"engineer\"}")
 REVIEWER_EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REVIEWER_EMP")
