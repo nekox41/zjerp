@@ -54,8 +54,10 @@ ALTER TABLE erp_project_issue
   ADD COLUMN resolved_at DATETIME(3) NULL AFTER rectification_note,
   ADD COLUMN verified_at DATETIME(3) NULL AFTER resolved_at,
   ADD COLUMN verified_by BIGINT NULL AFTER verified_at,
+  ADD COLUMN verified_site_visit_id BIGINT NULL AFTER verified_by,
   ADD CONSTRAINT fk_erp_project_issue_visit FOREIGN KEY (source_site_visit_id) REFERENCES erp_site_visit(id) ON DELETE SET NULL,
-  ADD CONSTRAINT fk_erp_project_issue_verifier FOREIGN KEY (verified_by) REFERENCES erp_identity(id) ON DELETE SET NULL;
+  ADD CONSTRAINT fk_erp_project_issue_verifier FOREIGN KEY (verified_by) REFERENCES erp_identity(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_erp_project_issue_verified_visit FOREIGN KEY (verified_site_visit_id) REFERENCES erp_site_visit(id) ON DELETE SET NULL;
 
 CREATE TABLE erp_project_issue_event (
   id BIGINT NOT NULL AUTO_INCREMENT,
