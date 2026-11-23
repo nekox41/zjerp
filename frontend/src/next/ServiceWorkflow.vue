@@ -226,7 +226,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
         <button class="primary" :disabled="busy">保存现场记录</button>
       </form>
       <div class="sw-list">
-        <article v-for="v in visits" :key="v.id"><div><b>{{ v.title }}</b><small>{{ v.visit_date }} · {{ ({inspection:'现场检测',rectification_review:'整改复核',supplement:'补充采集',maintenance:'维护保养',other:'其他'})[v.visit_type] }}</small><p>{{ v.summary||'暂无现场记录' }}</p></div><div><span class="sw-pill">{{ v.staff_count }} 位人员 · {{ v.issue_count }} 项问题</span><button @click="linkIssueToVisit(v)">关联问题</button></div></article>
+        <article v-for="v in visits" :key="v.id"><div><b>{{ v.title }}</b><small>{{ v.visit_date }} · {{ ({inspection:'现场检测',rectification_review:'整改复核',supplement:'补充采集',maintenance:'维护保养',other:'其他'})[v.visit_type] }}</small><p>{{ v.summary||'暂无现场记录' }}</p><p>现场人员：{{ v.staff_names||'未登记' }}</p></div><div><span class="sw-pill">{{ v.staff_count }} 位人员 · {{ v.issue_count }} 项问题</span><button @click="linkIssueToVisit(v)">关联问题</button></div></article>
         <div v-if="!visits.length" class="sw-empty small">尚未登记现场服务记录</div>
       </div>
     </div>
