@@ -78,8 +78,9 @@ jobs:
 
           ORG=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/organizations -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 业务部"}')
           ORG_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$ORG")
-          EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeCode\":\"CI-001\",\"fullName\":\"CI 员工\",\"organizationId\":$ORG_ID}")
+          EMP=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeCode\":\"CI-001\",\"fullName\":\"CI 员工\",\"employeeType\":\"engineer\",\"organizationId\":$ORG_ID}")
           EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$EMP")
+          curl -fsS -X POST "http://127.0.0.1:8090/api/business/employees/$EMP_ID/qualifications" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"qualificationName":"CI 工程师资格","expiresOn":"2099-12-31"}' >/dev/null
           CUSTOMER=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"customerCode\":\"CI-C-001\",\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
           CUSTOMER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CUSTOMER")
           curl -fsS -X POST "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 联系人","phone":"123456"}' >/dev/null
