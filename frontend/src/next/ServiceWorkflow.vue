@@ -96,7 +96,7 @@ async function openBatch(id) {
 }
 async function loadPreview(fileId) {
   const token=sessionStorage.getItem('erp-next-token')
-  const response=await fetch('/next-api/files/'+fileId+'/download',{headers:token?{Authorization:'Bearer '+token}:{}})
+  const response=await fetch((import.meta.env.VITE_NEXT_API_BASE||'/next-api')+'/files/'+fileId+'/download',{headers:token?{Authorization:'Bearer '+token}:{}})
   if(!response.ok)throw new Error('照片预览加载失败')
   previewUrls.value[fileId]=URL.createObjectURL(await response.blob())
 }
