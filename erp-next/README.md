@@ -1,6 +1,6 @@
 # 新版 ERP 独立运行环境
 
-这是新版 ERP 的独立运行栈，与旧版 RuoYi 应用和旧的 server 数据库完全隔离。它包含 MySQL 8.4、Flyway Schema V1-V7、新版 Spring Boot API、独立 Vue 工作空间入口，以及独立持久化的私有业务附件目录。
+这是新版 ERP 的独立运行栈，与旧版 RuoYi 应用和旧的 server 数据库完全隔离。它包含 MySQL 8.4、Flyway Schema V1-V8、新版 Spring Boot API、独立 Vue 工作空间入口，以及独立持久化的私有业务附件目录。
 
 ## 首次启动
 
