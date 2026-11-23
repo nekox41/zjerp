@@ -55,6 +55,9 @@ CREATE TABLE erp_contract_project (
 INSERT IGNORE INTO erp_contract_project(contract_id,project_id,relation_type)
  SELECT contract_id,id,'service' FROM erp_project WHERE contract_id IS NOT NULL;
 
+ALTER TABLE erp_employee ADD COLUMN employee_type VARCHAR(24) NOT NULL DEFAULT 'general',
+ ADD CONSTRAINT ck_erp_employee_type CHECK(employee_type IN ('general','operator','engineer','manager'));
+
 ALTER TABLE erp_project
  ADD COLUMN technical_lead_employee_id BIGINT NULL,
  ADD CONSTRAINT fk_erp_project_technical_lead FOREIGN KEY(technical_lead_employee_id) REFERENCES erp_employee(id) ON DELETE SET NULL;
