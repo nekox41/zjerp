@@ -128,7 +128,7 @@ onMounted(load)
         <label class="wide">现场人员<select v-model="visitForm.employeeIds" multiple><option v-for="e in employees" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
         <label class="wide">备注<input v-model="visitForm.notes"></label><button class="primary">登记维护记录</button>
       </form>
-      <div class="pm-detail"><h4>维护记录</h4><div v-for="v in maintenance.visits||[]" :key="v.id" class="pm-contract"><b>{{v.visit_date}}</b><small>{{v.notes||'无备注'}}</small></div><p v-if="!maintenance.visits?.length" class="pm-empty">暂无维护日期记录</p></div>
+      <div class="pm-detail"><h4>维护记录</h4><div v-for="v in maintenance.visits||[]" :key="v.id" class="pm-contract"><b>{{v.visit_date}}</b><small>{{v.staff_names||'未登记现场人员'}} · {{v.notes||'无备注'}}</small></div><p v-if="!maintenance.visits?.length" class="pm-empty">暂无维护日期记录</p></div>
     </div>
     <div v-else class="pm-panel pm-empty">选择一个项目以查看维保状态和合同历史</div>
   </div>
