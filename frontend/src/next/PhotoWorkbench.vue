@@ -45,6 +45,7 @@ const classifiedCount = computed(() => photos.value.filter(p => !!p.system_code)
 const selectedCount = computed(() => selectedIds.value.length)
 const ready = computed(() => photos.value.length > 0 && classifiedCount.value === photos.value.length)
 const editable = computed(() => batch.value && !['inserted','archived'].includes(batch.value.status))
+const canEditPhotos = computed(() => editable.value && can('photo:write'))
 const reportEditable = computed(() => report.value && ['draft','returned'].includes(report.value.status))
 
 function clearUrls() {
@@ -57,7 +58,7 @@ async function loadProjects() {
   if (!currentProjectId.value && projects.value.length) projectIdLocal.value = String(projects.value[0].id)
 }
 async function loadProjectData() {
-  if (!currentProjectId.value) return
+  if (!currentProjectId.value || !can('photo:write')) return
   const id = currentProjectId.value
   const [projectReports, photoBatches, visits] = await Promise.all([
     api('/business/projects/' + id + '/reports'),
@@ -155,7 +156,7 @@ async function compressPhoto(file) {
 async function uploadPhotos(event) {
   const files = Array.from(event.target.files || [])
   event.target.value = ''
-  if (!files.length || !batchId.value) return
+  if (!files.length || !batchId.value || !canEditPhotos.value) return
   if (!editable.value) { error.value='该批次已插入报告，不能再修改'; return }
   if (photos.value.length + files.length > 300) { error.value='一个批次最多 300 张照片'; return }
   busy.value = true; error.value=''; notice.value=''
@@ -210,7 +211,7 @@ function movePhoto(photo,direction) {
   })
 }
 async function saveClassification() {
-  if (!batchId.value || !editable.value) return
+  if (!batchId.value || !canEditPhotos.value) return
   busy.value=true; error.value=''; notice.value=''
   try {
     batch.value = await api('/report-photos/batches/' + batchId.value + '/photos',{
@@ -227,7 +228,7 @@ async function saveClassification() {
   finally { busy.value=false }
 }
 async function deletePhoto(photo) {
-  if (!confirm('确定移除这张照片吗？')) return
+  if (!canEditPhotos.value || !confirm('确定移除这张照片吗？')) return
   busy.value=true; error.value=''
   try {
     if(photo.previewUrl){URL.revokeObjectURL(photo.previewUrl);objectUrls.delete(photo.previewUrl)}
@@ -240,6 +241,7 @@ async function deletePhoto(photo) {
 async function uploadTemplate(event) {
   const file=event.target.files?.[0]; event.target.value=''
   if(!file) return
+  if(!can('report:write')) { error.value='当前账号没有报告编辑权限'; return }
   if(!file.name.toLowerCase().endsWith('.docx')) { error.value='模板必须是 DOCX 文件'; return }
   busy.value=true; error.value=''
   try {
@@ -253,6 +255,7 @@ async function uploadTemplate(event) {
 }
 function insertionBody() {
   if(!report.value || !templateFileId.value) throw new Error('请选择报告和 DOCX 模板')
+  if(!can('report:read')) throw new Error('当前账号没有报告读取权限')
   if(!ready.value) throw new Error('请先完成全部照片分类并保存')
   return { reportId:Number(reportIdLocal.value), templateFileId:Number(templateFileId.value), expectedVersionNo:Number(report.value.current_version_no) }
 }
@@ -308,19 +311,19 @@ onBeforeUnmount(clearUrls)
     <template v-else-if="batch">
       <div class="pw-batch-head"><div><b>{{ batch.title }}</b><small>{{ batch.batch_no }} · {{ batch.created_at }}</small></div><span class="pw-batch-status" :class="batch.status">{{ ({draft:'待分类',ready:'已分类待插入',inserted:'已插入报告',archived:'已归档'})[batch.status] }}</span></div>
       <div class="pw-toolbar">
-        <label v-if="editable" class="pw-upload">＋ 批量导入<input hidden type="file" multiple accept="image/jpeg,image/png" @change="uploadPhotos"></label>
+        <label v-if="canEditPhotos" class="pw-upload">＋ 批量导入<input hidden type="file" multiple accept="image/jpeg,image/png" @change="uploadPhotos"></label>
         <button type="button" class="pw-secondary" :disabled="busy || !photos.length" @click="selectVisible(true)">全选当前</button>
         <button type="button" class="pw-secondary" :disabled="busy || !selectedCount" @click="selectVisible(false)">取消选择</button>
-        <label v-if="selectedCount && editable" class="pw-bulk">批量分类<select @change="assignSelected($event.target.value);$event.target.value=''"><option value="">选择消防系统…</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></label>
+        <label v-if="selectedCount && canEditPhotos" class="pw-bulk">批量分类<select @change="assignSelected($event.target.value);$event.target.value=''"><option value="">选择消防系统…</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></label>
         <button type="button" class="pw-secondary" @click="viewMode=viewMode==='cards'?'table':'cards'">{{ viewMode==='cards'?'表格视图':'卡片视图' }}</button>
-        <button type="button" class="pw-primary" :disabled="busy || !editable || !photos.length" @click="saveClassification">保存分类与排序</button>
+        <button type="button" class="pw-primary" :disabled="busy || !canEditPhotos || !photos.length" @click="saveClassification">保存分类与排序</button>
       </div>
       <div class="pw-stats"><span>照片 {{ photos.length }} 张</span><span>已分类 {{ classifiedCount }} 张</span><span>待分类 {{ photos.length-classifiedCount }} 张</span><span>已选择 {{ selectedCount }} 张</span></div>
       <nav class="pw-filters"><button v-for="f in ['全部','未分类',...systems.filter(s=>photos.some(p=>p.system_code===s))]" :key="f" :class="{active:activeFilter===f}" @click="activeFilter=f">{{ f }}</button></nav>
       <div v-if="!photos.length" class="pw-empty"><span>▧</span><b>当前批次还没有照片</b><p>可以一次选择多张现场照片导入。</p></div>
       <div v-else-if="viewMode==='cards'" class="pw-grid">
         <article v-for="photo in filtered" :key="photo.photo_id" class="pw-card" :class="{selected:photo.selected}">
-          <label class="pw-check"><input type="checkbox" v-model="photo.selected" @change="toggleSelected(photo)" :disabled="!editable"></label>
+          <label class="pw-check"><input type="checkbox" v-model="photo.selected" @change="toggleSelected(photo)"  :disabled="!canEditPhotos"></label>
           <button class="pw-image" type="button" @click="focused=photo"><img v-if="photo.previewUrl" :src="photo.previewUrl" :alt="photo.original_name" loading="lazy"><span v-else>图片加载中</span></button>
           <div class="pw-card-body"><b :title="photo.original_name">{{ photo.original_name }}</b><small>{{ formatSize(photo.file_size) }}</small>
             <select v-model="photo.system_code" :disabled="!editable"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select>
@@ -333,9 +336,9 @@ onBeforeUnmount(clearUrls)
       </tbody></table></div>
       <section class="pw-insert-panel">
         <div><h3>插入报告</h3><p>系统会在对应消防系统章节内寻找最后一个「现场检测照片」位置，并在其后插入新的 2×2 照片组。原有检测记录和原照片不会被删除。</p></div>
-        <div class="pw-template-row"><label>目标报告附件中的 DOCX 模板<select v-model="templateFileId" :disabled="!report"><option value="">选择 DOCX 模板</option><option v-for="f in docxAttachments" :key="f.file_id" :value="String(f.file_id)">{{ f.original_name }} · v{{ f.version_no }}</option></select></label><label v-if="reportEditable" class="pw-upload secondary">上传新的 DOCX<input type="file" hidden accept=".docx" @change="uploadTemplate"></label></div>
+        <div class="pw-template-row"><label>目标报告附件中的 DOCX 模板<select v-model="templateFileId" :disabled="!report"><option value="">选择 DOCX 模板</option><option v-for="f in docxAttachments" :key="f.file_id" :value="String(f.file_id)">{{ f.original_name }} · v{{ f.version_no }}</option></select></label><label v-if="reportEditable && can('report:write')" class="pw-upload secondary">上传新的 DOCX<input type="file" hidden accept=".docx" @change="uploadTemplate"></label></div>
         <p v-if="report" class="pw-report-meta">{{ report.report_no }} · 当前版本 v{{ report.current_version_no }} · {{ report.title }}</p>
-        <div class="pw-insert-actions"><button type="button" class="pw-secondary" :disabled="busy || !ready || !templateFileId || !reportEditable || !editable" @click="previewDocx">生成 DOCX 预览</button><button type="button" class="pw-primary" :disabled="busy || !ready || !templateFileId || !reportEditable || !editable || !can('report:write')" @click="insertDocx">确认插入并生成报告新版本</button></div>
+        <div class="pw-insert-actions"><button type="button" class="pw-secondary" :disabled="busy || !ready || !templateFileId || !reportEditable || !canEditPhotos || !can('report:read')" @click="previewDocx">生成 DOCX 预览</button><button type="button" class="pw-primary" :disabled="busy || !ready || !templateFileId || !reportEditable || !canEditPhotos || !can('report:write')" @click="insertDocx">确认插入并生成报告新版本</button></div>
         <small>预览文件需要用 Word 检查分页、图片完整性和版式。确认后才会创建新的报告版本；原始 DOCX 与原始照片始终保留。</small>
       </section>
     </template>
