@@ -84,6 +84,24 @@ public class ReportPhotoController {
     @GetMapping("/systems") @PreAuthorize("hasAuthority('photo:read')")
     public List<String> systems() { return DocxPhotoInserter.SYSTEMS; }
 
+    @GetMapping("/templates/{fileId}/systems")
+    @PreAuthorize("hasAuthority('photo:read') and hasAuthority('report:read')")
+    public Map<String,Object> templateSystems(@PathVariable long fileId,Authentication a) throws IOException {
+        Map<String,Object> f=one("SELECT id,uploaded_by,media_type,byte_size,storage_key,original_name FROM erp_file_object WHERE id=?",fileId);
+        boolean owner=((Number)f.get("uploaded_by")).longValue()==actor(a);
+        if(!owner) {
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment WHERE file_id=?",Integer.class,fileId);
+            if(linked==null||linked==0) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"模板文件不存在");
+        }
+        if(!DOCX_MEDIA.equals(f.get("media_type")) || ((Number)f.get("byte_size")).longValue()>25L*1024*1024)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择 25MB 以内的 DOCX 模板");
+        byte[] bytes=Files.readAllBytes(storage.resolve(f.get("storage_key").toString()));
+        List<String> supported;
+        try { supported=DocxPhotoInserter.inspectSystems(bytes); }
+        catch(Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无法解析 DOCX 模板中的消防系统照片位置",e); }
+        return Map.of("fileId",fileId,"filename",f.get("original_name").toString(),"systems",supported);
+    }
+
     @GetMapping("/batches") @PreAuthorize("hasAuthority('photo:read')")
     public List<Map<String,Object>> batches(@RequestParam(required=false) Long projectId) {
         if(projectId!=null) one("SELECT id FROM erp_project WHERE id=?",projectId);
