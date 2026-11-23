@@ -103,7 +103,9 @@ async function saveMaintenance() {
       method:'PUT',
       body:JSON.stringify({
         honeybeeUploaded:!!project.value.honeybee_uploaded,
+        honeybeeProjectCreated:!!project.value.honeybee_project_created,
         documentsReady:!!project.value.documents_ready,
+        maintenanceCardPrepared:!!project.value.maintenance_card_prepared,
         maintenanceCardSent:!!project.value.maintenance_card_sent
       })
     })
@@ -306,9 +308,11 @@ onMounted(loadAll)
       <section v-else-if="tab==='maintenance'" class="pw-panel">
         <div class="pw-panel-title"><div><h3>维护保养状态</h3><p>小蜜蜂资料、项目资料和公示卡由工作人员人工确认。</p></div><button class="pw-primary" :disabled="busy || !can('maintenance:write')" @click="saveMaintenance">保存状态</button></div>
         <div class="pw-checks">
-          <label><input type="checkbox" v-model="project.honeybee_uploaded"> 小蜜蜂资料已上传</label>
+          <label><input type="checkbox" v-model="project.honeybee_uploaded"> 合同已上传小蜜蜂</label>
+          <label><input type="checkbox" v-model="project.honeybee_project_created"> 小蜜蜂项目已建立</label>
           <label><input type="checkbox" v-model="project.documents_ready"> 项目资料已准备</label>
-          <label><input type="checkbox" v-model="project.maintenance_card_sent"> 公示卡已寄送</label>
+          <label><input type="checkbox" v-model="project.maintenance_card_prepared"> 维保公示卡已制作</label>
+          <label><input type="checkbox" v-model="project.maintenance_card_sent"> 维保公示卡已寄送</label>
         </div>
         <div class="pw-panel-title"><div><h3>维护公示卡文件</h3><p>文件归档到项目当前合同；寄送状态由上方人工确认。</p></div><label v-if="project.contract_id && can('contract:write')" class="pw-secondary">上传公示卡<input type="file" hidden accept=".docx,.pdf,.jpg,.jpeg,.png" @change="uploadMaintenanceCard"></label></div>
         <div class="pw-panel-title"><div><h3>维保现场记录</h3><p>仅在确有外地现场服务时记录，不强制按月填报。</p></div></div>
