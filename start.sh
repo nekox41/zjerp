@@ -79,7 +79,7 @@ echo "Waiting for frontend and backend health (up to 180 seconds)..."
 healthy=0
 for ((i=0;i<90;i++)); do
   if compose exec -T erp-next-api curl -fsS http://127.0.0.1:8090/actuator/health >/dev/null 2>&1 &&
-     compose exec -T erp-next-web wget -q -O /dev/null http://127.0.0.1/next.html 2>/dev/null | grep -q 'next-app'; then
+     compose exec -T erp-next-web sh -c "wget -q -O - http://127.0.0.1/next.html | grep -q next-app" >/dev/null 2>&1; then
     healthy=1
     break
   fi
