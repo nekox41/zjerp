@@ -30,7 +30,7 @@ public class DashboardController {
             (SELECT COUNT(*) FROM erp_service_report WHERE status='returned') returned_reports,
             (SELECT COUNT(*) FROM erp_employee_qualification WHERE qualification_type='engineer' AND status='valid'
               AND expires_on IS NOT NULL AND expires_on<=DATE_ADD(CURRENT_DATE,INTERVAL 60 DAY)) expiring_qualifications,
-            (SELECT COUNT(*) FROM erp_project WHERE maintenance_card_sent=FALSE) maintenance_cards_pending
+            (SELECT COUNT(*) FROM erp_project p JOIN erp_contract c ON c.id=p.contract_id WHERE c.contract_type='maintenance' AND p.maintenance_card_sent=FALSE) maintenance_cards_pending
           """));
         result.put("projectStatuses",jdbc.queryForList("SELECT status,COUNT(*) count FROM erp_project GROUP BY status ORDER BY status"));
         result.put("issueStatuses",jdbc.queryForList("SELECT status,COUNT(*) count FROM erp_project_issue GROUP BY status ORDER BY FIELD(status,'open','in_progress','resolved','closed')"));
@@ -60,9 +60,9 @@ public class DashboardController {
                  p.honeybee_uploaded,p.documents_ready,p.maintenance_card_sent
           FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id
           LEFT JOIN erp_contract ct ON ct.id=p.contract_id
-          WHERE p.status NOT IN ('completed','cancelled')
+          WHERE p.status NOT IN ('completed','cancelled') AND (ct.contract_type='maintenance' OR ct.id IS NULL)
             AND (p.honeybee_uploaded=FALSE OR p.documents_ready=FALSE OR p.maintenance_card_sent=FALSE
-              OR ct.ends_on<=DATE_ADD(CURRENT_DATE,INTERVAL 60 DAY))
+              OR (ct.ends_on IS NOT NULL AND ct.ends_on<=DATE_ADD(CURRENT_DATE,INTERVAL 60 DAY)))
           ORDER BY ct.ends_on LIMIT 12
           """));
         return result;
