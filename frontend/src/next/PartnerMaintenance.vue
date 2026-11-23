@@ -7,7 +7,7 @@ const tab=ref('partners'),busy=ref(false),error=ref(''),notice=ref('')
 const partners=ref([]),contracts=ref([]),projects=ref([]),employees=ref([])
 const partner=ref(null),maintenance=ref(null)
 const partnerForm=ref({partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''})
-const linkForm=ref({contractId:'',partnerId:'',sharePercent:'',notes:''})
+const linkForm=ref({contractId:'',partnerId:'',sharePercent:'',notes:'',fileType:'contract'})
 const projectLink=ref({projectId:'',contractId:'',relationType:'service'})
 const leadership=ref({projectId:'',managerEmployeeId:'',technicalLeadEmployeeId:''})
 const maintenanceForm=ref({projectId:'',currentContractId:'',honeybeeContractUploaded:false,honeybeeProjectCreated:false,projectMaterialsCompleted:false,publicCardStatus:'not_started',notes:''})
@@ -67,7 +67,7 @@ async function addMaintenanceVisit(){
 }
 async function uploadContractFile(event){
   const file=event.target.files?.[0];event.target.value='';if(!file||!linkForm.value.contractId)return
-  try{const fd=new FormData();fd.append('file',file);const uploaded=await api('/files',{method:'POST',body:fd});await api('/business/contracts/'+linkForm.value.contractId+'/files',{method:'POST',body:JSON.stringify({fileId:uploaded.id,fileType:'contract'})});notice.value='合同附件已保存'}
+  try{const fd=new FormData();fd.append('file',file);const uploaded=await api('/files',{method:'POST',body:fd});await api('/business/contracts/'+linkForm.value.contractId+'/files',{method:'POST',body:JSON.stringify({fileId:uploaded.id,fileType:linkForm.value.fileType})});notice.value='合同附件已保存'}
   catch(e){error.value=e.message}
 }
 onMounted(load)
@@ -96,7 +96,7 @@ onMounted(load)
       <label>合作方<select v-model="linkForm.partnerId" required><option value="">选择合作方</option><option v-for="p in partners" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
       <label>合同分成比例（%）<input v-model="linkForm.sharePercent" type="number" min="0" max="100" step="0.01" required></label><label>备注<input v-model="linkForm.notes"></label><button class="primary">保存合作关系</button>
     </form><p class="pm-note">一个合作方可以关联多份合同；每份合同可记录多个合作方，分成比例合计不得超过 100%。这里只记录约定比例，不登记实际付款。</p>
-    <label class="pm-upload">上传合同附件<input type="file" hidden accept=".pdf,.docx" @change="uploadContractFile"></label></div>
+    <label>附件类型<select v-model="linkForm.fileType"><option value="contract">合同原件</option><option value="maintenance_card">维保公示卡</option><option value="project_material">项目资料</option><option value="other">其他</option></select></label><label class="pm-upload">上传合同/维保资料<input type="file" hidden accept=".pdf,.docx" @change="uploadContractFile"></label></div>
     <div class="pm-panel"><h3>合同与项目关联</h3><form class="pm-form" @submit.prevent="linkProject">
       <label>合同<select v-model="projectLink.contractId" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
       <label>项目<select v-model="projectLink.projectId" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
