@@ -62,6 +62,10 @@ public class ServiceReportController {
         return r;
     }
     private Object parse(String s){try{return mapper.readValue(s,Object.class);}catch(Exception e){throw new IllegalStateException("Stored report JSON is invalid",e);}}
+    private void requireEngineerReviewer(long identityId){
+        Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e JOIN erp_employee_qualification q ON q.employee_id=e.id WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)",Integer.class,identityId);
+        if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"报告内部审核必须由具有有效工程师资格的员工完成");
+    }
     private void checkContent(Map<String,Object> data){
         if(data==null||data.get("summary")==null||data.get("summary").toString().isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"提交前必须填写报告摘要");
         if(data.get("conclusion")==null||data.get("conclusion").toString().isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"提交前必须填写服务结论");
@@ -125,6 +129,7 @@ public class ServiceReportController {
     @PostMapping("/reports/{id}/start-review") @PreAuthorize("hasAuthority('report:review')") @Transactional
     public Map<String,Object> startReview(@PathVariable long id,Authentication a){
         Map<String,Object> r=report(id);if(!"submitted".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已提交报告可以开始审核");
+        requireEngineerReviewer(actor(a));
         if(versionAuthor(id,r)==actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"报告编制人不能审核自己的报告");
         jdbc.update("UPDATE erp_service_report SET status='reviewing',reviewer_id=? WHERE id=?",actor(a),id);event(id,"submitted","reviewing",actor(a),"开始审核");return detail(id);
     }
