@@ -220,7 +220,7 @@ public final class DocxPhotoInserter {
         long pixels=(long)image.getWidth()*image.getHeight();
         if(image.getWidth()<1||image.getHeight()<1||pixels>40000000L)
             throw new IllegalArgumentException("照片尺寸无效或超过 4000 万像素");
-        double scale=Math.min(1.0,Math.min(270.0/image.getWidth(),190.0/image.getHeight()));
+        double scale=Math.min(1.0,Math.min(220.0/image.getWidth(),160.0/image.getHeight()));
         return new ImageSize(Math.max(1,(int)Math.round(image.getWidth()*scale)),
             Math.max(1,(int)Math.round(image.getHeight()*scale)));
     }
