@@ -62,8 +62,8 @@ public class BusinessController {
     @PutMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> updateEmployee(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_employee WHERE id=?",id);
-        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),organization_id=COALESCE(?,organization_id),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
-          b.get("fullName"),optionalLong(b,"organizationId"),b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
+        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),employee_type=COALESCE(?,employee_type),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),status=COALESCE(?,status) WHERE id=?",
+          b.get("fullName"),b.get("employeeType"),b.get("phone"),b.get("email"),b.get("positionName"),b.get("status"),id);
         audit(a,"employee.updated","erp_employee",id,"员工资料更新"); return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
 
@@ -72,7 +72,7 @@ public class BusinessController {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
           SELECT e.id,e.employee_code,e.full_name,e.organization_id,o.name organization_name,e.identity_id,
-                 e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on
+                 e.status,e.employee_type,e.phone,e.email,e.position_name,e.joined_on,e.left_on
           FROM erp_employee e LEFT JOIN erp_organization o ON o.id=e.organization_id
           WHERE ?='' OR e.full_name LIKE ? OR e.employee_code LIKE ? OR e.phone LIKE ?
           ORDER BY e.id DESC LIMIT 500
@@ -83,8 +83,8 @@ public class BusinessController {
         String name=required(b,"fullName"); Long org=optionalLong(b,"organizationId"), identity=optionalLong(b,"identityId");
         if(org!=null) one("SELECT id FROM erp_organization WHERE id=?",org);
         if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
-        jdbc.update("INSERT INTO erp_employee(employee_code,full_name,organization_id,identity_id,phone,email,position_name,status) VALUES(?,?,?,?,?,?,?,'active')",
-            b.get("employeeCode"),name,org,identity,b.get("phone"),b.get("email"),b.get("positionName"));
+        jdbc.update("INSERT INTO erp_employee(employee_code,full_name,employee_type,organization_id,identity_id,phone,email,position_name,status) VALUES(?,?,?,?,?,?,?,?,'active')",
+            b.get("employeeCode"),name,val(b,"employeeType","employee"),org,identity,b.get("phone"),b.get("email"),b.get("positionName"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"employee.created","erp_employee",id,name);
         return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
@@ -169,17 +169,17 @@ public class BusinessController {
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
         BigDecimal amount=new BigDecimal(val(b,"amount","0")); if(amount.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
         jdbc.update("""
-          INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-          """,no,title,customer,b.get("contractType"),amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
+          INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,signing_mode,intermediary_name,intermediary_share_percent,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          """,no,title,customer,val(b,"contractType","other"),val(b,"signingMode","direct"),b.get("intermediaryName"),b.get("intermediarySharePercent")==null?null:new BigDecimal(b.get("intermediarySharePercent").toString()),amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"contract.created","erp_contract",id,no+" "+title);
         return one("SELECT ct.*,c.name customer_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id WHERE ct.id=?",id);
     }
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> updateContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_contract WHERE id=?",id);
-        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
-            b.get("title"),b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
+        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),contract_type=COALESCE(?,contract_type),signing_mode=COALESCE(?,signing_mode),intermediary_name=?,intermediary_share_percent=?,amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
+            b.get("title"),b.get("contractType"),b.get("signingMode"),b.get("intermediaryName"),b.get("intermediarySharePercent"),b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
         audit(a,"contract.updated","erp_contract",id,"合同资料更新"); return one("SELECT * FROM erp_contract WHERE id=?",id);
     }
 
@@ -200,8 +200,8 @@ public class BusinessController {
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); Long contract=optionalLong(b,"contractId");
         if(contract!=null) { Map<String,Object> ct=one("SELECT id,customer_id FROM erp_contract WHERE id=?",contract); if(((Number)ct.get("customer_id")).longValue()!=customer) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同客户与项目客户不一致"); }
         Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) one("SELECT id FROM erp_employee WHERE id=?",manager);
-        jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,progress,status) VALUES(?,?,?,?,?,?,?,?,0,'planned')",
-            no,name,contract,customer,b.get("description"),manager,b.get("plannedStart"),b.get("plannedEnd"));
+        jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,planned_start,planned_end,progress,status,honeybee_uploaded,documents_ready,maintenance_card_sent) VALUES(?,?,?,?,?,?,?,?,?,0,'planned',?,?,?)",
+            no,name,contract,customer,b.get("description"),manager,optionalLong(b,"technicalLeadEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),Boolean.parseBoolean(val(b,"honeybeeUploaded","false")),Boolean.parseBoolean(val(b,"documentsReady","false")),Boolean.parseBoolean(val(b,"maintenanceCardSent","false")));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.created","erp_project",id,no+" "+name);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
         return one("SELECT * FROM erp_project WHERE id=?",id);
@@ -211,8 +211,8 @@ public class BusinessController {
         one("SELECT id FROM erp_project WHERE id=?",id);
         BigDecimal progress=b.get("progress")==null?null:new BigDecimal(b.get("progress").toString());
         if(progress!=null && (progress.compareTo(BigDecimal.ZERO)<0||progress.compareTo(BigDecimal.valueOf(100))>0)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"进度必须在 0 到 100 之间");
-        jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=COALESCE(?,manager_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),progress=COALESCE(?,progress),status=COALESCE(?,status) WHERE id=?",
-            b.get("name"),b.get("description"),optionalLong(b,"managerEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),progress,b.get("status"),id);
+        jdbc.update("UPDATE erp_project SET name=COALESCE(?,name),description=COALESCE(?,description),manager_employee_id=COALESCE(?,manager_employee_id),technical_lead_employee_id=COALESCE(?,technical_lead_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),actual_start=COALESCE(?,actual_start),actual_end=COALESCE(?,actual_end),progress=COALESCE(?,progress),status=COALESCE(?,status),honeybee_uploaded=COALESCE(?,honeybee_uploaded),documents_ready=COALESCE(?,documents_ready),maintenance_card_sent=COALESCE(?,maintenance_card_sent) WHERE id=?",
+            b.get("name"),b.get("description"),optionalLong(b,"managerEmployeeId"),optionalLong(b,"technicalLeadEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),b.get("actualStart"),b.get("actualEnd"),progress,b.get("status"),b.get("honeybeeUploaded"),b.get("documentsReady"),b.get("maintenanceCardSent"),id);
         audit(a,"project.updated","erp_project",id,"项目进度或资料更新");
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'updated',?)",id,actor(a),val(b,"log","项目资料更新"));
         return one("SELECT * FROM erp_project WHERE id=?",id);
