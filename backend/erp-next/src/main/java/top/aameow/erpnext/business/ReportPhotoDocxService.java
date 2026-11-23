@@ -7,7 +7,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.imageio.ImageIO;
+import java.awt.*;
 import java.awt.image.BufferedImage;
+import javax.imageio.IIOImage;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 import java.io.*;
 import java.util.*;
 
@@ -168,21 +172,46 @@ public class ReportPhotoDocxService {
         BufferedImage decoded=ImageIO.read(new ByteArrayInputStream(image.bytes()));
         if(decoded==null || decoded.getWidth()<1 || decoded.getHeight()<1)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片无法解码："+image.filename());
-        int type=pictureType(image.bytes());
-        double scale=Math.min(1.0,Math.min(245.0/decoded.getWidth(),165.0/decoded.getHeight()));
-        int width=Math.max(1,(int)Math.round(decoded.getWidth()*scale));
-        int height=Math.max(1,(int)Math.round(decoded.getHeight()*scale));
+        if((long)decoded.getWidth()*decoded.getHeight()>60_000_000L)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片像素过高，请先缩小后再导入："+image.filename());
+        // Keep the original file in private storage; only the report copy is resized and JPEG-compressed.
+        double scale=Math.min(1.0,Math.min(1600.0/decoded.getWidth(),1200.0/decoded.getHeight()));
+        int pixelWidth=Math.max(1,(int)Math.round(decoded.getWidth()*scale));
+        int pixelHeight=Math.max(1,(int)Math.round(decoded.getHeight()*scale));
+        BufferedImage optimized=new BufferedImage(pixelWidth,pixelHeight,BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics=optimized.createGraphics();
+        graphics.setColor(Color.WHITE);
+        graphics.fillRect(0,0,pixelWidth,pixelHeight);
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        graphics.drawImage(decoded,0,0,pixelWidth,pixelHeight,null);
+        graphics.dispose();
+        byte[] jpeg=toJpeg(optimized);
+        double displayScale=Math.min(1.0,Math.min(245.0/pixelWidth,165.0/pixelHeight));
+        int width=Math.max(1,(int)Math.round(pixelWidth*displayScale));
+        int height=Math.max(1,(int)Math.round(pixelHeight*displayScale));
+        String filename=image.filename().replaceAll("(?i)\\.(png|jpe?g)$","")+".jpg";
         XWPFRun run=cell.getParagraphs().get(0).createRun();
         try {
-            run.addPicture(new ByteArrayInputStream(image.bytes()),type,image.filename(),Units.toEMU(width),Units.toEMU(height));
+            run.addPicture(new ByteArrayInputStream(jpeg),Document.PICTURE_TYPE_JPEG,filename,Units.toEMU(width),Units.toEMU(height));
         } catch(org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
-            throw new IOException("不支持的图片格式："+image.filename(),e);
+            throw new IOException("无法插入照片："+image.filename(),e);
         }
     }
 
-    private int pictureType(byte[] bytes) {
-        if(bytes.length>3&&(bytes[0]&255)==255&&(bytes[1]&255)==216) return Document.PICTURE_TYPE_JPEG;
-        if(bytes.length>8&&(bytes[0]&255)==137&&bytes[1]==80&&bytes[2]==78&&bytes[3]==71) return Document.PICTURE_TYPE_PNG;
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"仅支持 JPG 和 PNG 照片");
+    private byte[] toJpeg(BufferedImage image) throws IOException {
+        Iterator<ImageWriter> writers=ImageIO.getImageWritersByFormatName("jpeg");
+        if(!writers.hasNext()) throw new IOException("当前运行环境不支持 JPEG 编码");
+        ImageWriter writer=writers.next();
+        try(ByteArrayOutputStream out=new ByteArrayOutputStream();ImageOutputStream imageOut=ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(imageOut);
+            var params=writer.getDefaultWriteParam();
+            if(params.canWriteCompressed()) {
+                params.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+                params.setCompressionQuality(0.84f);
+            }
+            writer.write(null,new IIOImage(image,null,null),params);
+            imageOut.flush();
+            return out.toByteArray();
+        } finally { writer.dispose(); }
     }
 }
