@@ -14,6 +14,11 @@ import top.aameow.erpnext.auth.CurrentUser;
 import top.aameow.erpnext.files.PrivateFileStorage;
 
 import java.nio.file.Files;
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
@@ -184,6 +189,26 @@ public class ReportPhotoController {
         } catch(Exception e) {
             for(PrivateFileStorage.StoredFile f:storedFiles) storage.deleteQuietly(f.key());
             throw e;
+        }
+    }
+
+    @GetMapping(value="/photos/{id}/thumbnail",produces="image/jpeg")
+    @PreAuthorize("hasAuthority('report_photo:read')")
+    public org.springframework.http.ResponseEntity<byte[]> thumbnail(@PathVariable long id) throws Exception {
+        Map<String,Object> p=photo(id);
+        if(Boolean.TRUE.equals(p.get("is_deleted"))) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"照片不存在");
+        Map<String,Object> f=one("SELECT storage_key FROM erp_file_object WHERE id=?",p.get("file_id"));
+        BufferedImage source=ImageIO.read(Files.newInputStream(storage.resolve(f.get("storage_key").toString())));
+        if(source==null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片无法解码");
+        double scale=Math.min(1.0,Math.min(720.0/source.getWidth(),540.0/source.getHeight()));
+        int w=Math.max(1,(int)Math.round(source.getWidth()*scale)),h=Math.max(1,(int)Math.round(source.getHeight()*scale));
+        BufferedImage thumb=new BufferedImage(w,h,BufferedImage.TYPE_INT_RGB);
+        Graphics2D g=thumb.createGraphics();g.setColor(Color.WHITE);g.fillRect(0,0,w,h);
+        g.drawImage(source,0,0,w,h,null);g.dispose();
+        try(ByteArrayOutputStream out=new ByteArrayOutputStream()) {
+            ImageIO.write(thumb,"jpg",out);
+            return org.springframework.http.ResponseEntity.ok().contentType(org.springframework.http.MediaType.IMAGE_JPEG)
+                .header(org.springframework.http.HttpHeaders.CACHE_CONTROL,"private, no-store").body(out.toByteArray());
         }
     }
 
