@@ -21,8 +21,7 @@ public class ReportDocxPhotoInserter {
         "火灾自动报警系统", "消防给水系统", "消火栓系统", "自动喷水灭火系统",
         "防烟排烟系统", "消防应急照明和疏散指示系统", "防火分隔设施",
         "电气火灾监控系统", "消防电源监控系统", "火灾警报和消防应急广播系统",
-        "消防专用电话系统", "消防电梯", "消防供配电设施", "建筑灭火器",
-        "消防供配电设施"
+        "消防专用电话系统", "消防电梯", "消防供配电设施", "建筑灭火器"
     );
     private static final Pattern PREFIX = Pattern.compile("^[一二三四五六七八九十百]+[、.．]\\s*");
     public record Photo(String system, byte[] bytes, String filename, String takenOn, String caption) { }
