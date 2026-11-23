@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,6 +51,38 @@ public class PrivateFileStorage {
                 while((n=in.read(buf))!=-1){digest.update(buf,0,n);out.write(buf,0,n);}
             }
             return new StoredFile(key,original,media,file.getSize(),HexFormat.of().formatHex(digest.digest()),target);
+        } catch(ResponseStatusException e) { throw e; }
+        catch(Exception e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"文件保存失败",e); }
+    }
+    public StoredFile storeBytes(byte[] bytes,String filename,String mediaType) {
+        if(bytes==null||bytes.length==0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"文件内容为空");
+        if(bytes.length>250L*1024*1024) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"生成文件超过 250 MB");
+        String media=mediaType==null?"application/octet-stream":mediaType.split(";")[0].trim().toLowerCase();
+        if(!Set.of("application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document").contains(media))
+            throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"不支持的文件类型");
+        String original=filename==null?"generated":filename.replace('\\\\','/').replaceAll("[\\\\p{Cntrl}]","_");
+        original=Paths.get(original).getFileName().toString().trim();
+        if(original.isBlank()) original="generated";
+        if(original.length()>240) original=original.substring(original.length()-240);
+        String key=UUID.randomUUID().toString();
+        try {
+            byte[] signature=Arrays.copyOf(bytes,Math.min(bytes.length,8));
+            boolean valid=switch(media) {
+                case "application/pdf" -> starts(signature,0x25,0x50,0x44,0x46,0x2d);
+                case "image/png" -> starts(signature,0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a);
+                case "image/jpeg" -> starts(signature,0xff,0xd8,0xff);
+                case "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> starts(signature,0x50,0x4b,0x03,0x04);
+                case "text/plain" -> !containsZero(signature);
+                default -> false;
+            };
+            if(!valid) throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"生成文件内容与类型不匹配");
+            Files.createDirectories(root);
+            Path target=root.resolve(key).normalize();
+            if(!target.getParent().equals(root)) throw new IllegalStateException("Invalid storage key");
+            MessageDigest digest=MessageDigest.getInstance("SHA-256");
+            digest.update(bytes);
+            Files.write(target,bytes,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);
+            return new StoredFile(key,original,media,bytes.length,HexFormat.of().formatHex(digest.digest()),target);
         } catch(ResponseStatusException e) { throw e; }
         catch(Exception e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"文件保存失败",e); }
     }
