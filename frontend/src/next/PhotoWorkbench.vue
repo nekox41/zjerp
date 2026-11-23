@@ -45,6 +45,7 @@ const classifiedCount = computed(() => photos.value.filter(p => !!p.system_code)
 const selectedCount = computed(() => selectedIds.value.length)
 const ready = computed(() => photos.value.length > 0 && classifiedCount.value === photos.value.length)
 const editable = computed(() => batch.value && !['inserted','archived'].includes(batch.value.status))
+const reportEditable = computed(() => report.value && ['draft','returned'].includes(report.value.status))
 
 function clearUrls() {
   objectUrls.forEach(url => URL.revokeObjectURL(url))
@@ -326,9 +327,9 @@ onBeforeUnmount(clearUrls)
       </tbody></table></div>
       <section class="pw-insert-panel">
         <div><h3>插入报告</h3><p>系统会在对应消防系统章节内寻找最后一个「现场检测照片」位置，并在其后插入新的 2×2 照片组。原有检测记录和原照片不会被删除。</p></div>
-        <div class="pw-template-row"><label>目标报告附件中的 DOCX 模板<select v-model="templateFileId" :disabled="!report"><option value="">选择 DOCX 模板</option><option v-for="f in docxAttachments" :key="f.file_id" :value="String(f.file_id)">{{ f.original_name }} · v{{ f.version_no }}</option></select></label><label class="pw-upload secondary">上传新的 DOCX<input type="file" hidden accept=".docx" @change="uploadTemplate"></label></div>
+        <div class="pw-template-row"><label>目标报告附件中的 DOCX 模板<select v-model="templateFileId" :disabled="!report"><option value="">选择 DOCX 模板</option><option v-for="f in docxAttachments" :key="f.file_id" :value="String(f.file_id)">{{ f.original_name }} · v{{ f.version_no }}</option></select></label><label v-if="reportEditable" class="pw-upload secondary">上传新的 DOCX<input type="file" hidden accept=".docx" @change="uploadTemplate"></label></div>
         <p v-if="report" class="pw-report-meta">{{ report.report_no }} · 当前版本 v{{ report.current_version_no }} · {{ report.title }}</p>
-        <div class="pw-insert-actions"><button type="button" class="pw-secondary" :disabled="busy || !ready || !templateFileId || !report || !editable" @click="previewDocx">生成 DOCX 预览</button><button type="button" class="pw-primary" :disabled="busy || !ready || !templateFileId || !report || !editable || !can('report:write')" @click="insertDocx">确认插入并生成报告新版本</button></div>
+        <div class="pw-insert-actions"><button type="button" class="pw-secondary" :disabled="busy || !ready || !templateFileId || !reportEditable || !editable" @click="previewDocx">生成 DOCX 预览</button><button type="button" class="pw-primary" :disabled="busy || !ready || !templateFileId || !reportEditable || !editable || !can('report:write')" @click="insertDocx">确认插入并生成报告新版本</button></div>
         <small>预览文件需要用 Word 检查分页、图片完整性和版式。确认后才会创建新的报告版本；原始 DOCX 与原始照片始终保留。</small>
       </section>
     </template>
