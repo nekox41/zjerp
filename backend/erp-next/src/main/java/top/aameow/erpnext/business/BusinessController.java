@@ -364,10 +364,9 @@ public class BusinessController {
     public Map<String,Object> project(@PathVariable long id) { return projectDetail(id); }
     private Map<String,Object> projectDetail(long id) {
         Map<String,Object> result=new LinkedHashMap<>(one("""
-          SELECT p.*,c.name customer_name,ct.contract_no,ct.title contract_title,
+          SELECT p.*,c.name customer_name,
                  e.full_name manager_name,te.full_name technical_lead_name
           FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id
-          LEFT JOIN erp_contract ct ON ct.id=p.contract_id
           LEFT JOIN erp_employee e ON e.id=p.manager_employee_id
           LEFT JOIN erp_employee te ON te.id=p.technical_lead_employee_id WHERE p.id=?
           """,id));
