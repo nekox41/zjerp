@@ -100,7 +100,7 @@ public class CompanyWorkflowController {
     }
 
     // Project / contract many-to-many history and current-contract selection.
-    @GetMapping("/projects/{id}/contracts") @PreAuthorize("hasAuthority('project:read')")
+    @GetMapping("/projects/{id}/contracts") @PreAuthorize("hasAuthority('contract:read')")
     public List<Map<String,Object>> projectContracts(@PathVariable long id) {
         one("SELECT id FROM erp_project WHERE id=?",id);
         return jdbc.queryForList("""
