@@ -154,41 +154,34 @@ async function createBatch() {
   } catch(e) { error.value = e.message }
   finally { busy.value = false }
 }
-async function compressPhoto(file) {
-  const bitmap = await createImageBitmap(file)
-  try {
-    const maxSide = 1800
-    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-    canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height)
-    const blob = await new Promise((resolve,reject) => canvas.toBlob(v => v ? resolve(v) : reject(new Error('图片压缩失败')),'image/jpeg',.9))
-    const name = file.name.replace(/\.(png|jpe?g|webp|heic)$/i,'') + '.jpg'
-    return new File([blob],name,{type:'image/jpeg'})
-  } finally { bitmap.close() }
-}
 async function uploadPhotos(event) {
   const files = Array.from(event.target.files || [])
   event.target.value = ''
   if (!files.length || !batchId.value || !canEditPhotos.value) return
   if (!editable.value) { error.value='该批次已插入报告，不能再修改'; return }
-  if (photos.value.length + files.length > 300) { error.value='一个批次最多 300 张照片'; return }
-  busy.value = true; error.value=''; notice.value=''
+  const supported=files.filter(f=>f.type==='image/jpeg'||f.type==='image/png')
+  if(supported.length!==files.length) error.value='已跳过非 JPG / PNG 格式的文件。'
+  if(photos.value.length + supported.length > 300) { error.value='一个批次最多 300 张照片'; return }
+  if(supported.some(f=>f.size>25*1024*1024)) { error.value='单张原始照片不能超过 25MB'; return }
+  const existingBytes=photos.value.reduce((sum,p)=>sum+Number(p.file_size||0),0)
+  const incomingBytes=supported.reduce((sum,f)=>sum+f.size,0)
+  if(existingBytes+incomingBytes>120*1024*1024) { error.value='一个批次原始照片合计不能超过 120MB'; return }
+  if(!supported.length) return
+  busy.value = true; notice.value=''
   try {
-    for (let start=0;start<files.length;start+=20) {
+    for (let start=0;start<supported.length;start+=20) {
       const form = new FormData()
-      const end=Math.min(start+20,files.length)
+      const end=Math.min(start+20,supported.length)
       for (let i=start;i<end;i++) {
-        progress.value = '正在处理照片 ' + (i+1) + '/' + files.length
-        form.append('photos',await compressPhoto(files[i]))
+        progress.value = '正在准备原始照片 ' + (i+1) + '/' + supported.length
+        form.append('photos',supported[i],supported[i].name)
       }
-      progress.value = '正在上传第 ' + (start+1) + '–' + end + ' 张…'
+      progress.value = '正在上传第 ' + (start+1) + '–' + end + ' 张原始照片…'
       batch.value = await api('/report-photos/batches/' + batchId.value + '/photos',{method:'POST',body:form})
     }
     photos.value = (batch.value.photos || []).map(p=>({...p,previewUrl:'',selected:false}))
     await loadPreviews()
-    notice.value = '已导入 ' + files.length + ' 张照片。请逐张确认系统分类。'
+    notice.value = '已原样保存 ' + supported.length + ' 张照片。原始图像字节和 EXIF 不会被浏览器重编码；请逐张确认系统分类。'
   } catch(e) {
     error.value = e.message
     if(batchId.value) { try { batch.value=await api('/report-photos/batches/'+batchId.value); photos.value=(batch.value.photos||[]).map(p=>({...p,previewUrl:'',selected:false})); await loadPreviews() } catch {} }
@@ -312,7 +305,7 @@ onBeforeUnmount(clearUrls)
 
 <template>
   <section class="photo-workbench">
-    <header class="photo-head"><div><span class="eyebrow">REPORT / PHOTO WORKBENCH</span><h2>现场照片整理</h2><p>批量导入 → 人工分类 → 分组排序 → DOCX 预览 → 插入报告。</p></div><span class="pw-limit">JPG / PNG · 最多 300 张 / 批次 · 120 MB</span></header>
+    <header class="photo-head"><div><span class="eyebrow">REPORT / PHOTO WORKBENCH</span><h2>现场照片整理</h2><p>批量导入 → 人工分类 → 分组排序 → DOCX 预览 → 插入报告。</p></div><span class="pw-limit">JPG / PNG 原图 · 最多 300 张 / 批次 · 120 MB</span></header>
     <div class="pw-stepper"><span class="active">01 导入照片</span><i>→</i><span :class="{active:ready}">02 分类确认</span><i>→</i><span :class="{active:ready && !!templateFileId}">03 预览报告</span><i>→</i><span :class="{active:batch?.status==='inserted'}">04 生成版本</span></div>
     <div class="pw-context">
       <label v-if="!props.projectId">项目<select v-model="projectIdLocal" @change="selectProject"><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="String(p.id)">{{ p.project_no }} · {{ p.name }}</option></select></label>
@@ -327,7 +320,7 @@ onBeforeUnmount(clearUrls)
     <template v-else-if="batch">
       <div class="pw-batch-head"><div><b>{{ batch.title }}</b><small>{{ batch.batch_no }} · {{ batch.created_at }}</small></div><span class="pw-batch-status" :class="batch.status">{{ ({draft:'待分类',ready:'已分类待插入',inserted:'已插入报告',archived:'已归档'})[batch.status] }}</span></div>
       <div class="pw-toolbar">
-        <label v-if="canEditPhotos" class="pw-upload">＋ 批量导入<input hidden type="file" multiple accept="image/jpeg,image/png" @change="uploadPhotos"></label>
+        <label v-if="canEditPhotos" class="pw-upload">＋ 批量导入原始照片<input hidden type="file" multiple accept="image/jpeg,image/png" @change="uploadPhotos"></label>
         <button type="button" class="pw-secondary" :disabled="busy || !photos.length" @click="selectVisible(true)">全选当前</button>
         <button type="button" class="pw-secondary" :disabled="busy || !selectedCount" @click="selectVisible(false)">取消选择</button>
         <label v-if="selectedCount && canEditPhotos" class="pw-bulk">批量分类<select @change="assignSelected($event.target.value);$event.target.value=''"><option value="">选择消防系统…</option><option v-for="s in classificationSystems" :key="s" :value="s">{{ s }}</option></select></label>
@@ -351,7 +344,7 @@ onBeforeUnmount(clearUrls)
         <tr v-for="photo in filtered" :key="photo.photo_id"><td><input type="checkbox" v-model="photo.selected" @change="toggleSelected(photo)" :disabled="!canEditPhotos"></td><td><img v-if="photo.previewUrl" :src="photo.previewUrl" @click="focused=photo"></td><td>{{ photo.original_name }}</td><td>{{ formatSize(photo.file_size) }}</td><td><select v-model="photo.system_code" :disabled="!canEditPhotos"><option value="">未分类</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></td><td><button @click="movePhoto(photo,-1)">↑</button><button @click="movePhoto(photo,1)">↓</button></td><td><button class="danger" @click="deletePhoto(photo)">移除</button></td></tr>
       </tbody></table></div>
       <section class="pw-insert-panel">
-        <div><h3>插入报告</h3><p>系统会在对应消防系统章节内寻找最后一个「现场检测照片」位置，并在其后插入新的 2×2 照片组。原有检测记录和原照片不会被删除。</p></div>
+        <div><h3>插入报告</h3><p>系统会在对应消防系统章节内寻找最后一个「现场检测照片」位置，并在其后插入新的 2×2 照片组。原始图片文件不会被重编码或覆盖；Word 中仅按单元格尺寸缩放显示。</p></div>
         <div class="pw-template-row"><label>目标报告附件中的 DOCX 模板<select v-model="templateFileId" :disabled="!report"><option value="">选择 DOCX 模板</option><option v-for="f in docxAttachments" :key="f.file_id" :value="String(f.file_id)">{{ f.original_name }} · v{{ f.version_no }}</option></select></label><label v-if="reportEditable && can('report:write')" class="pw-upload secondary">上传新的 DOCX<input type="file" hidden accept=".docx" @change="uploadTemplate"></label></div>
         <p v-if="report" class="pw-report-meta">{{ report.report_no }} · 当前版本 v{{ report.current_version_no }} · {{ report.title }}</p>
         <p v-if="templateInspecting" class="pw-template-status">正在分析模板中的消防系统章节…</p>
