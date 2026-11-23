@@ -81,7 +81,8 @@ public class BusinessController {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
           SELECT e.id,e.employee_code,e.full_name,e.organization_id,o.name organization_name,e.identity_id,
-                 e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on,e.employee_type
+                 e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on,e.employee_type,
+                 EXISTS(SELECT 1 FROM erp_employee_qualification q WHERE q.employee_id=e.id AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)) AS has_valid_qualification
           FROM erp_employee e LEFT JOIN erp_organization o ON o.id=e.organization_id
           WHERE ?='' OR e.full_name LIKE ? OR e.employee_code LIKE ? OR e.phone LIKE ?
           ORDER BY e.id DESC LIMIT 500
