@@ -72,6 +72,14 @@ loader(){ dc exec "$@" -e MYSQL_PWD="$ERP_LEGACY_LOADER_PASSWORD" legacy-mysql m
 ensure_databases(){
  dc config --quiet
  dc up -d --wait erp-next-mysql legacy-mysql
+ # Stop application writes before applying or checking schema changes.
+ dc stop erp-next-web erp-next-api
+ if [[ -f "$STATE/files/.erp-next-trial.json" ]]; then
+   verify_marker
+   if [[ -f "$STATE/last-successful-commit" && "$(cat "$STATE/last-successful-commit")" != "$(git rev-parse HEAD)" ]]; then
+     backup_target
+   fi
+ fi
  dc run --rm erp-next-schema
  # Only create the target marker on an empty new target. Never repair a mismatch silently.
  server="$(nextsql <<< 'SELECT @@server_uuid;')"
@@ -167,6 +175,7 @@ if not status["initialized"]:
         if r.status!=201:raise SystemExit("管理员初始化失败")
 PY
    [[ "$(actor)" =~ ^[1-9][0-9]*$ ]] || { echo "缺少试迁移管理员"; exit 1; }
+   git rev-parse HEAD > "$STATE/last-successful-commit"
    dc ps -a
    echo "访问：http://localhost:$ERP_NEXT_WEB_PORT/next.html"
    echo "账号：trial-admin；初始密码文件：$STATE/admin-password"

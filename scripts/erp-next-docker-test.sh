@@ -13,7 +13,7 @@ shim="$(mktemp -d)"
 trap 'rm -rf -- "$shim"' EXIT
 ln -s "$(command -v python3)" "$shim/python"
 export PATH="$shim:$PATH"
-bash -n test.sh deploy.sh
+for script in test.sh deploy.sh; do bash -n "$script"; done
 bash scripts/erp-next-local-verify.sh --static
 [[ "$mode" != --static ]] || exit 0
 for cmd in docker curl flock; do

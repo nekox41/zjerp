@@ -59,3 +59,5 @@ Python MySQL 驱动在专用容器内安装，宿主机不需要 pip。archive �
 测试反馈发送 test-results/*.log；实际部署问题可用 bash deploy.sh status 或 bash deploy.sh logs（Ctrl+C 退出）。真实业务数据、日志、SQL、原件、.env、admin-password 均可能包含敏感信息，分享前脱敏。该环境专用于候选版验收，不视为正式生产迁移。禁止 docker compose down -v 或清理全部 Docker 卷。
 
 `bash deploy.sh backup` 可单独创建成对备份（停止 Web/API），`apply` 每次写入前亦自动创建。备份位于状态目录 backups/，只有 COMPLETE 标识存在且 SHA256SUMS 检查通过才视作完整备份；恢复仍需另行隔离演练。请勿将试迁移环境直接升格为正式生产。
+
+再次启动时会停止新版应用写入再运行 Flyway；若 Git 提交相较上次成功启动有变化，会先保存成对备份。请在仓库根目录执行所有命令。旧版 SQL 如含 `USE server` 或 `CREATE DATABASE`，请从离线备份重新导出单 schema SQL（`mysqldump ... server`，不要使用 `--databases`）；不要直接修改真实生产数据。
