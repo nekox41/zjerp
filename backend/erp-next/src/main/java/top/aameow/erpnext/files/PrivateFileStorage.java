@@ -15,14 +15,18 @@ import java.util.UUID;
 
 @Service
 public class PrivateFileStorage {
+    public static final long MAX_DOCX_BYTES=100L*1024*1024;
+    private static final long MAX_OTHER_UPLOAD_BYTES=25L*1024*1024;
+    private static final String DOCX="application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private final Path root;
     public PrivateFileStorage(@Value("${erp.files.root:/var/lib/erp-next/files}") String root) {
         this.root=Paths.get(root).toAbsolutePath().normalize();
     }
     public StoredFile store(MultipartFile file) {
         if(file==null||file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择非空文件");
-        if(file.getSize()>25L*1024*1024) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"单个文件不能超过 25 MB");
-        String media=file.getContentType()==null?"application/octet-stream":file.getContentType().split(";")[0].trim().toLowerCase();
+        String media=file.getContentType()==null?"application/octet-stream":file.getContentType().split(";")[0].trim().toLowerCase(java.util.Locale.ROOT);
+        long max=DOCX.equals(media)?MAX_DOCX_BYTES:MAX_OTHER_UPLOAD_BYTES;
+        if(file.getSize()>max)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"DOCX 上限100MB，其他上传文件上限25MB");
         if(!Set.of("application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document").contains(media))
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"仅支持 PDF、JPG、PNG、TXT、DOCX 文件");
         String supplied=file.getOriginalFilename()==null?"upload":file.getOriginalFilename().replace('\\','/').replaceAll("[\\p{Cntrl}]","_");
@@ -58,8 +62,8 @@ public class PrivateFileStorage {
     }
     public StoredFile storeBytes(byte[] bytes,String filename,String mediaType) {
         if(bytes==null||bytes.length==0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"文件内容为空");
-        if(bytes.length>250L*1024*1024) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"生成文件超过 250 MB");
-        String media=mediaType==null?"application/octet-stream":mediaType.split(";")[0].trim().toLowerCase();
+        String media=mediaType==null?"application/octet-stream":mediaType.split(";")[0].trim().toLowerCase(java.util.Locale.ROOT);
+        if(bytes.length>(DOCX.equals(media)?MAX_DOCX_BYTES:250L*1024*1024))throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"生成文件超出上限；DOCX 不得超过100MB，请减少照片或调整质量");
         if(!Set.of("application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document").contains(media))
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"不支持的文件类型");
         String original=filename==null?"generated":filename.replace('\\','/').replaceAll("[\\p{Cntrl}]","_");

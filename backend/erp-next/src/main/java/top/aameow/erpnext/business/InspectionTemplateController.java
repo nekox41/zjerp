@@ -52,7 +52,10 @@ public class InspectionTemplateController {
         String notes=Objects.toString(b.get("notes"),"");if(notes.length()>1000)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"备注过长");
         var f=one("SELECT * FROM erp_file_object WHERE id=?",fileId(b.get("fileId")));
         if(!(f.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a)||!DOCX.equals(f.get("media_type")))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请上传自己的 DOCX 模板");
-        byte[] bytes=Files.readAllBytes(storage.resolve(f.get("storage_key").toString()));
+        var path=storage.resolve(f.get("storage_key").toString());
+        long size=Files.size(path);
+        if(size<=0||size>40L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"模板库原件须小于等于40MB；请清除不需要的样本照片和资源");
+        byte[] bytes=Files.readAllBytes(path);
         String hash=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         if(!hash.equals(f.get("sha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"模板原件校验失败");
         var info=InspectionTemplateComposer.inspect(bytes,"base".equals(kind));

@@ -9,7 +9,7 @@ command -v docker >/dev/null
 command -v python >/dev/null
 command -v curl >/dev/null
 # Inherited production environment variables must not override generated trial credentials.
-unset ERP_NEXT_DB_PASSWORD ERP_NEXT_DB_ROOT_PASSWORD ERP_BOOTSTRAP_TOKEN COMPOSE_PROJECT_NAME COMPOSE_FILE
+unset ERP_NEXT_DB_PASSWORD ERP_NEXT_DB_ROOT_PASSWORD ERP_BOOTSTRAP_TOKEN COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES
 trial="$(python - "$1" <<'PY'
 import sys
 from pathlib import Path
@@ -41,7 +41,7 @@ services:
     ports: ["127.0.0.1::3306"]
     volumes: ["data:/var/lib/mysql"]
     healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -u root --silent"]
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -u root --silent"]
       interval: 5s
       timeout: 5s
       retries: 40

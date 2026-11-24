@@ -255,7 +255,11 @@ public class ServiceWorkflowController {
         return template;
     }
     private byte[] templateBytes(Map<String,Object> template)throws Exception{
-        byte[] bytes=Files.readAllBytes(storage.resolve(template.get("storage_key").toString()));
+        var path=storage.resolve(template.get("storage_key").toString());
+        long size=Files.size(path);
+        if(size<=0||size>PrivateFileStorage.MAX_DOCX_BYTES)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"DOCX 文件为空或超过100MB");
+        if(template.get("byte_size") instanceof Number n&&n.longValue()!=size)throw new ResponseStatusException(HttpStatus.CONFLICT,"DOCX 文件大小与归档记录不一致");
+        byte[] bytes=Files.readAllBytes(path);
         if(!sha(bytes).equals(template.get("sha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"模板文件校验失败");
         return bytes;
     }
@@ -436,7 +440,7 @@ public class ServiceWorkflowController {
                 if(!sha(data).equals(photo.get("sha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"照片原件校验失败");
                 totalPhotoBytes+=size;
                 var copy=PhotoEncoding.report(data,photoQuality);embeddedBytes+=copy.bytes().length;
-                if(embeddedBytes>160L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"内嵌照片超过160MB，请减少照片或调整打印质量");
+                if(embeddedBytes>90L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"内嵌照片超过90MB，请减少照片或调整打印质量，最终DOCX须可重新上传");
                 String name=photo.get("original_name").toString();
                 photos.add(new ReportDocxPhotoInserter.Photo(photo.get("system_code").toString(),copy.bytes(),name,photo.get("taken_on").toString(),Objects.toString(photo.get("caption"),"")));
                 Map<String,Object> evidence=new LinkedHashMap<>();evidence.put("photoId",photo.get("id"));evidence.put("system",photo.get("system_code"));evidence.put("takenOn",photo.get("taken_on").toString());evidence.put("caption",Objects.toString(photo.get("caption"),""));evidence.put("originalName",name);evidence.put("fileId",photo.get("file_id"));evidence.put("sourceSha256",photo.get("sha256"));evidence.put("embeddedSha256",sha(copy.bytes()));evidence.put("sourceBytes",size);evidence.put("embeddedBytes",copy.bytes().length);evidence.put("sourcePixels",List.of(copy.sourceWidth(),copy.sourceHeight()));evidence.put("embeddedPixels",List.of(copy.width(),copy.height()));evidence.put("effectiveDpi",copy.effectiveDpi());evidence.put("orientation",copy.orientation());photoEvidence.add(evidence);
