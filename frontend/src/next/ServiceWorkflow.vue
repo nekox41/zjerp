@@ -17,6 +17,7 @@ const projects = ref([]), packages = ref([]), employees = ref([]), issues = ref(
 const visits = ref([]), batches = ref([]), reports = ref([]), deliveries = ref([])
 const project = ref(null), workPackage = ref(null), batch = ref(null), report = ref(null)
 const systems = ref([]), templateFile = ref(null), selectedBatches = ref([])
+const inspectionVersions=ref([]),inspectionVersion=ref('')
 const loading = ref(false), busy = ref(false), error = ref(''), notice = ref('')
 const tab = ref('visits')
 const visitForm = ref({visitDate:new Date().toISOString().slice(0,10),visitType:'inspection',title:'现场检测',summary:'',resultSummary:'',staff:[]})
@@ -85,7 +86,7 @@ async function selectProject(id) {
 }
 async function selectPackage(id) {
   workPackage.value=packages.value.find(x=>x.id===id)||null
-  closeBatch(); report.value=null; selectedBatches.value=[]
+  closeBatch(); report.value=null; selectedBatches.value=[];inspectionVersions.value=[];inspectionVersion.value=''
   if(!id)return
   try {
     const [v,b,r,i]=await Promise.all([
@@ -94,7 +95,9 @@ async function selectPackage(id) {
       can('report:read')?api('/business/work-packages/'+id+'/reports'):Promise.resolve([]),
       can('project:read')?api('/business/projects/'+project.value.id+'/issues'):Promise.resolve([])
     ])
+    if(workPackage.value?.id!==id)return
     visits.value=v; batches.value=b; reports.value=r; issues.value=i
+    if(can('report:read')){const versions=await api('/service-workflow/work-packages/'+id+'/inspection-profile/versions');if(workPackage.value?.id===id)inspectionVersions.value=versions}
   } catch(e){error.value=e.message}
 }
 async function createVisit() {
@@ -215,18 +218,18 @@ async function reviewBatch() {
 async function createReport() {
   busy.value=true;error.value='';try{
     const f=reportForm.value
-    const r=await api('/business/work-packages/'+workPackage.value.id+'/reports',{method:'POST',body:JSON.stringify({reportNo:f.reportNo,title:f.title,reportType:f.reportType,content:{summary:f.summary,scope:f.scope,methods:f.methods,findings:f.findings,conclusion:f.conclusion}})})
+    const r=await api('/business/work-packages/'+workPackage.value.id+'/reports',{method:'POST',body:JSON.stringify({reportNo:f.reportNo,title:f.title,reportType:f.reportType,...(f.reportType==='inspection'&&inspectionVersion.value?{inspectionProfileVersionNo:Number(inspectionVersion.value)}:{}),content:{summary:f.summary,scope:f.scope,methods:f.methods,findings:f.findings,conclusion:f.conclusion}})})
     reportForm.value={reportNo:'',title:'',reportType:'inspection',summary:'',scope:'',methods:'',findings:'',conclusion:''}
     await selectPackage(workPackage.value.id);await openReport(r.id);notice.value='报告草稿已创建'
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function openReport(id) {
-  try{report.value=await api('/business/reports/'+id);const x=report.value.content||{};reportForm.value={reportNo:report.value.report_no,title:report.value.title,reportType:report.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''};deliveries.value=await api('/service-workflow/reports/'+id+'/deliveries').catch(()=>[])}
+  try{report.value=await api('/business/reports/'+id);const x=report.value.content||{};inspectionVersion.value=x.inspectionProfile?.versionNo||'';reportForm.value={reportNo:report.value.report_no,title:report.value.title,reportType:report.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''};deliveries.value=await api('/service-workflow/reports/'+id+'/deliveries').catch(()=>[])}
   catch(e){error.value=e.message}
 }
 async function saveReport() {
   if(!report.value)return;busy.value=true
-  try{const f=reportForm.value;report.value=await api('/business/reports/'+report.value.id,{method:'PUT',body:JSON.stringify({expectedVersionNo:report.value.current_version_no,title:f.title,content:{summary:f.summary,scope:f.scope,methods:f.methods,findings:f.findings,conclusion:f.conclusion}})});await openReport(report.value.id);notice.value='报告内容已保存为新版本'}
+  try{const f=reportForm.value;report.value=await api('/business/reports/'+report.value.id,{method:'PUT',body:JSON.stringify({expectedVersionNo:report.value.current_version_no,title:f.title,...(report.value.report_type==='inspection'?{inspectionProfileVersionNo:inspectionVersion.value?Number(inspectionVersion.value):null}:{}),content:{summary:f.summary,scope:f.scope,methods:f.methods,findings:f.findings,conclusion:f.conclusion}})});await openReport(report.value.id);notice.value='报告内容已保存为新版本'}
   catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function reportAction(action) {
@@ -344,12 +347,12 @@ onBeforeUnmount(releasePreviews)
         <p v-if="!visiblePhotos.length" class="sw-empty small">当前分组暂无照片</p>
         <div v-if="photoView==='cards'" class="sw-photo-grid">
           <article v-for="p in visiblePhotos" :key="p.id" class="sw-photo-card" :class="{picked:photoSelection.includes(p.id)}">
-            <label v-if="photoEditable" class="photo-select"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" aria-label="选择照片"> 选择</label>
+            <label v-if="photoEditable" class="photo-select"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" @change="bulkConfirm=false" aria-label="选择照片"> 选择</label>
             <img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusedPhoto=p"><div v-else class="sw-photo-placeholder">{{can('file:read')?'加载预览…':'无文件查看权限'}}</div>
             <div class="sw-photo-meta"><b :title="p.original_name">{{ p.original_name }}</b>
               <template v-if="photoEditable">
-                <label>所属系统<select v-model="photoDrafts[p.id].systemCode"><option value="">请选择一级系统</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></label>
-                <label>拍摄日期<input v-model="photoDrafts[p.id].takenOn" type="date"></label>
+                <label>所属系统<select v-model="photoDrafts[p.id].systemCode" @change="photoDrafts[p.id].confirmed=false"><option value="">请选择一级系统</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></label>
+                <label>拍摄日期<input v-model="photoDrafts[p.id].takenOn" @change="photoDrafts[p.id].confirmed=false" type="date"></label>
                 <label>照片说明<input v-model="photoDrafts[p.id].caption" placeholder="可选"></label>
                 <label class="confirm"><input v-model="photoDrafts[p.id].confirmed" type="checkbox"> 已人工核对</label>
                 <div class="sw-row-actions"><button  :disabled="busy" @click="movePhoto(p,-1)">↑</button><button  :disabled="busy" @click="movePhoto(p,1)">↓</button><button  :disabled="busy" @click="savePhoto(p)">保存</button><button class="danger"  :disabled="busy" @click="removePhoto(p)">移除</button></div>
@@ -359,9 +362,9 @@ onBeforeUnmount(releasePreviews)
           </article>
         </div>
         <div v-else class="sw-photo-table-wrap"><table class="sw-photo-table"><thead><tr><th v-if="photoEditable">选择</th><th>预览</th><th>文件名</th><th>一级系统</th><th>拍摄日期</th><th>人工确认</th><th>操作</th></tr></thead><tbody>
-          <tr v-for="p in visiblePhotos" :key="p.id"><td v-if="photoEditable"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" aria-label="选择照片"></td><td><img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusedPhoto=p"></td><td>{{p.original_name}}</td>
-          <td v-if="photoEditable"><select v-model="photoDrafts[p.id].systemCode"><option value="">未分类</option><option v-for="x in systems" :key="x" :value="x">{{x}}</option></select></td><td v-else>{{p.system_code||'未分类'}}</td>
-          <td v-if="photoEditable"><input v-model="photoDrafts[p.id].takenOn" type="date"></td><td v-else>{{p.taken_on||'—'}}</td>
+          <tr v-for="p in visiblePhotos" :key="p.id"><td v-if="photoEditable"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" @change="bulkConfirm=false" aria-label="选择照片"></td><td><img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusedPhoto=p"></td><td>{{p.original_name}}</td>
+          <td v-if="photoEditable"><select v-model="photoDrafts[p.id].systemCode" @change="photoDrafts[p.id].confirmed=false"><option value="">未分类</option><option v-for="x in systems" :key="x" :value="x">{{x}}</option></select></td><td v-else>{{p.system_code||'未分类'}}</td>
+          <td v-if="photoEditable"><input v-model="photoDrafts[p.id].takenOn" @change="photoDrafts[p.id].confirmed=false" type="date"></td><td v-else>{{p.taken_on||'—'}}</td>
           <td v-if="photoEditable"><input v-model="photoDrafts[p.id].confirmed" type="checkbox"></td><td v-else>{{p.confirmation_status==='confirmed'?'已确认':'未确认'}}</td>
           <td v-if="photoEditable"><button  :disabled="busy" @click="movePhoto(p,-1)">↑</button> <button  :disabled="busy" @click="movePhoto(p,1)">↓</button> <button  :disabled="busy" @click="savePhoto(p)">保存</button> <button  :disabled="busy" @click="removePhoto(p)">移除</button></td><td v-else>—</td></tr>
         </tbody></table></div>
@@ -375,9 +378,10 @@ onBeforeUnmount(releasePreviews)
     <div v-if="tab==='reports'" class="sw-panel">
       <div class="sw-panel-title"><h3>检测报告与交付</h3><span>{{ reports.length }} 份</span></div>
       <div v-if="!report" class="sw-two">
-        <form class="sw-form" @submit.prevent="createReport">
+        <form v-if="can('report:write')" class="sw-form" @submit.prevent="createReport">
           <label>报告编号<input v-model="reportForm.reportNo" required></label><label>报告标题<input v-model="reportForm.title" required></label>
           <label>报告类型<select v-model="reportForm.reportType"><option value="inspection">消防检测</option><option value="service">技术服务</option><option value="maintenance">维护保养</option></select></label>
+          <label v-if="reportForm.reportType==='inspection'" class="wide">检测资料版本（可选，绑定后不随档案更新）<select v-model="inspectionVersion"><option value="">暂不绑定</option><option v-for="v in inspectionVersions" :key="v.version_no" :value="v.version_no">资料 v{{v.version_no}} · {{v.created_at}}</option></select></label>
           <label class="wide">摘要<textarea v-model="reportForm.summary" required rows="2"></textarea></label>
           <label class="wide">检测范围<textarea v-model="reportForm.scope" rows="2"></textarea></label>
           <label class="wide">检测方法<textarea v-model="reportForm.methods" rows="2"></textarea></label>
@@ -391,9 +395,10 @@ onBeforeUnmount(releasePreviews)
         </div>
       </div>
       <div v-else class="sw-report-view">
-        <div class="sw-panel-title"><div><button class="back" @click="report=null">← 报告列表</button><h3>{{ report.title }}</h3><small>{{ report.report_no }} · 版本 {{ report.current_version_no }} · 修订 {{ report.revision_no }}</small></div><span class="sw-pill">{{ reportLabel(report.status) }}</span></div>
+        <div class="sw-panel-title"><div><button class="back" @click="report=null;inspectionVersion=''">← 报告列表</button><h3>{{ report.title }}</h3><small>{{ report.report_no }} · 版本 {{ report.current_version_no }} · 修订 {{ report.revision_no }}</small></div><span class="sw-pill">{{ reportLabel(report.status) }}</span></div>
         <div class="sw-form">
           <label>报告标题<input v-model="reportForm.title"></label><label>报告编号<input :value="report.report_no" disabled></label>
+          <label v-if="report.report_type==='inspection'" class="wide">检测资料版本<select v-model="inspectionVersion" :disabled="!['draft','returned'].includes(report.status)||!can('report:write')"><option value="">暂不绑定</option><option v-for="v in inspectionVersions" :key="v.version_no" :value="v.version_no">资料 v{{v.version_no}} · {{v.created_at}}</option></select><small v-if="report.content?.inspectionProfile">已绑定资料 v{{report.content.inspectionProfile.versionNo}}，保存新报告版本才会变更。</small></label>
           <label class="wide">摘要<textarea v-model="reportForm.summary" rows="2"></textarea></label><label class="wide">检测范围<textarea v-model="reportForm.scope" rows="2"></textarea></label><label class="wide">检测方法<textarea v-model="reportForm.methods" rows="2"></textarea></label><label class="wide">检测发现<textarea v-model="reportForm.findings" rows="3"></textarea></label><label class="wide">服务结论<textarea v-model="reportForm.conclusion" rows="2"></textarea></label>
         </div>
         <div class="sw-bottom-actions"><button v-if="['draft','returned'].includes(report.status)&&can('report:write')" class="primary" @click="saveReport">保存新版本</button><button v-if="report.status==='draft'&&can('report:write')" @click="reportAction('submit')">提交审核</button><button v-if="report.status==='submitted'&&can('report:review')" @click="reportAction('start-review')">开始审核</button><button v-if="report.status==='reviewing'&&can('report:review')" @click="reportAction('approve')">审核通过</button><button v-if="report.status==='reviewing'&&can('report:review')" class="danger" @click="reportAction('return')">退回修改</button><button v-if="report.status==='approved'&&can('report:issue')" @click="reportAction('issue')">签发报告</button><button v-if="report.status==='issued'&&can('report:issue')" @click="reportAction('archive')">归档报告</button><button v-if="['issued','archived'].includes(report.status)&&can('report:write')" @click="reportAction('revise')">创建修订版</button></div>
@@ -402,7 +407,7 @@ onBeforeUnmount(releasePreviews)
           <div class="sw-batch-checks"><label v-for="b in batches.filter(x=>x.status==='reviewed'||(photoMode==='replace'&&x.status==='locked'))" :key="b.id"><input type="checkbox" :value="b.id" v-model="selectedBatches">{{ b.title }} · {{ b.photo_count }} 张 · {{ batchLabel(b.status) }}</label></div>
           <label class="sw-mode"><input type="radio" value="append" v-model="photoMode"> 保留模板现有照片，在对应系统照片表格中追加（默认，非破坏性）</label>
           <label class="sw-mode"><input type="radio" value="replace" v-model="photoMode"> 替换模板中所有系统照片，仅保留本次已选批次（请确认模板原照片可替换）</label>
-          <p class="sw-disclaimer">DOCX 正文和检测结论以所上传模板为准；ERP 中的摘要、范围、方法和结论字段用于流程记录与审核，不会自动改写模板正文。追加模式下，已用过的批次不可重复追加；继续补充照片时，请以上一版生成的 DOCX 作为模板并选择新的审核批次。</p>
+          <p class="sw-disclaimer">检测资料绑定仅保存不可变快照，当前尚未自动填充 Word 正文。DOCX 正文和检测结论以所上传模板为准；ERP 中的摘要、范围、方法和结论字段用于流程记录与审核，不会自动改写模板正文。追加模式下，已用过的批次不可重复追加；继续补充照片时，请以上一版生成的 DOCX 作为模板并选择新的审核批次。</p>
           <button class="primary" @click="generateDocx">按系统章节插入照片并生成 DOCX</button>
         </section>
         <section v-if="report.status==='issued'||report.status==='archived'" class="sw-docx">

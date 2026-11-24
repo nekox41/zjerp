@@ -111,3 +111,10 @@ echo "$REVISED" | grep -q '"revision_no":2'
 echo "$REVISED" | grep -q 'erp-report-ci.txt'
 
 curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/reports" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-RPT-001'
+
+
+# E07 foundation: the selected inspection data revision is an immutable, server-resolved report snapshot.
+BOUND=$(curl -fsS -X POST "http://127.0.0.1:8090/api/business/work-packages/$WORK_ID/reports" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"reportNo":"CI-INSPECTION-PROFILE","title":"CI 检测资料绑定","reportType":"inspection","inspectionProfileVersionNo":1,"content":{"summary":"CI 摘要","conclusion":"待人工审核","inspectionProfile":{"versionNo":999}}}')
+BOUND_ID=$(python -c 'import json,sys; r=json.load(sys.stdin); assert r["content"]["inspectionProfile"]["versionNo"]==1; assert r["content"]["inspectionProfile"]["content"]["general"]["address"]=="CI 地址"; print(r["id"])' <<< "$BOUND")
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/reports/$BOUND_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"expectedVersionNo":1,"title":"CI 保留资料快照","content":{"summary":"修改摘要","conclusion":"待人工审核"}}' | python -c 'import json,sys; r=json.load(sys.stdin); assert r["current_version_no"]==2 and r["content"]["inspectionProfile"]["versionNo"]==1'
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/reports/$BOUND_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"expectedVersionNo":2,"inspectionProfileVersionNo":2,"content":{"summary":"明确切换资料版本","conclusion":"待人工审核"}}' | python -c 'import json,sys; r=json.load(sys.stdin); assert r["current_version_no"]==3 and r["content"]["inspectionProfile"]["versionNo"]==2 and r["content"]["inspectionProfile"]["content"]["general"]["address"]=="CI 更新地址"'

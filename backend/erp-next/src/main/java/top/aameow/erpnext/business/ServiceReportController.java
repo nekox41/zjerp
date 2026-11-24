@@ -41,6 +41,26 @@ public class ServiceReportController {
         if(expected==null||Integer.parseInt(expected.toString())!=((Number)r.get("current_version_no")).intValue())
             throw new ResponseStatusException(HttpStatus.CONFLICT,"报告版本已更新，请刷新后重试");
     }
+    // Never trust a client-supplied inspection snapshot. Resolve the immutable profile version in the report's own work package.
+    private Map<String,Object> bindInspectionProfile(Map<String,Object> request,Map<String,Object> data,Map<String,Object> previous,long workPackage,String type,Authentication a){
+        Map<String,Object> result=new LinkedHashMap<>(data);
+        result.remove("inspectionProfile");
+        if(!request.containsKey("inspectionProfileVersionNo")){
+            if(previous.get("inspectionProfile")!=null)result.put("inspectionProfile",previous.get("inspectionProfile"));
+            return result;
+        }
+        Object raw=request.get("inspectionProfileVersionNo");
+        if(raw==null)return result;
+        int version;
+        try{version=Integer.parseInt(raw.toString());}catch(NumberFormatException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"检测资料版本无效");}
+        if(version<=0||!"inspection".equals(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"只有消防检测报告可以绑定有效的检测资料版本");
+        if(a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("service:read"))||a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:read")))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权读取检测资料");
+        Map<String,Object> row=one("SELECT content_json FROM erp_inspection_profile_version WHERE work_package_id=? AND version_no=?",workPackage,version);
+        Object snapshot=parse(row.get("content_json").toString());
+        result.put("inspectionProfile",Map.of("workPackageId",workPackage,"versionNo",version,"content",snapshot));
+        return result;
+    }
     private Map<String,Object> insertVersion(long reportId,int no,Map<String,Object> data,long who){
         String body=json(data);
         jdbc.update("INSERT INTO erp_service_report_version(report_id,version_no,content_json,content_sha256,created_by) VALUES(?,?,?,?,?)",reportId,no,body,sha(body),who);
@@ -87,6 +107,7 @@ public class ServiceReportController {
         String no=req(b,"reportNo"),title=req(b,"title"),type=b.get("reportType")==null?"service":b.get("reportType").toString();
         if(!Set.of("service","inspection","maintenance").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效报告类型");
         Map<String,Object> data=b.get("content") instanceof Map<?,?> m?(Map<String,Object>)m:Map.of();
+        data=bindInspectionProfile(b,data,Map.of(),workPackageId,type,a);
         jdbc.update("INSERT INTO erp_service_report(report_no,work_package_id,title,report_type,created_by) VALUES(?,?,?,?,?)",no,workPackageId,title,type,actor(a));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         insertVersion(id,1,data,actor(a));
@@ -102,6 +123,8 @@ public class ServiceReportController {
         Map<String,Object> data=b.get("content") instanceof Map<?,?> m?(Map<String,Object>)m:null;
         if(data==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"报告内容必须是对象");
         int old=((Number)r.get("current_version_no")).intValue(),next=old+1;
+        Map<String,Object> previous=mapper.convertValue(parse(content(id,r).get("content_json").toString()),new TypeReference<Map<String,Object>>(){});
+        data=bindInspectionProfile(b,data,previous,((Number)r.get("work_package_id")).longValue(),r.get("report_type").toString(),a);
         insertVersion(id,next,data,actor(a));
         jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) SELECT report_id,?,file_id,? FROM erp_service_report_attachment WHERE report_id=? AND version_no=?",next,actor(a),id,old);
         if("returned".equals(r.get("status"))){jdbc.update("UPDATE erp_service_report SET status='draft',current_version_no=?,return_reason=NULL,reviewer_id=NULL WHERE id=?",next,id);event(id,"returned","draft",actor(a),"根据退回意见修订");}

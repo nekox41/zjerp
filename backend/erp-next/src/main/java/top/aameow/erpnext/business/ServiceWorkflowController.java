@@ -142,8 +142,8 @@ public class ServiceWorkflowController {
     public Map<String,Object> classifyPhotos(@PathVariable long id,@RequestBody BatchClassification b,Authentication a){
         Map<String,Object> batch=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",id);
         if(!"collecting".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前批次已提交，照片不可修改");
-        if(b.photoIds()==null||b.photoIds().isEmpty()||b.photoIds().size()>300||b.photoIds().stream().anyMatch(x->x==null||x<=0)||new HashSet<>(b.photoIds()).size()!=b.photoIds().size())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择 1 至 300 张不重复的照片");
+        if(b.photoIds()==null||b.photoIds().isEmpty()||b.photoIds().size()>500||b.photoIds().stream().anyMatch(x->x==null||x<=0)||new HashSet<>(b.photoIds()).size()!=b.photoIds().size())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择 1 至 500 张不重复的照片");
         String system=b.systemCode()==null||b.systemCode().isBlank()?null:b.systemCode().trim();
         if(system!=null&&!inserter.supportedSystems().contains(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效消防系统分类");
         boolean confirmed=Boolean.TRUE.equals(b.confirmed());
