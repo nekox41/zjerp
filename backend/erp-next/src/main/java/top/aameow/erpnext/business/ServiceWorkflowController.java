@@ -268,6 +268,8 @@ public class ServiceWorkflowController {
         var report=reportForGeneration(id,true);
         boolean fillBody=Boolean.TRUE.equals(b.get("fillBody"));
         checkExpectedVersion(b,report,fillBody);
+        if(fillBody&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:read")))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权读取报告资料");
         var template=templateForGeneration(b,a);
         long templateId=((Number)template.get("id")).longValue();
         if(fillBody&&(!Boolean.TRUE.equals(b.get("templateReviewed"))||!Objects.equals(template.get("sha256"),b.get("templateSha256"))))
@@ -278,6 +280,9 @@ public class ServiceWorkflowController {
         if(new HashSet<>(batchIds).size()!=batchIds.size())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片批次不能重复选择");
         String photoMode=b.get("photoMode")==null?"append":b.get("photoMode").toString();
         if(!Set.of("append","replace").contains(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效照片插入模式");
+        if(batchIds.isEmpty()&&"replace".equals(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"替换照片模式至少需要一个已审核照片批次");
+        if(!batchIds.isEmpty()&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:photo:read")))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权读取照片批次");
         int version=((Number)report.get("current_version_no")).intValue();
         List<ReportDocxPhotoInserter.Photo> photos=new ArrayList<>();
         for(Long batchId:batchIds){

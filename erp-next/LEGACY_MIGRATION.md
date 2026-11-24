@@ -88,3 +88,5 @@ python scripts/erp-next-legacy-import.py apply --archive /secure/erp-legacy-arch
 `bash scripts/erp-next-local-verify.sh --build-only` 本地 Maven ERP Next verify + npm ci / 前端构建；`--full` 另执行旧版 Maven reactor 和隔离 Smoke。需已安装 JDK 17、Maven、Node 22 及依赖访问环境。此轮没有调用 Actions；这些命令由用户在完成第一版后手动执行。
 
 原始档案除类型化 JSONL 外增加 raw.jsonl：保留 MySQL raw cursor 返回的每列字节（base64，NULL 独立表示），与 DDL、类型化投影各自核对哈希和记录数，避免零日期等类型转换导致无声丢失。仍须保留 MySQL 标准备份以覆盖过程、触发器、事件、授权等非表对象。
+
+纯函数校验可单独执行 `python scripts/erp-next-legacy-unit-test.py`，不连接数据库、不访问网络。覆盖金额精度、路径安全、原始档案哈希/篡改检测与二进制保全。数据库迁移回归必须在独立试迁移库执行；本轮没有运行。

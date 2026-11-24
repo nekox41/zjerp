@@ -102,7 +102,7 @@ public class InspectionDocxBinder {
         Map<String,Candidate> byTarget=new HashMap<>();
         for(Candidate c:candidates)byTarget.put(c.target(),c);
         List<Binding> result=new ArrayList<>();
-        Map<String,String> labels=Map.ofEntries(Map.entry("工程名称","projectName"),Map.entry("工程地址","address"),
+        Map<String,String> labels=Map.ofEntries(Map.entry("工程名称","projectName"),Map.entry("工程地址","address"),Map.entry("工程类别","projectCategory"),
             Map.entry("建设单位","constructionUnit"),Map.entry("设计单位","designUnit"),Map.entry("施工单位","contractor"),Map.entry("监理单位","supervisionUnit"),
             Map.entry("建筑总面积","totalArea"),Map.entry("检测日期","inspectionDates"),Map.entry("委托单位","commissioningUnit"),
             Map.entry("委托时间","commissionedOn"),Map.entry("委托/联系人","contact"),Map.entry("联系电话","phone"));
@@ -239,7 +239,7 @@ public class InspectionDocxBinder {
                 }
             }
             for(int j=0;j<runs.size();j++)if(runs.get(j).getCTR().sizeOfTArray()==1){
-                writeText(runs.get(j),chunks.get(j));
+                if(!Objects.equals(runs.get(j).getCTR().getTArray(0).getStringValue(),chunks.get(j)))writeText(runs.get(j),chunks.get(j));
             }
         }
         return plan.inspection();
