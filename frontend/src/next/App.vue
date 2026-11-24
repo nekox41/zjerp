@@ -48,6 +48,24 @@ const audit = ref([])
 const error = ref('')
 const notice = ref('')
 const tab = ref('overview')
+const destination = ref(null)
+const navigationKey = ref(0)
+function navigate(target, section=null, id=null) {
+  const allowed = {
+    business: section ? can(({customers:'customer:read',contracts:'contract:read',projects:'project:read',employees:'employee:read'})[section]) : ['customer:read','contract:read','project:read','employee:read'].some(can),
+    'partner-maintenance': section==='maintenance' ? can('maintenance:read')&&can('project:read') : section==='leadership' ? can('project:read') : section==='links' ? can('contract:read') : can('partner:read')||can('maintenance:read')||can('contract:read')||can('project:read'),
+    'service-workflow': can('service:read')
+  }
+  if (!allowed[target]) return
+  destination.value = {section,id}
+  navigationKey.value++
+  tab.value = target
+}
+function sidebar(target) {
+  destination.value=null
+  navigationKey.value++
+  tab.value=target
+}
 const loginForm = ref({ username: '', password: '' })
 const registering=ref(false)
 const registerForm=ref({username:'',displayName:'',password:'',confirm:''})
@@ -128,7 +146,7 @@ async function login() {
 async function logout() {
   try { await api('/auth/logout', { method: 'POST' }) } catch { /* local session is still cleared */ }
   sessionStorage.removeItem('erp-next-token')
-  user.value = null; identities.value = []; roles.value=[]; permissionCatalog.value=[]; roleEditor.value=false; identityEdit.value=null; audit.value = []; tab.value = 'overview'
+  user.value = null; identities.value = []; roles.value=[]; permissionCatalog.value=[]; roleEditor.value=false; identityEdit.value=null; audit.value = []; tab.value = 'overview'; destination.value=null
 }
 async function createIdentity() {
   error.value = ''; notice.value = ''; submitting.value = true
@@ -241,9 +259,9 @@ onMounted(refresh)
       <button :class="{active:tab==='overview'}" @click="tab='overview'"><span>⌂</span>工作台</button>
       <button v-if="can('project:read')" :class="{active:tab==='dashboard'}" @click="tab='dashboard'"><span>◫</span>经营驾驶舱</button>
       <div class="side-caption">业务管理</div>
-      <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务全生命周期</button>
-      <button v-if="can('partner:read') || can('maintenance:read')" :class="{active:tab==='partner-maintenance'}" @click="tab='partner-maintenance'"><span>♧</span>合作方与维保</button>
-      <button v-if="can('service:read')" :class="{active:tab==='service-workflow'}" @click="tab='service-workflow'"><span>◈</span>技术服务交付</button>
+      <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="sidebar('business')"><span>▦</span>业务全生命周期</button>
+      <button v-if="can('partner:read') || can('maintenance:read') || can('contract:read') || can('project:read')" :class="{active:tab==='partner-maintenance'}" @click="sidebar('partner-maintenance')"><span>♧</span>合作方与维保</button>
+      <button v-if="can('service:read')" :class="{active:tab==='service-workflow'}" @click="sidebar('service-workflow')"><span>◈</span>技术服务交付</button>
       <div class="side-caption">财务管理</div>
       <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>
       <button v-if="can('invoice:read')" :class="{active:tab==='invoices'}" @click="tab='invoices'"><span>▤</span>发票与应收应付</button>
@@ -286,12 +304,12 @@ onMounted(refresh)
         <template v-else-if="tab==='audit'">
           <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
         </template>
-        <PartnerMaintenance v-else-if="tab==='partner-maintenance'" :permissions="user.permissions" />
-        <ServiceWorkflow v-else-if="tab==='service-workflow'" :permissions="user.permissions" :user-id="user.id" />
+        <PartnerMaintenance v-else-if="tab==='partner-maintenance'" :key="navigationKey" :permissions="user.permissions" :destination="destination" @navigate="navigate" />
+        <ServiceWorkflow v-else-if="tab==='service-workflow'" :key="navigationKey" :permissions="user.permissions" :user-id="user.id" :destination="destination" @navigate="navigate" />
         <DashboardModule v-else-if="tab==='dashboard'" />
         <InvoiceModule v-else-if="tab==='invoices'" :permissions="user.permissions" />
         <FinanceModule v-else-if="tab==='finance'" :permissions="user.permissions" :user-id="user.id" />
-        <BusinessModule v-else :permissions="user.permissions" />
+        <BusinessModule v-else :key="navigationKey" :permissions="user.permissions" :destination="destination" @navigate="navigate" />
       </div>
     </section>
   </main>

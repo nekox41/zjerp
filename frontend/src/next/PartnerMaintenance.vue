@@ -1,8 +1,15 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api, downloadFile } from './api'
-const props=defineProps({permissions:{type:Array,default:()=>[]}})
+const props=defineProps({permissions:{type:Array,default:()=>[]},destination:{type:Object,default:null}})
+const emit=defineEmits(['navigate'])
 const can=p=>props.permissions.includes(p)
+const visibleTabs=computed(()=>[
+  {id:'partners',name:'合作方档案',allowed:can('partner:read')},
+  {id:'links',name:'合同与项目关联',allowed:can('contract:read')},
+  {id:'leadership',name:'项目人员',allowed:can('project:read')&&can('project:write')},
+  {id:'maintenance',name:'维保项目',allowed:can('maintenance:read')&&can('project:read')}
+].filter(t=>t.allowed))
 const tab=ref('partners'),busy=ref(false),error=ref(''),notice=ref('')
 const partners=ref([]),contracts=ref([]),projects=ref([]),employees=ref([])
 const partner=ref(null),maintenance=ref(null),contractDetail=ref(null)
@@ -151,24 +158,32 @@ async function uploadContractFile(event){
   try{const fd=new FormData();fd.append('file',file);const uploaded=await api('/files',{method:'POST',body:fd});await api('/business/contracts/'+linkForm.value.contractId+'/files',{method:'POST',body:JSON.stringify({fileId:uploaded.id,fileType:linkForm.value.fileType})});notice.value='合同附件已保存';await openContractDetail(Number(linkForm.value.contractId))}
   catch(e){error.value=e.message}
 }
-onMounted(load)
+onMounted(async ()=>{
+  const target=props.destination
+  tab.value=visibleTabs.value.some(t=>t.id===target?.section)?target.section:(visibleTabs.value[0]?.id||'')
+  await load()
+  if(!target?.id||tab.value!==target.section)return
+  if(tab.value==='maintenance')await openMaintenance(target.id)
+  else if(tab.value==='leadership'){leadership.value.projectId=target.id;await loadLeadership(target.id)}
+  else if(tab.value==='links'){linkForm.value.contractId=target.id;projectLink.value.contractId=target.id;await openContractDetail(target.id)}
+})
 </script>
 
 <template>
 <section class="pm-module">
   <div class="pm-head"><div><span class="pm-kicker">BUSINESS PARTNERS · MAINTENANCE</span><h2>合作方与维护保养</h2><p>独立管理中间人、合同来源与分成，跟踪维护保养项目的合同和资料状态。</p></div><button @click="load">刷新</button></div>
   <p v-if="error" class="pm-msg error">{{error}}</p><p v-if="notice" class="pm-msg success">{{notice}}</p>
-  <nav class="pm-tabs"><button v-for="t in [{id:'partners',name:'合作方档案'},{id:'links',name:'合同与项目关联'},{id:'leadership',name:'项目人员'},{id:'maintenance',name:'维保项目'}]" :key="t.id" :class="{active:tab===t.id}" @click="tab=t.id">{{t.name}}</button></nav>
+  <nav class="pm-tabs"><button v-for="t in visibleTabs" :key="t.id" :class="{active:tab===t.id}" @click="tab=t.id">{{t.name}}</button></nav>
 
   <div v-if="tab==='partners'" class="pm-layout">
-    <div class="pm-panel"><h3>新增合作方</h3><form @submit.prevent="createPartner" class="pm-form">
+    <div v-if="can('partner:write')" class="pm-panel"><h3>新增合作方</h3><form @submit.prevent="createPartner" class="pm-form">
       <label>合作方编号<input v-model="partnerForm.partnerCode" required></label><label>名称<input v-model="partnerForm.name" required></label>
       <label>类型<select v-model="partnerForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label><label>联系人<input v-model="partnerForm.contactName"></label>
       <label>电话<input v-model="partnerForm.phone"></label><label>邮箱<input v-model="partnerForm.email"></label><label class="wide">地址<input v-model="partnerForm.address"></label><label class="wide">备注<textarea v-model="partnerForm.notes"></textarea></label><button class="primary" :disabled="busy">创建合作方</button>
     </form></div>
     <div class="pm-panel"><h3>合作方列表</h3><div class="pm-list"><button v-for="p in partners" :key="p.id" @click="openPartner(p.id)" :class="{selected:partner?.id===p.id}"><b>{{p.name}}</b><small>{{p.partner_code}} · {{p.contract_count}} 份关联合同</small></button><p v-if="!partners.length" class="pm-empty">暂无合作方</p></div>
       <div v-if="partner" class="pm-detail">
-        <div class="pm-detail-head"><h4>{{partner.name}} · 合作方档案</h4><button class="secondary-button" @click="partnerEditOpen=!partnerEditOpen">{{partnerEditOpen?'收起编辑':'编辑档案'}}</button></div>
+        <div class="pm-detail-head"><h4>{{partner.name}} · 合作方档案</h4><button v-if="can('partner:write')" class="secondary-button" @click="partnerEditOpen=!partnerEditOpen">{{partnerEditOpen?'收起编辑':'编辑档案'}}</button></div>
         <p>编号：{{partner.partner_code}} · 状态：{{partner.status==='active'?'启用':'停用'}}</p>
         <form v-if="partnerEditOpen" class="pm-form" @submit.prevent="savePartner">
           <label>名称<input v-model="partnerEditForm.name" required></label>
@@ -178,7 +193,7 @@ onMounted(load)
           <label class="wide">地址<input v-model="partnerEditForm.address"></label><label class="wide">备注<textarea v-model="partnerEditForm.notes"></textarea></label>
           <button class="primary" :disabled="busy">保存档案</button>
         </form>
-        <h4>关联合同</h4><div v-for="c in partner.contracts||[]" :key="c.id" class="pm-contract"><b>{{c.title}}</b><small>{{c.contract_no}} · 分成 {{c.share_percent}}% · {{c.status}}</small></div><p v-if="!partner.contracts?.length" class="pm-empty">尚未关联合同</p>
+        <h4>关联合同</h4><div v-for="c in partner.contracts||[]" :key="c.id" class="pm-contract"><b>{{c.title}}</b><small>{{c.contract_no}} · 分成 {{c.share_percent}}% · {{c.status}}</small><button v-if="can('contract:read')" class="secondary-button" @click="emit('navigate','business','contracts',c.id)">合同档案</button></div><p v-if="!partner.contracts?.length" class="pm-empty">尚未关联合同</p>
       </div>
     </div>
   </div>
@@ -187,17 +202,17 @@ onMounted(load)
     <div class="pm-panel"><h3>合同介绍来源与分成</h3><form class="pm-form" @submit.prevent="linkPartner">
       <label>合同<select v-model="linkForm.contractId" @change="openContractDetail(Number(linkForm.contractId))" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
       <label>合作方<select v-model="linkForm.partnerId" required><option value="">选择合作方</option><option v-for="p in partners" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
-      <label>合同分成比例（%）<input v-model="linkForm.sharePercent" type="number" min="0" max="100" step="0.01" required></label><label>备注<input v-model="linkForm.notes"></label><button class="primary">保存合作关系</button>
+      <label>合同分成比例（%）<input v-model="linkForm.sharePercent" type="number" min="0" max="100" step="0.01" required></label><label>备注<input v-model="linkForm.notes"></label><button v-if="can('contract:write')&&can('partner:read')" class="primary">保存合作关系</button>
     </form><p class="pm-note">一个合作方可以关联多份合同；每份合同可记录多个合作方，分成比例合计不得超过 100%。这里只记录约定比例，不登记实际付款。</p>
-    <label>附件类型<select v-model="linkForm.fileType"><option value="contract">合同原件</option><option value="maintenance_card">维保公示卡</option><option value="project_material">项目资料</option><option value="other">其他</option></select></label><label class="pm-upload">上传合同/维保资料<input type="file" hidden accept=".pdf,.docx" @change="uploadContractFile"></label></div>
+    <label>附件类型<select v-model="linkForm.fileType"><option value="contract">合同原件</option><option value="maintenance_card">维保公示卡</option><option value="project_material">项目资料</option><option value="other">其他</option></select></label><label v-if="can('contract:write')&&can('file:write')" class="pm-upload">上传合同/维保资料<input type="file" hidden accept=".pdf,.docx" @change="uploadContractFile"></label></div>
     <div class="pm-panel"><h3>合同与项目关联</h3><form class="pm-form" @submit.prevent="linkProject">
       <label>合同<select v-model="projectLink.contractId" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
       <label>项目<select v-model="projectLink.projectId" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
-      <label>关联类型<select v-model="projectLink.relationType"><option value="service">服务合同</option><option value="renewal">年度续签</option><option value="supplement">补充合同</option><option value="other">其他</option></select></label><button class="primary">关联项目</button>
+      <label>关联类型<select v-model="projectLink.relationType"><option value="service">服务合同</option><option value="renewal">年度续签</option><option value="supplement">补充合同</option><option value="other">其他</option></select></label><button v-if="can('contract:write')&&can('project:read')" class="primary">关联项目</button>
     </form><p class="pm-note">项目可以先建立，后续再关联合同；一份合同可以覆盖多个项目，一个项目也可以保留多份年度合同历史。</p>
-      <div v-if="contractDetail" class="pm-detail"><h4>{{contractDetail.contract_no}} · 合同关联资料</h4>
+      <div v-if="contractDetail" class="pm-detail"><h4>{{contractDetail.contract_no}} · 合同关联资料</h4><button class="secondary-button" @click="emit('navigate','business','contracts',contractDetail.id)">返回合同档案</button>
         <div v-if="contractDetail.partners?.length" class="pm-contract"><b>合作方与分成</b><div v-for="p in contractDetail.partners" :key="p.id" class="pm-file"><span>{{p.name}} · {{p.share_percent}}%</span><button v-if="can('contract:write')" type="button" :disabled="busy" @click="unlinkPartner(p.id)">解除关联</button></div></div>
-        <div v-if="contractDetail.projects?.length" class="pm-contract"><b>关联合同项目</b><div v-for="p in contractDetail.projects" :key="p.id" class="pm-file"><span>{{p.project_no}} · {{p.name}} · {{p.relation_type}}</span><button v-if="can('contract:write')&&['draft','pending'].includes(contractDetail.status)" type="button" :disabled="busy" @click="unlinkProject(p.id)">解除关联</button></div></div>
+        <div v-if="contractDetail.projects?.length" class="pm-contract"><b>关联合同项目</b><div v-for="p in contractDetail.projects" :key="p.id" class="pm-file"><span>{{p.project_no}} · {{p.name}} · {{p.relation_type}}</span><button v-if="can('project:read')" type="button" @click="emit('navigate','business','projects',p.id)">项目档案</button><button v-if="can('contract:write')&&['draft','pending'].includes(contractDetail.status)" type="button" :disabled="busy" @click="unlinkProject(p.id)">解除关联</button></div></div>
         <div v-if="contractDetail.files?.length" class="pm-contract"><b>合同及项目附件</b><div v-for="f in contractDetail.files" :key="f.id" class="pm-file"><span>{{f.title||f.original_name}} · {{f.file_type}}</span><button type="button" @click="downloadFile(f.file_id,f.original_name)">下载</button></div></div>
         <p v-if="!contractDetail.partners?.length&&!contractDetail.projects?.length&&!contractDetail.files?.length" class="pm-empty">暂无关联合作方、项目或附件</p>
       </div>
@@ -214,17 +229,17 @@ onMounted(load)
   <div v-if="tab==='maintenance'" class="pm-layout">
     <div class="pm-panel"><h3>选择维护保养项目</h3><div class="pm-list"><button v-for="p in projects" :key="p.id" @click="openMaintenance(p.id)" :class="{selected:String(maintenanceForm.projectId)===String(p.id)}"><b>{{p.name}}</b><small>{{p.project_no}} · {{p.customer_name}}</small></button></div></div>
     <div class="pm-panel" v-if="maintenance">
-      <h3>维保项目状态</h3><form class="pm-form" @submit.prevent="saveMaintenance">
+      <h3>维保项目状态</h3><button class="secondary-button" @click="emit('navigate','business','projects',Number(maintenanceForm.projectId))">返回项目档案</button><form class="pm-form" @submit.prevent="saveMaintenance"><fieldset :disabled="!can('maintenance:write')" class="wide" style="display:contents">
         <label>当前有效维护合同<select v-model="maintenanceForm.currentContractId"><option value="">未指定</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}}</option></select></label>
         <label>公示卡状态<select v-model="maintenanceForm.publicCardStatus"><option value="not_started">未开始</option><option value="preparing">制作中</option><option value="sent">已寄出</option><option value="delivered">已送达</option></select></label>
         <label class="check"><input v-model="maintenanceForm.honeybeeContractUploaded" type="checkbox"> 合同已上传小蜜蜂</label>
         <label class="check"><input v-model="maintenanceForm.honeybeeProjectCreated" type="checkbox"> 小蜜蜂项目已建立</label>
         <label class="check"><input v-model="maintenanceForm.projectMaterialsCompleted" type="checkbox"> 项目资料已完成</label>
-        <label class="wide">备注<textarea v-model="maintenanceForm.notes"></textarea></label><button class="primary">保存维保状态</button>
+        <label class="wide">备注<textarea v-model="maintenanceForm.notes"></textarea></label><button v-if="can('maintenance:write')" class="primary">保存维保状态</button></fieldset>
       </form>
       <div class="pm-divider"></div><h3>年度维保合同续签</h3>
       <p class="pm-note">续签沿用原项目，新合同独立保存合同期限及维保卡附件。新建的是草稿，不会自动替换当前有效合同。</p>
-      <form v-if="maintenance.contractHistory?.length" class="pm-form" @submit.prevent="createRenewal">
+      <form v-if="maintenance.contractHistory?.length&&can('maintenance:write')&&can('contract:write')" class="pm-form" @submit.prevent="createRenewal">
         <label>新合同编号<input v-model="renewalForm.contractNo" required></label>
         <label>合同名称<input v-model="renewalForm.title" required></label>
         <label>金额<input v-model="renewalForm.amount" type="number" min="0" step="0.01" required></label>
@@ -239,7 +254,7 @@ onMounted(load)
         <div v-for="c in maintenance.contractHistory||[]" :key="c.id" class="pm-contract">
           <b>{{c.contract_no}} · {{c.title}}</b>
           <small>{{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}} · {{c.status}}</small>
-          <button type="button" class="secondary-button" @click="openRenewalHistory(c.id)">查看该合同附件</button>
+          <button v-if="can('contract:read')" type="button" class="secondary-button" @click="openRenewalHistory(c.id)">查看该合同附件</button>
         </div>
         <div v-if="renewalHistoryDetail" class="pm-contract">
           <b>{{renewalHistoryDetail.contract_no}} · 独立附件记录</b>
@@ -250,7 +265,7 @@ onMounted(load)
           <p v-if="!renewalHistoryDetail.files?.length" class="pm-note">此合同暂无附件；请在「合同与项目关联」中上传本年度维保卡。</p>
         </div>
       </div>
-      <div class="pm-divider"></div><h3>维护日期与现场人员（按需登记）</h3><form class="pm-form" @submit.prevent="addMaintenanceVisit">
+      <div class="pm-divider"></div><h3>维护日期与现场人员（按需登记）</h3><form v-if="can('maintenance:write')" class="pm-form" @submit.prevent="addMaintenanceVisit">
         <label>维护日期<input v-model="visitForm.visitDate" type="date" required></label>
         <label>对应合同<select v-model="visitForm.contractId"><option value="">当前项目</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}}</option></select></label>
         <label class="wide">现场人员<select v-model="visitForm.employeeIds" multiple><option v-for="e in employees" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>

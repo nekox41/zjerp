@@ -2,7 +2,8 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { api, downloadFile } from './api'
 
-const props = defineProps({ permissions: { type: Array, default: () => [] }, userId: { type: Number, default: 0 } })
+const props = defineProps({ permissions: { type: Array, default: () => [] }, userId: { type: Number, default: 0 }, destination: {type:Object,default:null} })
+const emit=defineEmits(['navigate'])
 const can = p => props.permissions.includes(p)
 const visibleTabs = computed(()=>[
   {id:'visits',name:'现场服务',permission:'service:visit:read'},
@@ -35,13 +36,15 @@ async function load() {
       can('report:photo:read')?api('/service-workflow/photo-systems'):Promise.resolve([])
     ])
     projects.value=p; employees.value=e; systems.value=s
-    if(project.value) await selectProject(project.value.id)
+    if(!visibleTabs.value.some(t=>t.id===tab.value))tab.value=visibleTabs.value[0]?.id||''
+    if(project.value){const packageId=workPackage.value?.id;await selectProject(project.value.id);if(packageId&&packages.value.some(p=>p.id===packageId))await selectPackage(packageId)}
   } catch(e){error.value=e.message} finally{loading.value=false}
 }
 async function selectProject(id) {
   error.value=''; project.value=projects.value.find(x=>x.id===id)||null
   workPackage.value=null; batch.value=null; report.value=null
-  if(!id){packages.value=[];return}
+  packages.value=[];visits.value=[];batches.value=[];reports.value=[];issues.value=[];deliveries.value=[];selectedBatches.value=[];templateFile.value=null
+  if(!project.value)return
   try { packages.value=await api('/service-workflow/projects/'+id+'/work-packages') }
   catch(e){error.value=e.message}
 }
@@ -207,7 +210,13 @@ async function updateDelivery(delivery,status) {
 }
 function batchLabel(status){return ({collecting:'整理中',submitted:'待审核',reviewed:'已审核',locked:'已用于报告'})[status]||status}
 function reportLabel(status){return ({draft:'草稿',submitted:'待审核',reviewing:'审核中',returned:'已退回',approved:'审核通过',issued:'已签发',archived:'已归档',withdrawn:'已撤回'})[status]||status}
-onMounted(load)
+onMounted(async ()=>{
+  await load()
+  if(props.destination?.id) {
+    await selectProject(props.destination.id)
+    if(packages.value.length===1)await selectPackage(packages.value[0].id)
+  }
+})
 onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL))
 </script>
 
@@ -215,6 +224,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
 <section class="service-workflow">
   <div class="sw-head"><div><span class="sw-kicker">TECHNICAL SERVICE · DELIVERY</span><h2>技术服务交付</h2><p>现场执行、问题整改、照片整理、报告审核和交付登记，按项目与服务批次留痕。</p></div><button @click="load">刷新</button></div>
   <p v-if="error" class="sw-msg error">{{ error }}</p><p v-if="notice" class="sw-msg success">{{ notice }}</p>
+  <div v-if="project&&can('project:read')" class="report-actions"><button class="secondary-button" @click="emit('navigate','business','projects',project.id)">返回项目档案</button></div>
   <div class="sw-selects">
     <label>项目<select :value="project?.id||''" @change="selectProject(Number($event.target.value)||null)"><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.project_no }} · {{ p.name }}</option></select></label>
     <label>服务工作包<select :value="workPackage?.id||''" @change="selectPackage(Number($event.target.value)||null)" :disabled="!project"><option value="">选择服务工作包</option><option v-for="w in packages" :key="w.id" :value="w.id">{{ w.package_no }} · {{ w.title }}</option></select></label>
@@ -227,7 +237,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
 
     <div v-if="tab==='visits'" class="sw-panel">
       <div class="sw-panel-title"><h3>多次现场服务记录</h3><span>{{ visits.length }} 次</span></div>
-      <form class="sw-form" @submit.prevent="createVisit">
+      <form v-if="can('service:visit:write')" class="sw-form" @submit.prevent="createVisit">
         <label>到场日期<input v-model="visitForm.visitDate" type="date" required></label>
         <label>服务类型<select v-model="visitForm.visitType"><option value="inspection">首次检测</option><option value="rectification_review">整改复核</option><option value="supplement">补充采集</option><option value="maintenance">维护保养</option><option value="other">其他</option></select></label>
         <label>标题<input v-model="visitForm.title" required></label>
