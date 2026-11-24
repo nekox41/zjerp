@@ -20,7 +20,7 @@ jobs:
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml config --quiet
       - name: Start isolated MySQL
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d erp-next-mysql
-      - name: Apply schema V1 through V14
+      - name: Apply schema V1 through V15
         run: timeout 180 docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml run --rm erp-next-schema
       - name: Re-run migrations idempotently
         run: timeout 180 docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml run --rm erp-next-schema
@@ -28,10 +28,10 @@ jobs:
         run: |
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2','3','4','5','6','7','8','9','10','11','12','13','14') AND success = 1" | grep -qx 14
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1','2','3','4','5','6','7','8','9','10','11','12','13','14','15') AND success = 1" | grep -qx 15
           docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql \
             mysql -u erp_next -D erp_next -N -e \
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name IN ('erp_service_visit','erp_service_visit_staff','erp_service_visit_issue','erp_report_photo_batch','erp_report_photo','erp_service_report_artifact','erp_service_delivery','erp_service_delivery_event','erp_partner','erp_contract_partner','erp_contract_project','erp_contract_file','erp_maintenance_project','erp_maintenance_visit','erp_maintenance_visit_staff','erp_repair_record','erp_repair_staff','erp_maintenance_card_sequence','erp_maintenance_card','erp_maintenance_contact','erp_maintenance_material','erp_maintenance_material_archive','erp_maintenance_contract_state','erp_inspection_profile_version')" | grep -qx 24
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'erp_next' AND table_name IN ('erp_service_visit','erp_service_visit_staff','erp_service_visit_issue','erp_report_photo_batch','erp_report_photo','erp_service_report_artifact','erp_service_delivery','erp_service_delivery_event','erp_partner','erp_contract_partner','erp_contract_project','erp_contract_file','erp_maintenance_project','erp_maintenance_visit','erp_maintenance_visit_staff','erp_repair_record','erp_repair_staff','erp_maintenance_card_sequence','erp_maintenance_card','erp_maintenance_contact','erp_maintenance_material','erp_maintenance_material_archive','erp_maintenance_contract_state','erp_inspection_profile_version','erp_legacy_migration_map','erp_legacy_migration_run')" | grep -qx 26
       - name: Build and start API and web
         run: docker compose --env-file erp-next/.env.example -f erp-next/compose.yaml up -d --build
       - name: Collect container diagnostics
