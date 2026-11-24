@@ -125,8 +125,8 @@ public class InspectionProfileController {
     private void resolveTemplateRecords(com.fasterxml.jackson.databind.node.ObjectNode data,JsonNode previous){
         var records=data.path("records");if(!records.isArray())return;
         Map<Long,Map<String,Object>> cache=new HashMap<>();
-        Set<Long> oldItems=new HashSet<>();
-        for(JsonNode old:previous.path("records"))if(old.path("templateItemId").isTextual())try{oldItems.add(Long.parseLong(old.path("templateItemId").asText()));}catch(NumberFormatException ignored){}
+        Map<Long,Integer> oldItems=new HashMap<>(),usedItems=new HashMap<>();
+        for(JsonNode old:previous.path("records"))if(old.path("templateItemId").isTextual())try{oldItems.merge(Long.parseLong(old.path("templateItemId").asText()),1,Integer::sum);}catch(NumberFormatException ignored){}
         Map<String,Integer> sequences=new HashMap<>();
         for(JsonNode node:records){
             var row=(com.fasterxml.jackson.databind.node.ObjectNode)node;
@@ -141,7 +141,8 @@ public class InspectionProfileController {
                     if(found.size()!=1)throw bad("模板检测项目不存在："+id);
                     item=found.get(0);cache.put(id,item);
                 }
-                if(!oldItems.contains(id)&&(!enabled(item.get("template_active"))||!enabled(item.get("clause_active"))||!enabled(item.get("standard_active"))||!enabled(item.get("verified"))))throw bad("新记录不能使用停用或未核验的模板及条款："+id);
+                int used=usedItems.merge(id,1,Integer::sum);
+                if(used>oldItems.getOrDefault(id,0)&&(!enabled(item.get("template_active"))||!enabled(item.get("clause_active"))||!enabled(item.get("standard_active"))||!enabled(item.get("verified"))))throw bad("不能为停用或未核验的模板及条款新增记录："+id);
                 row.put("templateItemId",Long.toString(id));row.put("templateId",item.get("template_id").toString());
                 row.put("clauseId",item.get("clause_id").toString());row.put("standardId",item.get("standard_id").toString());
                 row.put("system",item.get("system_name").toString());row.put("item",item.get("item_name").toString());

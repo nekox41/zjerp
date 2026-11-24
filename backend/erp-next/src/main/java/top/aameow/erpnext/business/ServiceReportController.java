@@ -174,6 +174,15 @@ public class ServiceReportController {
         Map<String,Object> r=report(id);if(!"draft".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿报告可以提交");
         Map<String,Object> v=content(id,r);Map<String,Object> data=mapper.convertValue(parse(v.get("content_json").toString()),new TypeReference<Map<String,Object>>(){});
         checkActionVersion(b,r);checkContent(data);
+        if("inspection".equals(r.get("report_type"))){
+            var snapshot=mapper.valueToTree(data).path("inspectionProfile").path("content");
+            Set<String> basis=new HashSet<>();for(var ref:snapshot.path("basisReferences"))basis.add(ref.path("id").asText());
+            for(var row:snapshot.path("records"))if(!row.path("templateItemId").asText("").isBlank()){
+                if(row.path("location").asText("").isBlank()||row.path("result").asText("").isBlank()||row.path("judgment").asText("").isBlank())
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,"模板检测项目尚未填写检测部位、结果或人工判定："+row.path("item").asText());
+                if(!basis.contains(row.path("standardId").asText()))throw new ResponseStatusException(HttpStatus.CONFLICT,"模板检测项目规范尚未选为检测依据："+row.path("clauseReference").asText());
+            }
+        }
         var artifacts=jdbc.queryForList("SELECT id FROM erp_service_report_artifact WHERE report_id=? AND version_no=? AND artifact_type='docx' ORDER BY artifact_revision_no DESC",id,r.get("current_version_no"));
         Long selected=null;
         if(b!=null&&b.get("artifactId")!=null){

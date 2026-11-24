@@ -286,6 +286,11 @@ public class ServiceWorkflowController {
     }
     private void checkStructuredRecords(TemplatePlan plan,com.fasterxml.jackson.databind.JsonNode data){
         Set<String> basis=new HashSet<>();for(var ref:data.path("basisReferences"))basis.add(ref.path("id").asText());
+        if(!plan.revisions().isEmpty()){
+            Set<String> selected=new HashSet<>();for(var t:plan.revisions())if(t.containsKey("system_name"))selected.add(t.get("id").toString());
+            for(var row:data.path("records"))if(!row.path("templateItemId").asText("").isBlank()&&!selected.contains(row.path("templateId").asText()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"组合报告未选择资料中使用的系统模板版本："+row.path("system").asText());
+        }
         for(var template:plan.revisions()){
             if(!template.containsKey("system_name"))continue;
             long tid=((Number)template.get("id")).longValue();
