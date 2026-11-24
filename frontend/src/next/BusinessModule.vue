@@ -49,7 +49,7 @@ const forms = {
   employee: ref({employeeCode:'',fullName:'',identityId:'',positionName:'',phone:'',email:'',employeeType:'general'}),
   customer: ref({customerCode:'',name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',notes:''}),
   contact: ref({name:'',positionName:'',phone:'',email:'',isPrimary:false}),
-  contract: ref({contractNo:'',title:'',customerId:'',contractType:'',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',notes:''}),
+  contract: ref({contractNo:'',title:'',customerId:'',contractType:'',serviceType:'other',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',notes:''}),
   project: ref({projectNo:'',name:'',customerId:'',contractId:'',managerEmployeeId:'',plannedStart:'',plannedEnd:'',description:''}),
   qualification: ref({qualificationName:'',certificateNo:'',issuingAuthority:'',issuedOn:'',expiresOn:'',notes:''}),
   amendment: ref({amendmentNo:'',title:'',changeSummary:'',revisedAmount:'',effectiveOn:''})
@@ -81,6 +81,7 @@ async function load() {
     rows.value=cfg ? await api('/business'+cfg.endpoint+'?q='+encodeURIComponent(q.value)) : []
   } catch(e) { error.value=e.message }
 }
+const initialForms=Object.fromEntries(Object.entries(forms).map(([k,v])=>[k,{...v.value}]))
 async function submit(kind) {
   busy.value=true; error.value=''; notice.value=''
   try {
@@ -98,7 +99,7 @@ async function submit(kind) {
     const required={employee:'employee:write',customer:'customer:write',contact:'customer:write',contract:'contract:write',amendment:'contract:write',project:'project:write',qualification:'employee:write'}[kind]
     if(!required||!can(required))throw new Error('当前账号没有此项修改权限')
     await api('/business'+endpoint,{method:'POST',body:JSON.stringify(data)})
-    notice.value='保存成功'; forms[kind].value=Object.fromEntries(Object.keys(forms[kind].value).map(k=>[k,typeof forms[kind].value[k]==='boolean'?false:'']))
+    notice.value='保存成功'; forms[kind].value={...initialForms[kind]}
     await load()
     if(kind==='contact') await openCustomer(selectedCustomer.value.id)
     if(kind==='qualification') await openEmployee(selectedEmployee.value.id)
