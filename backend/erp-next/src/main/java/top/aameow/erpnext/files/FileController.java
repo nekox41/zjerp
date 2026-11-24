@@ -42,6 +42,11 @@ public class FileController {
             Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_contract_file WHERE file_id=?",Integer.class,f.get("id"));
             if(linked!=null&&linked>0)return;
         }
+        boolean maintenanceRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("maintenance:read"));
+        if(maintenanceRead){
+            Integer linked=jdbc.queryForObject("SELECT (SELECT COUNT(*) FROM erp_maintenance_card WHERE file_id=?)+(SELECT COUNT(*) FROM erp_maintenance_material WHERE file_id=?)+(SELECT COUNT(*) FROM erp_maintenance_material_archive WHERE file_id=?)",Integer.class,f.get("id"),f.get("id"),f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
         boolean expenseRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("expense:read"));
         if(expenseRead){
             boolean finance=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("expense:approve")||x.getAuthority().equals("expense:pay"));
