@@ -51,6 +51,39 @@ class InspectionDocxBinderTest {
             assertEquals("第一行\n第二行",cell.getParagraphs().get(0).getText());
         }
     }
+    private void cells(XWPFTableRow row,String...texts){
+        for(int i=0;i<texts.length;i++){
+            var cell=i==0?row.getCell(0):row.addNewTableCell();
+            if(!texts[i].isEmpty())cell.setText(texts[i]);
+        }
+    }
+    @Test void suggestsLogicalLabelsAndBlankBuildingRowWithoutMutatingTemplate()throws Exception{
+        try(var doc=new XWPFDocument()){
+            var table=doc.createTable(19,1);
+            cells(table.getRow(0),"工程名称","旧名称");
+            cells(table.getRow(1),"工程地址","旧地址");
+            cells(table.getRow(2),"工程类别","新建");
+            cells(table.getRow(3),"建设单位","旧建设单位");
+            cells(table.getRow(4),"设计单位","旧设计单位","资质等级","甲级");
+            cells(table.getRow(5),"施工单位","旧施工单位","资质等级","甲级");
+            cells(table.getRow(6),"监理单位","旧监理单位","资质等级","甲级");
+            cells(table.getRow(7),"建筑总面积","1㎡","检测日期","旧日期");
+            cells(table.getRow(8),"委托单位","旧委托单位","委托时间","旧日期");
+            cells(table.getRow(9),"委托/联系人","旧联系人","联系电话","旧电话");
+            cells(table.getRow(10),"单体建筑工程信息");
+            cells(table.getRow(11),"单体建筑名称","结构类型","使用性质","耐火等级","层数","高度","长度","占地面积","建筑面积");
+            cells(table.getRow(12),"","","","","地上","地下","","","","地上","地下");
+            cells(table.getRow(13),"旧楼栋","","","","","","","","","","");
+            cells(table.getRow(14),"","","","","","","","","","","");
+            var result=binder.inspect(doc,snapshot(),"CI","报告",List.of());
+            assertTrue(result.suggestedBindings().stream().anyMatch(x->x.target().equals("T1/R1/C2/P1")&&x.field().equals("general.projectName")));
+            assertTrue(result.suggestedBindings().stream().anyMatch(x->x.target().equals("T1/R15/C1/P1")&&x.field().equals("buildings.1.name")&&x.expectedText().isEmpty()));
+            assertEquals("旧名称",table.getRow(0).getCell(1).getText());
+            binder.fill(doc,snapshot(),"CI","报告",result.suggestedBindings());
+            assertEquals("测试工程",table.getRow(0).getCell(1).getText());
+            assertEquals("车库一期",table.getRow(14).getCell(0).getText());
+        }
+    }
     @Test void missingAndProtectedTargetsFailWithoutPartialMutation()throws Exception{
         try(var doc=new XWPFDocument()){
             var a=doc.createParagraph();a.createRun().setText("{{erp.general.projectName}}");

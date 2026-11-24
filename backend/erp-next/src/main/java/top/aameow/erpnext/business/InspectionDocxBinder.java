@@ -112,7 +112,7 @@ public class InspectionDocxBinder {
         for(XWPFTable table:doc.getTables()){
             tableNo++;
             var rows=table.getRows();
-            if(rows.size()<13||rows.get(0).getTableCells().size()!=2||!"工程名称".equals(normalized(rows.get(0).getCell(0).getText()))
+            if(rows.size()<13||rows.get(0).getTableCells().size()!=2||rows.get(1).getTableCells().size()<2||!"工程名称".equals(normalized(rows.get(0).getCell(0).getText()))
                 ||!"工程地址".equals(normalized(rows.get(1).getCell(0).getText())))continue;
             int buildingHeader=-1;
             for(int i=0;i<rows.size();i++){
@@ -196,8 +196,8 @@ public class InspectionDocxBinder {
             StringBuilder after=new StringBuilder(before);
             for(int i=edits.size()-1;i>=0;i--){Edit e=edits.get(i);after.replace(e.start(),e.end(),e.value());}
             // Normal line breaks and tabs are rendered as Word runs, never raw control characters.
-            if(edits.stream().anyMatch(e->e.value().codePoints().anyMatch(c->Character.isISOControl(c)&&c!='\n'&&c!='\r'&&c!='\t'))){
-                errors.add(target.key()+"：字段含不支持的控制字符");continue;
+            if(edits.stream().anyMatch(e->e.value().contains("{{erp.")||e.value().codePoints().anyMatch(c->Character.isISOControl(c)&&c!='\n'&&c!='\r'&&c!='\t'))){
+                errors.add(target.key()+"：字段含不支持的控制字符或嵌套 ERP 标记");continue;
             }
             used.addAll(keys);
             planned.add(new Planned(target,edits,new Change(target.key(),before,after.toString(),keys)));
