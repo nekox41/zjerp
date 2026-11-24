@@ -1,5 +1,36 @@
 set -euo pipefail
 
+# Self-registration is unprivileged until admin approval; custom role permissions are enforceable.
+REG_PAYLOAD='{"username":"ci-self-register","displayName":"CI Registered","password":"ci-register-password-123","roleIds":[1],"status":"active"}'
+curl -fsS -X POST http://127.0.0.1:8090/api/auth/register -H 'Content-Type: application/json' -d "$REG_PAYLOAD" >/dev/null
+REG_DUP=$(curl -sS -o /tmp/erp-reg-dup.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/auth/register -H 'Content-Type: application/json' -d "$REG_PAYLOAD")
+test "$REG_DUP" = "409"
+REG_LOGIN='{"username":"ci-self-register","password":"ci-register-password-123"}'
+REG_BLOCKED=$(curl -sS -o /tmp/erp-reg-blocked.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/auth/login -H 'Content-Type: application/json' -d "$REG_LOGIN")
+test "$REG_BLOCKED" = "401"
+REG_ID=$(curl -fsS http://127.0.0.1:8090/api/admin/identities -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; x=next(x for x in json.load(sys.stdin) if x["username"]=="ci-self-register"); assert x["status"]=="disabled" and not x["roles"]; print(x["id"])')
+REG_PERMS=$(curl -fsS http://127.0.0.1:8090/api/admin/permissions -H "Authorization: Bearer $TOKEN")
+REG_READ=$(python -c 'import json,sys; print(next(x["id"] for x in json.load(sys.stdin) if x["code"]=="customer:read"))' <<< "$REG_PERMS")
+REG_ADMIN=$(python -c 'import json,sys; print(next(x["id"] for x in json.load(sys.stdin) if x["code"]=="identity:write"))' <<< "$REG_PERMS")
+REG_BAD=$(curl -sS -o /tmp/erp-reg-admin.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/admin/roles -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"name\":\"CI Invalid Admin\",\"permissionIds\":[$REG_ADMIN]}")
+test "$REG_BAD" = "400"
+REG_ROLE=$(curl -fsS -X POST http://127.0.0.1:8090/api/admin/roles -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"name\":\"CI Customer Read\",\"permissionIds\":[$REG_READ]}")
+REG_ROLE_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REG_ROLE")
+curl -fsS -X PUT "http://127.0.0.1:8090/api/admin/identities/$REG_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"status\":\"active\",\"roleIds\":[$REG_ROLE_ID]}" >/dev/null
+REG_SESSION=$(curl -fsS -X POST http://127.0.0.1:8090/api/auth/login -H 'Content-Type: application/json' -d "$REG_LOGIN")
+REG_TOKEN=$(python -c 'import json,sys; x=json.load(sys.stdin); assert x["permissions"]==["customer:read"]; print(x["token"])' <<< "$REG_SESSION")
+curl -fsS http://127.0.0.1:8090/api/business/customers -H "Authorization: Bearer $REG_TOKEN" >/dev/null
+REG_FORBIDDEN=$(curl -sS -o /tmp/erp-reg-forbidden.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/admin/roles -H "Authorization: Bearer $REG_TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI Unauthorized","permissionIds":[]}')
+test "$REG_FORBIDDEN" = "403"
+REG_WRITE=$(curl -sS -o /tmp/erp-reg-write.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/business/customers -H "Authorization: Bearer $REG_TOKEN" -H 'Content-Type: application/json' -d '{"customerCode":"CI-NO-WRITE","name":"Forbidden"}')
+test "$REG_WRITE" = "403"
+curl -fsS -X PUT "http://127.0.0.1:8090/api/admin/roles/$REG_ROLE_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI Customer Read Removed","permissionIds":[]}' >/dev/null
+REG_OLD_SESSION=$(curl -sS -o /tmp/erp-reg-session.json -w '%{http_code}' http://127.0.0.1:8090/api/auth/me -H "Authorization: Bearer $REG_TOKEN")
+test "$REG_OLD_SESSION" = "401" || test "$REG_OLD_SESSION" = "403"
+REG_NEW_SESSION=$(curl -fsS -X POST http://127.0.0.1:8090/api/auth/login -H 'Content-Type: application/json' -d "$REG_LOGIN")
+python -c 'import json,sys; assert json.load(sys.stdin)["permissions"]==[]' <<< "$REG_NEW_SESSION"
+curl -fsS -X PUT "http://127.0.0.1:8090/api/admin/identities/$REG_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"disabled"}' >/dev/null
+
 # Report author is the bootstrap administrator already authenticated as TOKEN.
 ROLES=$(curl -fsS http://127.0.0.1:8090/api/admin/roles -H "Authorization: Bearer $TOKEN")
 PM_ROLE_ID=$(python -c 'import json,sys; print(next(x["id"] for x in json.load(sys.stdin) if x["code"]=="project_manager"))' <<< "$ROLES")
