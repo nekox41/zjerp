@@ -19,6 +19,26 @@ const error = ref('')
 const notice = ref('')
 const tab = ref('overview')
 const loginForm = ref({ username: '', password: '' })
+const registering=ref(false)
+const registerForm=ref({username:'',displayName:'',password:'',confirm:''})
+async function register(){
+  error.value='';notice.value=''
+  if(registerForm.value.password!==registerForm.value.confirm){error.value='两次输入的密码不一致';return}
+  submitting.value=true
+  try{
+    const {username,displayName,password}=registerForm.value
+    await api('/auth/register',{method:'POST',body:JSON.stringify({username,displayName,password})})
+    loginForm.value.username=username
+    loginForm.value.password=''
+    registerForm.value={username:'',displayName:'',password:'',confirm:''}
+    registering.value=false
+    notice.value='注册成功，请等待管理员启用账户并分配权限。'
+  }catch(e){error.value=e.message}finally{submitting.value=false}
+}
+function toggleRegister(){
+  registering.value=!registering.value;error.value='';notice.value=''
+  registerForm.value={username:'',displayName:'',password:'',confirm:''}
+}
 const bootstrapForm = ref({ token: '', username: 'admin', displayName: '系统管理员', password: '', confirm: '' })
 const createForm = ref({ username: '', displayName: '', password: '', roleIds: [] })
 const identityEdit = ref(null)
@@ -150,6 +170,19 @@ onMounted(refresh)
             <button class="primary-button" :disabled="submitting">{{ submitting ? '正在创建…' : '创建管理员' }}</button>
           </form>
         </template>
+        <template v-else-if="registering">
+          <span class="eyebrow">CREATE ACCOUNT</span>
+          <h2>注册工作账号</h2>
+          <p class="muted">注册后由管理员核实身份、启用账户并分配权限。</p>
+          <form @submit.prevent="register" class="form-stack">
+            <label>账号<input v-model="registerForm.username" required maxlength="100" autocomplete="username"></label>
+            <label>姓名<input v-model="registerForm.displayName" required maxlength="200" autocomplete="name"></label>
+            <label>密码<input v-model="registerForm.password" type="password" required minlength="12" maxlength="72" autocomplete="new-password"></label>
+            <label>确认密码<input v-model="registerForm.confirm" type="password" required minlength="12" maxlength="72" autocomplete="new-password"></label>
+            <button class="primary-button" :disabled="submitting">提交注册申请</button>
+            <button type="button" class="secondary-button" @click="toggleRegister" :disabled="submitting">返回登录</button>
+          </form>
+        </template>
         <template v-else>
           <span class="eyebrow">WELCOME BACK</span>
           <h2>登录工作空间</h2>
@@ -159,6 +192,7 @@ onMounted(refresh)
             <label>密码<input v-model="loginForm.password" type="password" required autocomplete="current-password" placeholder="输入密码"></label>
             <button class="primary-button" :disabled="submitting">{{ submitting ? '正在登录…' : '登录' }}<span>→</span></button>
           </form>
+          <button type="button" class="secondary-button" @click="toggleRegister" :disabled="submitting">注册普通账户</button>
         </template>
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
