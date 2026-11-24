@@ -92,6 +92,12 @@ public class LegacyInventoryController {
         try{result.add(Map.of("key",key,"description",description,"count",count(c,"SELECT COUNT(*) FROM "+name(table)+" WHERE "+predicate)));}
         catch(SQLException e){result.add(Map.of("key",key,"description",description,"error","字段结构不匹配或查询失败；需人工核查"));}
     }
+    @GetMapping("/runs")
+    public Map<String,Object> runs(Authentication a){
+        admin(a);
+        return Map.of("runs",target.queryForList("SELECT id,source_namespace,archive_sha256,decision_sha256,summary_json,created_at FROM erp_legacy_migration_run ORDER BY id DESC LIMIT 100"),
+            "mapped",target.queryForList("SELECT source_namespace,source_table,target_table,COUNT(*) mapped_count FROM erp_legacy_migration_map GROUP BY source_namespace,source_table,target_table ORDER BY source_namespace,source_table,target_table"));
+    }
     @GetMapping("/scan")
     public Map<String,Object> scan(Authentication a){
         admin(a);

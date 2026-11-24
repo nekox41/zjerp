@@ -21,8 +21,8 @@ spec.loader.exec_module(archive_lib)
 canonical, digest, safe_path = archive_lib.canonical, archive_lib.digest, archive_lib.safe_path
 TYPES = {"WB":"maintenance", "JC":"fire_inspection", "PD":"fire_assessment", "PG":"fire_evaluation", "QT":"other"}
 CONTRACTS = {"zj_contract_maintenance":"WB","zj_contract_inspection":"JC","zj_contract_rating":"PD","zj_contract_assessment":"PG","zj_contract_other":"QT"}
-SECTIONS = ("customers","accounts","employees","qualifications","partners","contracts","projects","contacts","files","contractFiles","materials","cards","maintenanceStates")
-TARGETS = {"erp_customer","erp_identity","erp_employee","erp_employee_qualification","erp_partner","erp_contract","erp_project","erp_maintenance_contact","erp_file_object","erp_contract_file","erp_maintenance_material","erp_maintenance_card"}
+SECTIONS = ("customers","accounts","employees","qualifications","partners","contracts","projects","contractLinks","customerContacts","contacts","files","contractFiles","materials","materialArchives","cards","maintenanceStates")
+TARGETS = {"erp_customer","erp_identity","erp_employee","erp_employee_qualification","erp_partner","erp_contract","erp_project","erp_maintenance_contact","erp_file_object","erp_contract_file","erp_maintenance_material","erp_maintenance_card","erp_customer_contact","erp_maintenance_material_archive"}
 SOURCE_TABLES = {"sys_user","zj_employee","zj_report_credential","zj_intermediary","zj_work_project","zjerp_wbcard_phone","sys_file","zj_wbcard_material","zj_wbcard",*CONTRACTS}
 
 def sha(obj):
@@ -132,6 +132,9 @@ class Migration:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",self.ns):
             raise ValueError("Invalid archive namespace")
         self.source=source_index(root,manifest)
+        self.manifest=manifest
+        self.new=set()
+        self.new_file_ids=set()
         self.file_manifest={f["path"]:f for f in manifest["files"]}
         self.plan=plan
         self.storage=storage
@@ -164,10 +167,12 @@ class Migration:
         id=ident(id) if table in SOURCE_TABLES else key(id)
         pair=(table,id)
         if pair not in self.mapped:
-            self.cur.execute("SELECT target_table,target_id FROM erp_legacy_migration_map WHERE source_namespace=%s AND source_table=%s AND source_key=%s",(self.ns,table,id))
+            self.cur.execute("SELECT target_table,target_id,source_sha256 FROM erp_legacy_migration_map WHERE source_namespace=%s AND source_table=%s AND source_key=%s",(self.ns,table,id))
             found=self.cur.fetchall()
             if len(found)!=1:
                 raise ValueError("Required source reference has not been migrated: "+table+"/"+id)
+            if table in SOURCE_TABLES and found[0]["source_sha256"]!=sha(self.legacy(table,id)):
+                raise ValueError("Referenced source changed since earlier import: "+table+"/"+id)
             self.mapped[pair]=(found[0]["target_table"],found[0]["target_id"])
         t,n=self.mapped[pair]
         if t!=expected:
@@ -195,14 +200,56 @@ class Migration:
             self.target(target,n)
             self.execute("INSERT INTO erp_legacy_migration_map(source_namespace,source_table,source_key,source_sha256,decision_sha256,target_table,target_id,archive_sha256) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",(self.ns,table,id,src,dec,target,n,self.archive))
             self.inserted[table]=self.inserted.get(table,0)+1
+            self.new.add(pair)
+            if target=="erp_file_object":
+                self.new_file_ids.add(n)
         self.mapped[pair]=(target,n)
         return n
+    def reserve_card_numbers(self):
+        codes=set(); maximum=0
+        for t in self.manifest["tables"]:
+            if t["kind"]!="BASE TABLE" or t["table"] not in ("zj_wbcard","zj_wbcard_number","zj_wbcard_sequence"):
+                continue
+            with safe_path(self.root,t["data"]).open("r",encoding="utf-8") as f:
+                for line in f:
+                    row=json.loads(line)
+                    if t["table"]=="zj_wbcard_sequence":
+                        n=value(row.get("sequence_value"))
+                        if n is None or not re.fullmatch(r"[0-9]{1,18}",str(n)):
+                            raise ValueError("Invalid legacy maintenance card sequence")
+                        maximum=max(maximum,int(n))
+                    elif row.get("code") not in (None,""):
+                        code=required(row,"code",100)
+                        codes.add(code)
+                        if re.fullmatch(r"[0-9]{1,18}",code):
+                            maximum=max(maximum,int(code))
+        for code in sorted(codes):
+            self.cur.execute("SELECT source_namespace FROM erp_maintenance_card_legacy_number WHERE code=%s",(code,))
+            previous=self.cur.fetchall()
+            if previous and previous[0]["source_namespace"]!=self.ns:
+                raise ValueError("Reserved legacy card number belongs to another installation: "+code)
+            self.cur.execute("SELECT id FROM erp_maintenance_card WHERE code=%s",(code,))
+            existing=self.cur.fetchall()
+            if existing:
+                known=self.one("SELECT COUNT(*) AS n FROM erp_legacy_migration_map WHERE source_namespace=%s AND source_table='zj_wbcard' AND target_table='erp_maintenance_card' AND target_id=%s",(self.ns,existing[0]["id"]))
+                if known["n"]!=1:
+                    raise ValueError("Legacy card number collides with an existing target card: "+code)
+            if not previous:
+                self.execute("INSERT INTO erp_maintenance_card_legacy_number(code,source_namespace) VALUES(%s,%s)",(code,self.ns))
+        self.execute("UPDATE erp_maintenance_card_sequence SET last_number=GREATEST(last_number,%s) WHERE id=1",(maximum,))
+        self.summary["reservedLegacyCardNumbers"]=len(codes)
+        self.summary["legacyCardSequenceMaximum"]=maximum
     def run(self):
+        self.reserve_card_numbers()
         for d in self.plan.get("customers",[]):
             k=key(d["key"]); code=required(d,"code",64); name=required(d,"name",240)
             self.map("manual_customer",k,{"key":k},d,"erp_customer",
                 lambda:self.execute("INSERT INTO erp_customer(customer_code,name,phone,email,address,notes) VALUES(%s,%s,%s,%s,%s,%s)",
                     (code,name,optional(d,"phone",40),optional(d,"email",190),optional(d,"address",500),optional(d,"notes",20000))))
+        for d in self.plan.get("customerContacts",[]):
+            k=key(d["key"]); customer=self.ref("manual_customer",d["customerKey"],"erp_customer")
+            self.map("manual_customer_contact",k,{"key":k},d,"erp_customer_contact",
+                lambda:self.execute("INSERT INTO erp_customer_contact(customer_id,name,phone,email,position_name,is_primary,notes) VALUES(%s,%s,%s,%s,%s,%s,%s)",(customer,required(d,"name",160),optional(d,"phone",40),optional(d,"email",190),optional(d,"positionName",120),boolean(d.get("primary",False)),optional(d,"notes",1000))))
         for d in self.plan.get("accounts",[]):
             sid=ident(d["sourceId"]); row=self.legacy("sys_user",sid)
             username=required(d,"username",100) if "username" in d else required(row,"user_name",100)
@@ -308,6 +355,30 @@ class Migration:
                     self.execute("INSERT INTO erp_maintenance_project(project_id,notes) VALUES(%s,%s)",(n,"旧项目状态待人工确认；原始资料完整保全"))
                 return n
             self.map("zj_work_project",sid,row,d,"erp_project",create_project)
+        for d in self.plan.get("contractLinks",[]):
+            c=self.ref(enum(d["contractSourceTable"],CONTRACTS),d["contractSourceId"],"erp_contract")
+            p=self.ref("zj_work_project",d["projectSourceId"],"erp_project")
+            if self.target("erp_contract",c)["customer_id"]!=self.target("erp_project",p)["customer_id"]:
+                raise ValueError("Additional contract and project customer mismatch")
+            relation=enum(d["relationType"],{"service","renewal","supplement","other"})
+            self.cur.execute("SELECT relation_type FROM erp_contract_project WHERE contract_id=%s AND project_id=%s",(c,p))
+            old=self.cur.fetchall()
+            if old:
+                if old[0]["relation_type"]!=relation:
+                    raise ValueError("Existing contract relationship differs; no overwrite")
+            else:
+                self.execute("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(%s,%s,%s)",(c,p,relation))
+        # Explicit status is applied only to newly inserted contracts after project linkage.
+        for d in self.plan.get("contracts",[]):
+            table=d["sourceTable"];sid=ident(d["sourceId"])
+            desired=enum(d.get("status","draft"),{"draft","pending","active","completed","terminated"})
+            if (table,sid) in self.new and desired!="draft":
+                c=self.ref(table,sid,"erp_contract")
+                if desired in ("active","completed","terminated"):
+                    count=self.one("SELECT COUNT(*) AS n FROM erp_contract_project WHERE contract_id=%s",(c,))
+                    if count["n"]==0:
+                        raise ValueError("Reviewed non-draft contract requires a linked project")
+                self.execute("UPDATE erp_contract SET status=%s WHERE id=%s",(desired,c))
         for d in self.plan.get("contacts",[]):
             sid=ident(d["sourceId"]);row=self.legacy("zjerp_wbcard_phone",sid)
             self.map("zjerp_wbcard_phone",sid,row,d,"erp_maintenance_contact",
@@ -334,21 +405,22 @@ class Migration:
                 name=str(uuid.uuid4())
                 if self.apply:
                     dst=self.storage/name
-                    self.created_files.append(dst)
                     with source.open("rb") as src,dst.open("xb") as dest:
+                        self.created_files.append(dst)
                         shutil.copyfileobj(src,dest,1024*1024)
                     if digest(dst)!=info["sha256"]:
                         raise ValueError("Copied original differs from archive")
-                return self.execute("INSERT INTO erp_file_object(storage_key,sha256,byte_size,media_type,original_name) VALUES(%s,%s,%s,%s,%s)",(name,info["sha256"],info["size"],media,filename))
+                return self.execute("INSERT INTO erp_file_object(storage_key,sha256,byte_size,media_type,original_name,uploaded_by) VALUES(%s,%s,%s,%s,%s,%s)",(name,info["sha256"],info["size"],media,filename,self.actor))
             file_id=self.map("sys_file",sid,row,{**d,"archiveFileSha256":info["sha256"]},"erp_file_object",create_file)
             saved=self.target("erp_file_object",file_id)
             if saved["sha256"]!=info["sha256"]:
                 raise ValueError("Target file metadata differs from archive")
-            if self.apply and (self.storage/saved["storage_key"]) not in self.created_files:
-                if digest(self.storage/saved["storage_key"])!=info["sha256"]:
+            if file_id not in self.new_file_ids or self.apply:
+                storage_key=str(uuid.UUID(saved["storage_key"]))
+                if storage_key!=saved["storage_key"] or digest(safe_path(self.storage,storage_key))!=info["sha256"]:
                     raise ValueError("Existing target original missing or changed")
         actor=None
-        if any(self.plan.get(s) for s in ("contractFiles","materials","cards","maintenanceStates")):
+        if any(self.plan.get(s) for s in ("contractFiles","materials","materialArchives","cards","maintenanceStates")):
             # Never fabricate actor IDs. Use the pre-existing, active target admin explicitly supplied to CLI.
             actor=self.actor
         for d in self.plan.get("contractFiles",[]):
@@ -365,6 +437,21 @@ class Migration:
                 raise ValueError("Maintenance material must be PDF")
             self.map("zj_wbcard_material",sid,row,d,"erp_maintenance_material",
                 lambda:self.execute("INSERT INTO erp_maintenance_material(name,file_id,notes,created_by) VALUES(%s,%s,%s,%s)",(required(row,"name",200),f,optional(row,"remark",2000),actor)))
+        for d in self.plan.get("materialArchives",[]):
+            k=key(d["key"]);p=self.ref("zj_work_project",d["projectSourceId"],"erp_project")
+            c=self.ref("zj_contract_maintenance",d["contractSourceId"],"erp_contract")
+            m=self.ref("zj_wbcard_material",d["materialSourceId"],"erp_maintenance_material")
+            self.one("SELECT contract_id FROM erp_contract_project WHERE contract_id=%s AND project_id=%s",(c,p))
+            resource=self.target("erp_maintenance_material",m)
+            f=resource["file_id"]
+            title=required(d,"title",200) if "title" in d else resource["name"]
+            def create_archive():
+                n=self.execute("INSERT INTO erp_maintenance_material_archive(contract_id,project_id,material_id,file_id,title,created_by) VALUES(%s,%s,%s,%s,%s,%s)",(c,p,m,f,title,actor))
+                self.cur.execute("SELECT id FROM erp_contract_file WHERE contract_id=%s AND file_id=%s",(c,f))
+                if not self.cur.fetchall():
+                    self.execute("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(%s,%s,'project_material',%s,%s)",(c,f,title,actor))
+                return n
+            self.map("manual_material_archive",k,{"key":k},d,"erp_maintenance_material_archive",create_archive)
         for d in self.plan.get("cards",[]):
             sid=ident(d["sourceId"]);row=self.legacy("zj_wbcard",sid)
             p=self.ref("zj_work_project",d["projectSourceId"],"erp_project")
@@ -381,7 +468,12 @@ class Migration:
                     (p,c,f,code,required(d,"projectName",255),required(d,"company",255),required(d,"leader",100),required(d,"phone",255),required(d,"systems",60000),start,end,boolean(d["printed"]),boolean(d["sent"]),actor))
                 if re.fullmatch(r"[0-9]{1,18}",code):
                     self.execute("UPDATE erp_maintenance_card_sequence SET last_number=GREATEST(last_number,%s) WHERE id=1",(int(code),))
-                self.execute("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(%s,%s,'maintenance_card',%s,%s)",(c,f,code,actor))
+                self.cur.execute("SELECT file_type FROM erp_contract_file WHERE contract_id=%s AND file_id=%s",(c,f))
+                links=self.cur.fetchall()
+                if links and links[0]["file_type"]!="maintenance_card":
+                    raise ValueError("Existing attachment type conflicts with maintenance card")
+                if not links:
+                    self.execute("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(%s,%s,'maintenance_card',%s,%s)",(c,f,code,actor))
                 return n
             self.map("zj_wbcard",sid,row,d,"erp_maintenance_card",create_card)
         # Annual state is optional and explicit; never infer Honeybee status from unrelated fields.
@@ -399,12 +491,23 @@ class Migration:
                     raise ValueError("Annual state differs; do not overwrite existing business state")
             else:
                 self.execute("INSERT INTO erp_maintenance_contract_state(contract_id,project_id,honeybee_contract_uploaded,honeybee_project_created,project_materials_completed,public_card_status,updated_by) VALUES(%s,%s,%s,%s,%s,%s,%s)",(c,p,*state,actor))
-            # Do not set active/current contract automatically. That requires the normal business rules.
+            if boolean(d.get("current",False)):
+                contract=self.target("erp_contract",c)
+                if contract["status"]!="active" or not contract["starts_on"] or not contract["ends_on"]:
+                    raise ValueError("Current maintenance contract must be explicitly active with dates")
+                m=self.one("SELECT * FROM erp_maintenance_project WHERE project_id=%s",(p,))
+                if m["current_contract_id"] not in (None,c):
+                    raise ValueError("A different current maintenance contract already exists")
+                if m["current_contract_id"] is None:
+                    self.execute("UPDATE erp_maintenance_project SET current_contract_id=%s,honeybee_contract_uploaded=%s,honeybee_project_created=%s,project_materials_completed=%s,public_card_status=%s,updated_by=%s WHERE project_id=%s",(c,*state,actor,p))
+                    self.execute("UPDATE erp_project SET contract_id=%s,planned_start=%s,planned_end=%s WHERE id=%s",(c,contract["starts_on"],contract["ends_on"],p))
         self.summary.update(inserted=self.inserted,alreadyMapped=self.skipped,rawArchiveRetained=True)
-        self.cur.execute("SELECT source_table,COUNT(*) AS n FROM erp_legacy_migration_map WHERE source_namespace=%s GROUP BY source_table",(self.ns,))
-        existing={x["source_table"]:x["n"] for x in self.cur.fetchall()}
-        self.summary["unmappedArchiveRows"]={table:len(rows)-sum(1 for sid in rows if (table,sid) in self.mapped) for table,rows in self.source.items()}
-        self.summary["totalMappedByTable"]=existing
+        self.cur.execute("SELECT source_table,source_key FROM erp_legacy_migration_map WHERE source_namespace=%s",(self.ns,))
+        existing={}
+        for x in self.cur.fetchall():
+            existing.setdefault(x["source_table"],set()).add(x["source_key"])
+        self.summary["unmappedArchiveRows"]={t["table"]:t["rows"]-len(set(self.source.get(t["table"],{})) & existing.get(t["table"],set())) for t in self.manifest["tables"] if t["kind"]=="BASE TABLE"}
+        self.summary["totalMappedByTable"]={table:len(keys) for table,keys in existing.items()}
         return self.summary
 
 def blank_plan(manifest,hash):

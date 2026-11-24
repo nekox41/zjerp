@@ -53,7 +53,8 @@ public class MaintenanceDocumentController {
     }
     private String code(long n){return String.format(Locale.ROOT,"%07d",n);}
     private long lastNumber(boolean lock){return jdbc.queryForObject("SELECT last_number FROM erp_maintenance_card_sequence WHERE id=1"+(lock?" FOR UPDATE":""),Long.class);}
-    private String nextCode(long n){do{n=Math.addExact(n,1);}while(jdbc.queryForObject("SELECT COUNT(*) FROM erp_maintenance_card WHERE code=?",Integer.class,code(n))>0);return code(n);}
+    private boolean reservedCode(String no){return jdbc.queryForObject("SELECT (SELECT COUNT(*) FROM erp_maintenance_card WHERE code=?)+(SELECT COUNT(*) FROM erp_maintenance_card_legacy_number WHERE code=?)",Integer.class,no,no)>0;}
+    private String nextCode(long n){do{n=Math.addExact(n,1);}while(reservedCode(code(n)));return code(n);}
     private record CardInput(MaintenanceCardRenderer.Card card,LocalDate start,LocalDate end){}
     private CardInput input(Map<String,Object>b,Map<String,Object>scope,String code){
         LocalDate start,end;
@@ -88,7 +89,7 @@ public class MaintenanceDocumentController {
         if(!"active".equals(s.get("status")))throw bad("正式生成须选择履行中的维保合同");
         long last=lastNumber(true);String no=field(b,"code",100,false);
         if(no.isBlank())no=nextCode(last);
-        if(jdbc.queryForObject("SELECT COUNT(*) FROM erp_maintenance_card WHERE code=?",Integer.class,no)>0)
+        if(reservedCode(no))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"维保卡编号已使用");
         CardInput v=input(b,s,no);var card=v.card();
         byte[] pdf=renderer.render(card);
