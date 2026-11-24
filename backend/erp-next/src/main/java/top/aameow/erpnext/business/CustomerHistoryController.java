@@ -90,7 +90,7 @@ public class CustomerHistoryController {
             case "deliveries" -> {
                 permission="delivery:read";
                 sql="""
-                    SELECT d.id,d.version_no,d.status,d.delivery_method,d.courier_name,d.tracking_no,d.dispatched_at,d.delivered_at,
+                    SELECT d.id,d.version_no,d.artifact_id,d.status,d.delivery_method,d.courier_name,d.tracking_no,d.dispatched_at,d.delivered_at,
                         r.report_no,r.title,p.id project_id,p.name project_name
                     FROM erp_service_delivery d JOIN erp_service_report r ON r.id=d.report_id
                     JOIN erp_service_work_package w ON w.id=r.work_package_id

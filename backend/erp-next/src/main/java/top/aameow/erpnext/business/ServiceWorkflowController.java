@@ -213,13 +213,15 @@ public class ServiceWorkflowController {
 
     private Map<String,Object> reportForGeneration(long id,boolean lock){
         var report=one("SELECT * FROM erp_service_report WHERE id=?"+(lock?" FOR UPDATE":""),id);
-        if(!Set.of("draft","returned").contains(report.get("status").toString()))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿或退回状态的报告可以生成 DOCX");
+        if(!"draft".equals(report.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"请先保存为新的草稿版本，再生成 DOCX");
         return report;
     }
     private Map<String,Object> templateForGeneration(Map<String,Object>b,Authentication a){
         long templateId=Long.parseLong(req(b,"templateFileId"));
         var template=one("SELECT * FROM erp_file_object WHERE id=?",templateId);
-        if(((Number)template.get("uploaded_by")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先上传自己有权使用的 DOCX 模板");
+        if(!(template.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a)){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先上传自己有权使用的 DOCX 模板");
+        }
         if(!DOCX.equals(template.get("media_type"))||!template.get("original_name").toString().toLowerCase(Locale.ROOT).endsWith(".docx"))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"模板必须是 DOCX 文件");
         return template;
     }
@@ -343,22 +345,23 @@ public class ServiceWorkflowController {
 
     @GetMapping("/reports/{id}/deliveries") @PreAuthorize("hasAuthority('delivery:read')")
     public List<Map<String,Object>> deliveries(@PathVariable long id){
-        List<Map<String,Object>> result=jdbc.queryForList("SELECT d.*,i.display_name creator_name FROM erp_service_delivery d JOIN erp_identity i ON i.id=d.created_by WHERE d.report_id=? ORDER BY d.created_at DESC",id);
+        List<Map<String,Object>> result=jdbc.queryForList("SELECT d.*,i.display_name creator_name,a.file_id,a.sha256 artifact_sha256,f.original_name FROM erp_service_delivery d JOIN erp_identity i ON i.id=d.created_by LEFT JOIN erp_service_report_artifact a ON a.id=d.artifact_id LEFT JOIN erp_file_object f ON f.id=a.file_id WHERE d.report_id=? ORDER BY d.created_at DESC",id);
         for(Map<String,Object> delivery:result)delivery.put("events",jdbc.queryForList("SELECT e.*,i.display_name actor_name FROM erp_service_delivery_event e JOIN erp_identity i ON i.id=e.actor_identity_id WHERE e.delivery_id=? ORDER BY e.id",delivery.get("id")));
         return result;
     }
     @PostMapping("/reports/{id}/deliveries") @PreAuthorize("hasAuthority('delivery:write')") @Transactional
     public Map<String,Object> createDelivery(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
-        Map<String,Object> report=one("SELECT * FROM erp_service_report WHERE id=?",id);
-        if(!Set.of("issued","archived").contains(report.get("status").toString()))throw new ResponseStatusException(HttpStatus.CONFLICT,"报告签发后才能登记交付");
+        Map<String,Object> report=one("SELECT * FROM erp_service_report WHERE id=? FOR UPDATE",id);
         int version=b.get("versionNo")==null?((Number)report.get("current_version_no")).intValue():Integer.parseInt(b.get("versionNo").toString());
-        one("SELECT report_id FROM erp_service_report_version WHERE report_id=? AND version_no=?",id,version);
-        Integer artifact=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_artifact WHERE report_id=? AND version_no=? AND artifact_type='docx'",Integer.class,id,version);
-        if(artifact==null||artifact==0)throw new ResponseStatusException(HttpStatus.CONFLICT,"当前报告版本尚未生成 DOCX 文件，不能登记正式交付");
+        var v=one("SELECT submitted_artifact_id,version_issued_at FROM erp_service_report_version WHERE report_id=? AND version_no=?",id,version);
+        if(v.get("version_issued_at")==null||v.get("submitted_artifact_id")==null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"此版本没有可确认的签发文件，不能登记新交付；历史记录仍保留");
+        long artifact=((Number)v.get("submitted_artifact_id")).longValue();
+        one("SELECT id FROM erp_service_report_artifact WHERE id=? AND report_id=? AND version_no=? AND artifact_type='docx'",artifact,id,version);
         String method=b.get("deliveryMethod")==null?"courier":b.get("deliveryMethod").toString();
         if(!Set.of("courier","hand_delivery","electronic").contains(method))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效交付方式");
-        jdbc.update("INSERT INTO erp_service_delivery(report_id,version_no,delivery_method,recipient_name,recipient_phone,recipient_organization,recipient_address,courier_name,tracking_no,status,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,'prepared',?,?)",
-            id,version,method,req(b,"recipientName"),b.get("recipientPhone"),b.get("recipientOrganization"),req(b,"recipientAddress"),b.get("courierName"),b.get("trackingNo"),b.get("notes"),actor(a));
+        jdbc.update("INSERT INTO erp_service_delivery(report_id,version_no,artifact_id,delivery_method,recipient_name,recipient_phone,recipient_organization,recipient_address,courier_name,tracking_no,status,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,'prepared',?,?)",
+            id,version,artifact,method,req(b,"recipientName"),b.get("recipientPhone"),b.get("recipientOrganization"),req(b,"recipientAddress"),b.get("courierName"),b.get("trackingNo"),b.get("notes"),actor(a));
         long deliveryId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         eventDelivery(deliveryId,null,"prepared",actor(a),"创建交付登记");
         audit(actor(a),"report.delivery.created","erp_service_delivery",deliveryId,method);
