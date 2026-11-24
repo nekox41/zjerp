@@ -42,3 +42,27 @@ python scripts/erp-next-legacy-export.py verify --archive /secure/erp-legacy-arc
 每个可见实体表保留原 DDL 和逐行 JSONL（Decimal、日期、二进制显式编码，不能丢精度），视图保留定义；所有文件（包含孤儿/暂缓业务文件）按相对路径逐字复制并核验长度、SHA256；生成清单和校验和。失败保留 .partial，不会覆盖已存在档案或把未完成档案当作完成。文件备份保留旧路径关系，拒绝符号链接。清单不代表加密或数字签名，必须存放于权限受控、加密的备份介质，不提交 Git、不上传公共网盘。源库账号密码哈希、系统配置等敏感数据仅离线保全，不进入普通业务页面。另需保留标准 MySQL 全量备份（包括过程、触发器、事件、授权等非表对象）及旧部署配置，确保可恢复整个旧系统。
 
 V15 增加旧 ID→新 ID 映射与已提交迁移批次账本，为后续显式映射、重复导入防重与审计提供基础。它不会自动执行任何迁移。
+
+## 核心业务隔离试迁移（M03/M05 初版）
+
+先完成离线档案验证并备份隔离新版数据库及私有文件卷（包括管理员初始化）。停止目标业务写入；只对可丢弃的独立试迁移 `erp_next` 操作。脚本不连接旧库，只使用已校验档案。
+
+```bash
+python scripts/erp-next-legacy-import.py new-plan --archive /secure/erp-legacy-archive --plan /secure/review.json
+# 编辑 review.json，依据预检结果和真实业务资料填写各项明确映射。
+python scripts/erp-next-legacy-import.py preview --archive /secure/erp-legacy-archive --plan /secure/review.json --host 127.0.0.1 --user erp_next --actor 1 --files-root /path/to/isolated-private-files --isolated-trial
+# 确认输出的 planSha256 及计划，不得在生产目标运行。
+python scripts/erp-next-legacy-import.py apply --archive /secure/erp-legacy-archive --plan /secure/review.json --host 127.0.0.1 --user erp_next --actor 1 --files-root /path/to/isolated-private-files --isolated-trial --confirm-plan-sha256 <preview输出>
+```
+
+映射 JSON 各数组示例（以下 ID 仅演示字段，不代表真实数据；保留 new-plan 生成的 format/archiveSha256）：
+
+```json
+{"customers":[{"key":"customer-1","code":"L-C001","name":"人工确认甲方"}],"accounts":[{"sourceId":100}],"employees":[{"sourceId":1,"type":"engineer","linkAccount":true}],"qualifications":[{"sourceId":2,"employeeSourceId":1,"status":"valid"}],"partners":[{"sourceId":1}],"contracts":[{"sourceTable":"zj_contract_maintenance","sourceId":10,"customerKey":"customer-1","signingSource":"direct"}],"projects":[{"sourceId":20,"customerKey":"customer-1","contractSourceTable":"zj_contract_maintenance"}],"contacts":[{"sourceId":1}],"files":[{"sourceId":1,"archivePath":"2026/contract.pdf","mediaType":"application/pdf"}],"contractFiles":[{"key":"cf-1","contractSourceTable":"zj_contract_maintenance","contractSourceId":10,"fileSourceId":1,"fileType":"contract"}],"materials":[{"sourceId":1,"fileSourceId":2}],"cards":[{"sourceId":1,"projectSourceId":20,"contractSourceId":10,"fileSourceId":3,"projectName":"经核实项目","company":"经核实公司","leader":"经核实负责人","phone":"经核实电话","systems":"经核实系统","startsOn":"2026-01-01","endsOn":"2026-12-31","printed":true,"sent":false}],"maintenanceStates":[{"projectSourceId":20,"contractSourceId":10,"honeybeeContractUploaded":true,"honeybeeProjectCreated":true,"materialsCompleted":false,"publicCardStatus":"preparing"}]}
+```
+
+- accounts 默认禁用且不可用密码，旧权限不自动授予。若与目标账号重名，只允许显式 existingId + 相同用户名关联，不更改其角色或密码。员工类型与是否关联账号必须明确选择；资质状态也必须明确选择。
+- 合同旧金额不能准确转为两位小数或为空时阻止；只有明确审定 amount 才允许使用调整值，原值在档案内保全。中间人合同必须提供 sharePercent；旧 ownership 冲突则拒绝。合同默认草稿，项目默认计划中；不可凭日期推断活跃/结算/签发。
+- 项目已有旧 contract_id 不能隐式抛弃；校验类型和甲方一致。领导可暂不填，填写时两个不同有效工程师及有效资格必须成立。当前维保合同不自动选中，年度状态人工确认后独立保存。
+- 文件须明确对应归档文件相对路径、媒体类型、原始 SHA256/大小；未知格式、孤儿或未选记录继续留在离线档案。旧报告不自动签发。现有映射目标、旧行哈希和决策哈希不一致时终止，不覆盖。
+- preview 在一个事务内演练然后回滚，不复制文件、不提交业务记录；可能消耗 AUTO_INCREMENT 序号，故必须是隔离库。apply 使用同一个事务，失败清理本次复制文件；提交结果不明时保留文件以供核对。使用数据库命名锁防止并发迁移；不要同时运行新版业务。备份回滚为恢复试迁移前数据库与私有卷，而非按猜测删除共享业务记录。脚本输出已插入、已映射、剩余保全统计。实际旧库试迁移和完整核对待执行。
