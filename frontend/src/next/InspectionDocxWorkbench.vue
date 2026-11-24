@@ -89,6 +89,7 @@ onMounted(inspect)
  <div v-if="inspection.inspection.errors.length" role="alert" class="binding-error"><b>预检问题</b><p v-for="(e,i) in inspection.inspection.errors" :key="i">{{e}}</p></div>
  <details open><summary>正文变更预览（{{inspection.inspection.changes.length}}）</summary><div class="binding-changes"><article v-for="c in inspection.inspection.changes" :key="c.target" class="binding-row"><b>{{c.target}} · {{c.fields.join('、')}}</b><label>原文<span>{{c.before}}</span></label><label>填充后<span>{{c.after}}</span></label></article></div></details>
  <details><summary>未映射资料字段（{{inspection.inspection.unmappedFields.length}}）</summary><p>未映射字段不会写入。未绑定的模板原文也不会自动删除，请逐项核对。</p><p v-for="k in inspection.inspection.unmappedFields" :key="k">{{k}}</p></details>
+ <p v-if="baseTemplateId">组合报告将按选定顺序编号系统章节，照片分为独立打印页。生成后在 Word 中更新整个目录、核对实际页码并检查照片清晰度；需要修订时上传最终 Word 作为新的送审文件。</p>
  <p v-if="!batchIds.length">{{baseTemplateId?'未选择照片批次，组合报告不生成空照片页。':'未选择照片批次，本次仅填充正文，模板原有照片保持不变。'}}</p>
  <label class="binding-ack"><input v-model="reviewed" type="checkbox" :disabled="busy||inspection.inspection.errors.length>0||checkedPlan!==JSON.stringify(bindings)">我已检查变更及未映射字段，确认模板中未遗留不适用的旧项目信息、照片、证照、签字或印章；生成文件仅作为人工审核草稿。</label>
  <button class="primary-button" :disabled="!ready" @click="generate">生成正文{{batchIds.length?'与 '+batchIds.length+' 批照片':''}}并归档草稿</button>

@@ -227,7 +227,15 @@ final class InspectionTemplateComposer {
             if(!systems.add(section.system()))throw bad("同一消防系统只能选择一个章节模板");
             var fragment=body(parse(parts(section.docx()).get("word/document.xml")));
             totalRows+=validateSystem(fragment,styles,true).rows();if(totalRows>10000)throw bad("报告检测表合计超过10000行");
-            b.insertBefore(systemHeading(d,++ordinal,section.system()),at);
+            Element heading=systemHeading(d,++ordinal,section.system());
+            // A preceding base heading with keepNext starts the first system on the same page.
+            if(ordinal==1){
+                Node prev=at.getPreviousSibling();while(prev!=null&&!(prev instanceof Element))prev=prev.getPreviousSibling();
+                if(prev instanceof Element h&&"p".equals(h.getLocalName())&&descendant(h,"keepNext")!=null&&descendant(h,"outlineLvl")!=null){
+                    Element page=descendant(heading,"pageBreakBefore");if(page!=null)page.getParentNode().removeChild(page);
+                }
+            }
+            b.insertBefore(heading,at);
             for(var e:children(fragment))if(!"sectPr".equals(e.getLocalName())){
                 if("p".equals(e.getLocalName())&&selectedNames.contains(text(e)))throw bad("系统章节模板请移除独立系统标题，由组合器统一生成");
                 b.insertBefore(d.importNode(e,true),at);

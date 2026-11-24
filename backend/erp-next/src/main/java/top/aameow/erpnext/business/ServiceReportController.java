@@ -191,9 +191,11 @@ public class ServiceReportController {
         }else if(artifacts.size()==1)selected=((Number)artifacts.get(0).get("id")).longValue();
         else if(artifacts.size()>1)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"有多个生成文件，请明确选择本次送审的 DOCX");
         if("inspection".equals(r.get("report_type"))&&selected==null)throw new ResponseStatusException(HttpStatus.CONFLICT,"消防检测报告必须先生成或登记本版本的 DOCX 文件");
+        boolean layout=requiresLayoutReview(selected);
+        if(layout&&(b==null||!Boolean.TRUE.equals(b.get("layoutReviewed"))))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请在 Word 中检查目录、实际页码、分页及照片清晰度，并确认当前送审文件");
         jdbc.update("UPDATE erp_service_report_version SET submitted_artifact_id=?,submitted_by=? WHERE report_id=? AND version_no=?",selected,actor(a),id,r.get("current_version_no"));
         jdbc.update("UPDATE erp_service_report SET status='submitted',reviewer_id=NULL,return_reason=NULL WHERE id=?",id);
-        event(id,"draft","submitted",actor(a),"提交审核");return detail(id);
+        event(id,"draft","submitted",actor(a),layout?"提交审核；人工确认已核对送审文件目录、分页及照片":"提交审核");return detail(id);
     }
     @PostMapping("/reports/{id}/start-review") @PreAuthorize("hasAuthority('report:review')") @Transactional
     public Map<String,Object> startReview(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
@@ -208,13 +210,21 @@ public class ServiceReportController {
         if(((Number)r.get("reviewer_id")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只有当前审核人可以退回");
         String reason=req(b,"reason");jdbc.update("UPDATE erp_service_report SET status='returned',return_reason=? WHERE id=?",reason,id);event(id,"reviewing","returned",actor(a),reason);return detail(id);
     }
+    private boolean requiresLayoutReview(Object artifact){
+        if(artifact==null)return false;
+        var row=one("SELECT generation_manifest FROM erp_service_report_artifact WHERE id=?",artifact);
+        if(row.get("generation_manifest")==null)return false;
+        return "modular-photo-pages-v1".equals(parse(row.get("generation_manifest").toString()).path("layout").asText());
+    }
     @PostMapping("/reports/{id}/approve") @PreAuthorize("hasAuthority('report:review')") @Transactional
     public Map<String,Object> approve(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!"reviewing".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有审核中的报告可以通过");
         if(((Number)r.get("reviewer_id")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只有当前审核人可以审核");
         requireEngineerReviewer(actor(a));requireNotContributor(id,r,actor(a));
+        boolean layout=requiresLayoutReview(content(id,r).get("submitted_artifact_id"));
+        if(layout&&(b==null||!Boolean.TRUE.equals(b.get("layoutReviewed"))))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"审核人须人工核对固定送审文件目录、分页及照片");
         jdbc.update("UPDATE erp_service_report_version SET reviewed_by=? WHERE report_id=? AND version_no=?",actor(a),id,r.get("current_version_no"));
-        jdbc.update("UPDATE erp_service_report SET status='approved' WHERE id=?",id);event(id,"reviewing","approved",actor(a),"审核通过");return detail(id);
+        jdbc.update("UPDATE erp_service_report SET status='approved' WHERE id=?",id);event(id,"reviewing","approved",actor(a),layout?"审核通过；人工确认已核对固定文件目录、分页及照片":"审核通过");return detail(id);
     }
     @PostMapping("/reports/{id}/issue") @PreAuthorize("hasAuthority('report:issue')") @Transactional
     public Map<String,Object> issue(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){

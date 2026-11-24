@@ -3,6 +3,7 @@ import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { api, downloadFile } from './api'
 import InspectionProfile from './InspectionProfile.vue'
 import InspectionDocxWorkbench from './InspectionDocxWorkbench.vue'
+import ReportReviewEvidence from './ReportReviewEvidence.vue'
 
 const props = defineProps({ permissions: { type: Array, default: () => [] }, userId: { type: Number, default: 0 }, destination: {type:Object,default:null} })
 const emit=defineEmits(['navigate'])
@@ -49,7 +50,7 @@ const inspectionVersions=ref([]),inspectionVersion=ref(''),showBodyBinding=ref(f
 const selectedArtifact=ref(''),deliveryVersion=ref(''),historyVersion=ref(null)
 const editableReport=computed(()=>!!report.value&&['draft','returned','withdrawn'].includes(report.value.status)&&can('report:write'))
 function manifestFor(a){try{return typeof a?.generation_manifest==='string'?JSON.parse(a.generation_manifest):a?.generation_manifest||{}}catch{return {}}}
-const reviewEvidence=computed(()=>manifestFor((report.value?.artifacts||[]).find(a=>a.id===report.value?.selectedArtifactId)).photos||[])
+const reviewArtifact=computed(()=>(report.value?.artifacts||[]).find(a=>Number(a.id)===Number(report.value?.status==='draft'?selectedArtifact.value:report.value?.selectedArtifactId)))
 const draftArtifacts=computed(()=>(report.value?.artifacts||[]).filter(a=>a.version_no===report.value?.current_version_no&&a.artifact_type==='docx'))
 const issuedVersions=computed(()=>(report.value?.versions||[]).filter(v=>v.version_issued_at&&v.submitted_artifact_id))
 function syncReportSelection(){
@@ -311,6 +312,10 @@ async function reportAction(action) {
     if(selectedArtifact.value)body.artifactId=Number(selectedArtifact.value)
     if(!confirm('确认送审当前已保存版本及所选文件？未保存的正文修改不会提交。'))return
   }
+  if(['submit','approve'].includes(action)&&manifestFor(reviewArtifact.value).layout==='modular-photo-pages-v1'){
+    if(!confirm('确认已在 Word 核对当前文件目录、页码、分页及照片清晰度？如需修改，应重新登记文件。'))return
+    body.layoutReviewed=true
+  }
   if(action==='issue'&&!confirm('确认签发已审核的版本及对应文件？'))return
   busy.value=true
   try{const reportId=report.value.id;await api('/business/reports/'+reportId+'/'+action,{method:'POST',body:JSON.stringify(body)});await selectPackage(workPackage.value.id);await openReport(reportId);notice.value='报告状态已更新'}
@@ -500,7 +505,7 @@ onBeforeUnmount(releasePreviews)
         </div>
         <details v-if="report.content?.inspectionProfile?.content?.basisReferences?.length"><summary>本报告固定的检测依据</summary><article v-for="s in report.content.inspectionProfile.content.basisReferences" :key="s.id"><b>《{{s.title}}》 {{s.standard_no}} {{s.edition}}</b><p>{{s.scope}} · {{s.reason}}</p><a :href="s.source_url" target="_blank" rel="noopener noreferrer">来源</a> <a v-if="s.access_url" :href="s.access_url" target="_blank" rel="noopener noreferrer">原文入口</a></article></details>
         <div v-if="report.status==='draft'&&can('report:write')" class="sw-form"><label class="wide">本版本送审文件<select v-model="selectedArtifact" :disabled="busy"><option value="">未选择 DOCX</option><option v-for="a in draftArtifacts" :key="a.id" :value="a.id">文件 #{{a.artifact_revision_no}} · {{a.original_name}}</option></select></label><label v-if="can('file:upload')" class="sw-upload">上传人工编辑 DOCX<input type="file" hidden accept=".docx" :disabled="busy" @change="registerEditedDocx"></label><small>送审后固定所选文件，旧版生成文件不会自动成为新版本正式报告。</small></div>
-        <div v-else-if="report.selectedArtifactId"><p>本版本固定送审文件 #{{report.selectedArtifactId}}</p><details v-if="reviewEvidence.length&&can('report:photo:read')&&can('file:read')"><summary>送审文件对应的 {{reviewEvidence.length}} 张现场原图</summary><p>可下载原始证据，不受 DOCX 内嵌压缩影响。低于 200 DPI 的照片请重点检查。</p><div v-for="p in reviewEvidence" :key="p.photoId"><span>照片 #{{p.photoId}} · {{p.embeddedPixels.join('×')}} · {{p.effectiveDpi}} DPI </span><button @click="downloadFile(p.fileId,'原始照片-'+p.photoId)">下载原图</button></div></details></div>
+        <ReportReviewEvidence v-if="reviewArtifact" :key="reviewArtifact.id" :artifact="reviewArtifact" :content="report.content" :can-file="can('file:read')" :can-photo="can('report:photo:read')"/>
         <p v-if="report.return_reason">退回意见：{{report.return_reason}}</p>
         <div class="sw-bottom-actions"><button v-if="editableReport" :disabled="busy" class="primary" @click="saveReport">保存新版本</button><button v-if="report.status==='draft'&&can('report:write')"  :disabled="busy||(report.report_type==='inspection'&&!selectedArtifact)" @click="reportAction('submit')">提交审核</button><button v-if="report.status==='submitted'&&can('report:review')&&Number(report.versionCreatedBy)!==props.userId&&Number(report.submittedBy)!==props.userId" :disabled="busy" @click="reportAction('start-review')">开始审核</button><button v-if="report.status==='reviewing'&&can('report:review')&&Number(report.reviewer_id)===props.userId" :disabled="busy" @click="reportAction('approve')">审核通过</button><button v-if="report.status==='reviewing'&&can('report:review')&&Number(report.reviewer_id)===props.userId" :disabled="busy" class="danger" @click="reportAction('return')">退回修改</button><button v-if="['submitted','reviewing','approved'].includes(report.status)&&can('report:write')&&(Number(report.versionCreatedBy)===props.userId||Number(report.submittedBy)===props.userId)" :disabled="busy" @click="reportAction('withdraw')">撤回重新编制</button><button v-if="report.status==='approved'&&can('report:issue')&&Number(report.reviewer_id)!==props.userId&&Number(report.versionCreatedBy)!==props.userId&&Number(report.submittedBy)!==props.userId" :disabled="busy" @click="reportAction('issue')">签发报告</button><button v-if="report.status==='issued'&&can('report:issue')" @click="reportAction('archive')">归档报告</button><button v-if="['issued','archived'].includes(report.status)&&can('report:write')" @click="reportAction('revise')">创建修订版</button></div>
         <section v-if="report.status==='draft'&&can('report:write')" class="sw-docx">
