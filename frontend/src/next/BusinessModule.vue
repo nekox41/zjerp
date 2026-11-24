@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { api, downloadFile } from './api'
 import CustomerHistory from './CustomerHistory.vue'
+import LegacyProjectDocuments from './LegacyProjectDocuments.vue'
 
 const props=defineProps({permissions:{type:Array,default:()=>[]},destination:{type:Object,default:null}})
 const emit=defineEmits(['navigate'])
@@ -348,6 +349,7 @@ onMounted(async ()=>{
           </div><h4 v-if="can('contract:read')">关联合同历史</h4>
           <template v-if="can('contract:read')"><div v-for="contract in selectedProject.contracts||[]" :key="contract.id" class="log-line"><button class="secondary-button" @click="section='contracts';openContract(contract.id)">{{contract.contract_no}} · {{contract.title}}</button> · {{contract.relation_type}} · {{contract.starts_on||'—'}} 至 {{contract.ends_on||'—'}} · {{contract.status}}</div></template>
           <p v-if="can('contract:read')&&!selectedProject.contracts?.length" class="empty">当前尚未关联合同，可在「合作方与维保」中建立合同关系。</p>
+          <LegacyProjectDocuments v-if="can('project:read')&&can('report:read')" :key="selectedProject.id" :project-id="Number(selectedProject.id)" :permissions="props.permissions" />
           <h4>项目动态</h4>
           <p v-for="x in projectLogs" :key="x.id" class="log-line">{{x.created_at}} · {{x.actor_name||'系统'}} · {{x.content}}</p>
           <p v-if="!projectLogs.length" class="empty">暂无项目动态</p>

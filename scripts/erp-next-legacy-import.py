@@ -21,9 +21,9 @@ spec.loader.exec_module(archive_lib)
 canonical, digest, safe_path = archive_lib.canonical, archive_lib.digest, archive_lib.safe_path
 TYPES = {"WB":"maintenance", "JC":"fire_inspection", "PD":"fire_assessment", "PG":"fire_evaluation", "QT":"other"}
 CONTRACTS = {"zj_contract_maintenance":"WB","zj_contract_inspection":"JC","zj_contract_rating":"PD","zj_contract_assessment":"PG","zj_contract_other":"QT"}
-SECTIONS = ("customers","accounts","employees","qualifications","partners","contracts","projects","contractLinks","customerContacts","contacts","files","contractFiles","materials","materialArchives","cards","maintenanceStates")
-TARGETS = {"erp_customer","erp_identity","erp_employee","erp_employee_qualification","erp_partner","erp_contract","erp_project","erp_maintenance_contact","erp_file_object","erp_contract_file","erp_maintenance_material","erp_maintenance_card","erp_customer_contact","erp_maintenance_material_archive"}
-SOURCE_TABLES = {"sys_user","zj_employee","zj_report_credential","zj_intermediary","zj_work_project","zjerp_wbcard_phone","sys_file","zj_wbcard_material","zj_wbcard",*CONTRACTS}
+SECTIONS = ("customers","accounts","employees","qualifications","partners","contracts","projects","contractLinks","customerContacts","contacts","files","rawFiles","contractFiles","materials","materialArchives","cards","maintenanceStates","projectIssues","projectDocuments")
+TARGETS = {"erp_customer","erp_identity","erp_employee","erp_employee_qualification","erp_partner","erp_contract","erp_project","erp_maintenance_contact","erp_file_object","erp_contract_file","erp_maintenance_material","erp_maintenance_card","erp_customer_contact","erp_maintenance_material_archive","erp_project_issue","erp_legacy_project_document"}
+SOURCE_TABLES = {"sys_user","zj_employee","zj_report_credential","zj_intermediary","zj_work_project","zjerp_wbcard_phone","sys_file","zj_wbcard_material","zj_wbcard","zj_work_project_issue","zj_report","zj_inspection_report","zj_project_document",*CONTRACTS}
 
 def sha(obj):
     return hashlib.sha256(canonical(obj).encode("utf-8")).hexdigest()
@@ -205,6 +205,53 @@ class Migration:
                 self.new_file_ids.add(n)
         self.mapped[pair]=(target,n)
         return n
+    def file_ref(self,d):
+        if ("fileSourceId" in d)==("rawFileKey" in d):
+            raise ValueError("Choose exactly one fileSourceId or rawFileKey")
+        return self.ref("sys_file",d["fileSourceId"],"erp_file_object") if "fileSourceId" in d else self.ref("manual_raw_file",d["rawFileKey"],"erp_file_object")
+    def import_file(self,table,sid,row,d):
+        path=d.get("archivePath")
+        if path not in self.file_manifest:
+            raise ValueError("Reviewed file path missing from archive")
+        info=self.file_manifest[path];source=safe_path(self.root,"files/"+path)
+        if row.get("file_hash") and re.fullmatch(r"[0-9a-fA-F]{64}",str(row["file_hash"])) and str(row["file_hash"]).lower()!=info["sha256"]:
+            raise ValueError("Legacy file SHA256 differs from archived original")
+        if row.get("file_size") is not None and int(row["file_size"])!=info["size"]:
+            raise ValueError("Legacy file size differs from archived original")
+        filename=required(d,"filename",240) if "filename" in d else required(row,"file_name",240)
+        if "/" in filename or "\\" in filename or any(ord(c)<32 for c in filename):
+            raise ValueError("File name must not contain path separators or control characters")
+        media=enum(d.get("mediaType"),{"application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document"})
+        with source.open("rb") as f: head=f.read(8)
+        valid=({"application/pdf":head.startswith(b"%PDF-"),"image/jpeg":head.startswith(b"\xff\xd8\xff"),
+                "image/png":head.startswith(b"\x89PNG\r\n\x1a\n"),"text/plain":b"\x00" not in head,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document":head.startswith(b"PK\x03\x04")})[media]
+        if not valid or info["size"]<=0:
+            raise ValueError("Reviewed file content does not match declared media type")
+        if media.endswith("wordprocessingml.document"):
+            from zipfile import ZipFile
+            with ZipFile(source) as z:
+                if "[Content_Types].xml" not in z.namelist() or "word/document.xml" not in z.namelist():
+                    raise ValueError("Archive file is not a valid DOCX package")
+        def create_file():
+            name=str(uuid.uuid4())
+            if self.apply:
+                dst=self.storage/name
+                with source.open("rb") as src,dst.open("xb") as dest:
+                    self.created_files.append(dst)
+                    shutil.copyfileobj(src,dest,1024*1024)
+                if digest(dst)!=info["sha256"]:
+                    raise ValueError("Copied original differs from archive")
+            return self.execute("INSERT INTO erp_file_object(storage_key,sha256,byte_size,media_type,original_name,uploaded_by) VALUES(%s,%s,%s,%s,%s,%s)",(name,info["sha256"],info["size"],media,filename,self.actor))
+        file_id=self.map(table,sid,row,{**d,"archiveFileSha256":info["sha256"]},"erp_file_object",create_file)
+        saved=self.target("erp_file_object",file_id)
+        if saved["sha256"]!=info["sha256"]:
+            raise ValueError("Target file metadata differs from archive")
+        if file_id not in self.new_file_ids or self.apply:
+            storage_key=str(uuid.UUID(saved["storage_key"]))
+            if storage_key!=saved["storage_key"] or digest(safe_path(self.storage,storage_key))!=info["sha256"]:
+                raise ValueError("Existing target original missing or changed")
+        return file_id
     def reserve_card_numbers(self):
         codes=set(); maximum=0
         for t in self.manifest["tables"]:
@@ -385,40 +432,10 @@ class Migration:
                 lambda:self.execute("INSERT INTO erp_maintenance_contact(name,phone) VALUES(%s,%s)",(required(row,"name",100),required(row,"phone",50))))
         for d in self.plan.get("files",[]):
             sid=ident(d["sourceId"]);row=self.legacy("sys_file",sid)
-            path=d.get("archivePath")
-            if path not in self.file_manifest:
-                raise ValueError("Reviewed file path missing from archive")
-            info=self.file_manifest[path];source=safe_path(self.root,"files/"+path)
-            if row.get("file_hash") and re.fullmatch(r"[0-9a-fA-F]{64}",str(row["file_hash"])) and str(row["file_hash"]).lower()!=info["sha256"]:
-                raise ValueError("Legacy file SHA256 differs from archived original")
-            if row.get("file_size") is not None and int(row["file_size"])!=info["size"]:
-                raise ValueError("Legacy file size differs from archived original")
-            filename=required(d,"filename",240) if "filename" in d else required(row,"file_name",240)
-            media=enum(d.get("mediaType"),{"application/pdf","image/jpeg","image/png","text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document"})
-            with source.open("rb") as f: head=f.read(8)
-            valid=({"application/pdf":head.startswith(b"%PDF-"),"image/jpeg":head.startswith(b"\xff\xd8\xff"),
-                    "image/png":head.startswith(b"\x89PNG\r\n\x1a\n"),"text/plain":b"\x00" not in head,
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":head.startswith(b"PK\x03\x04")})[media]
-            if not valid or info["size"]<=0:
-                raise ValueError("Reviewed file content does not match declared media type")
-            def create_file():
-                name=str(uuid.uuid4())
-                if self.apply:
-                    dst=self.storage/name
-                    with source.open("rb") as src,dst.open("xb") as dest:
-                        self.created_files.append(dst)
-                        shutil.copyfileobj(src,dest,1024*1024)
-                    if digest(dst)!=info["sha256"]:
-                        raise ValueError("Copied original differs from archive")
-                return self.execute("INSERT INTO erp_file_object(storage_key,sha256,byte_size,media_type,original_name,uploaded_by) VALUES(%s,%s,%s,%s,%s,%s)",(name,info["sha256"],info["size"],media,filename,self.actor))
-            file_id=self.map("sys_file",sid,row,{**d,"archiveFileSha256":info["sha256"]},"erp_file_object",create_file)
-            saved=self.target("erp_file_object",file_id)
-            if saved["sha256"]!=info["sha256"]:
-                raise ValueError("Target file metadata differs from archive")
-            if file_id not in self.new_file_ids or self.apply:
-                storage_key=str(uuid.UUID(saved["storage_key"]))
-                if storage_key!=saved["storage_key"] or digest(safe_path(self.storage,storage_key))!=info["sha256"]:
-                    raise ValueError("Existing target original missing or changed")
+            self.import_file("sys_file",sid,row,d)
+        for d in self.plan.get("rawFiles",[]):
+            k=key(d["key"])
+            self.import_file("manual_raw_file",k,{"key":k},d)
         actor=None
         if any(self.plan.get(s) for s in ("contractFiles","materials","materialArchives","cards","maintenanceStates")):
             # Never fabricate actor IDs. Use the pre-existing, active target admin explicitly supplied to CLI.
@@ -426,13 +443,13 @@ class Migration:
         for d in self.plan.get("contractFiles",[]):
             k=key(d["key"])
             c=self.ref(enum(d["contractSourceTable"],CONTRACTS),d["contractSourceId"],"erp_contract")
-            f=self.ref("sys_file",d["fileSourceId"],"erp_file_object")
+            f=self.file_ref(d)
             kind=enum(d["fileType"],{"contract","maintenance_card","project_material","other"})
             self.map("manual_contract_file",k,{"key":k},d,"erp_contract_file",
                 lambda:self.execute("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(%s,%s,%s,%s,%s)",(c,f,kind,optional(d,"title",240),actor)))
         for d in self.plan.get("materials",[]):
             sid=ident(d["sourceId"]);row=self.legacy("zj_wbcard_material",sid)
-            f=self.ref("sys_file",d["fileSourceId"],"erp_file_object")
+            f=self.file_ref(d)
             if self.target("erp_file_object",f)["media_type"]!="application/pdf":
                 raise ValueError("Maintenance material must be PDF")
             self.map("zj_wbcard_material",sid,row,d,"erp_maintenance_material",
@@ -456,7 +473,7 @@ class Migration:
             sid=ident(d["sourceId"]);row=self.legacy("zj_wbcard",sid)
             p=self.ref("zj_work_project",d["projectSourceId"],"erp_project")
             c=self.ref("zj_contract_maintenance",d["contractSourceId"],"erp_contract")
-            f=self.ref("sys_file",d["fileSourceId"],"erp_file_object")
+            f=self.file_ref(d)
             self.one("SELECT contract_id FROM erp_contract_project WHERE contract_id=%s AND project_id=%s",(c,p))
             if self.target("erp_file_object",f)["media_type"]!="application/pdf":
                 raise ValueError("Maintenance card must be PDF")
@@ -501,6 +518,40 @@ class Migration:
                 if m["current_contract_id"] is None:
                     self.execute("UPDATE erp_maintenance_project SET current_contract_id=%s,honeybee_contract_uploaded=%s,honeybee_project_created=%s,project_materials_completed=%s,public_card_status=%s,updated_by=%s WHERE project_id=%s",(c,*state,actor,p))
                     self.execute("UPDATE erp_project SET contract_id=%s,planned_start=%s,planned_end=%s WHERE id=%s",(c,contract["starts_on"],contract["ends_on"],p))
+        for d in self.plan.get("projectIssues",[]):
+            sid=ident(d["sourceId"]);row=self.legacy("zj_work_project_issue",sid)
+            p=self.ref("zj_work_project",row["project_id"],"erp_project")
+            severity=enum(d["severity"],{"low","medium","high","critical"})
+            status=enum(d["status"],{"open","in_progress","resolved","closed"})
+            description=canonical({k:row.get(k) for k in ("description","found_date","resolved_date")})
+            self.map("zj_work_project_issue",sid,row,d,"erp_project_issue",
+                lambda:self.execute("INSERT INTO erp_project_issue(project_id,title,description,severity,status) VALUES(%s,%s,%s,%s,%s)",(p,required(row,"title",240),description,severity,status)))
+        for d in self.plan.get("projectDocuments",[]):
+            table=enum(d["sourceTable"],{"zj_report","zj_inspection_report","zj_project_document"})
+            sid=ident(d["sourceId"]);row=self.legacy(table,sid)
+            p=self.ref("zj_work_project",d["projectSourceId"],"erp_project")
+            if row.get("project_id") is not None and ident(row["project_id"])!=ident(d["projectSourceId"]):
+                raise ValueError("Historical document project contradicts source")
+            title=required(d,"title",240) if "title" in d else required(row,{"zj_report":"report_name","zj_inspection_report":"report_no","zj_project_document":"name"}[table],240)
+            kind=enum(d.get("kind","historical_report" if table!="zj_project_document" else "project_document"),{"historical_report","project_document","other"})
+            links=d.get("files",[])
+            if not isinstance(links,list) or any(not isinstance(x,dict) for x in links):
+                raise ValueError("Invalid historical document files")
+            file_ids=[self.file_ref(x) for x in links]
+            if len(set(file_ids))!=len(file_ids):
+                raise ValueError("Duplicate historical document file")
+            if not file_ids and not boolean(d.get("missingOriginalConfirmed",False)):
+                raise ValueError("Missing original must be explicitly acknowledged")
+            created=value(row.get("created_at",row.get("create_time")))
+            original_status=optional(d,"originalStatus",200)
+            report_no=optional(row,"report_id" if table=="zj_report" else "report_no",100) if table!="zj_project_document" else optional(d,"reportNo",100)
+            def create_document():
+                n=self.execute("INSERT INTO erp_legacy_project_document(project_id,title,document_kind,report_no,source_namespace,source_table,source_key,original_created_at,original_status,archive_note) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (p,title,kind,report_no,self.ns,table,sid,created,original_status,optional(d,"note",2000)))
+                for f in file_ids:
+                    self.execute("INSERT INTO erp_legacy_project_document_file(document_id,file_id) VALUES(%s,%s)",(n,f))
+                return n
+            self.map(table,sid,row,d,"erp_legacy_project_document",create_document)
         self.summary.update(inserted=self.inserted,alreadyMapped=self.skipped,rawArchiveRetained=True)
         self.cur.execute("SELECT source_table,source_key FROM erp_legacy_migration_map WHERE source_namespace=%s",(self.ns,))
         existing={}

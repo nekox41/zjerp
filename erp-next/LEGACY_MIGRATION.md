@@ -74,3 +74,9 @@ python scripts/erp-next-legacy-import.py apply --archive /secure/erp-legacy-arch
 - materialArchives：`{"key":"mat-archive-1","projectSourceId":20,"contractSourceId":10,"materialSourceId":1}`，以材料 PDF 原件归档，不重新生成。
 - 所有旧卡号（包括未关联或已删除的保留编号）和旧序列上界自动写入新版编号保留表；新卡生成不得使用已保留编号。若目标已经存在无对应旧 ID 映射的同号卡，迁移直接中止。V16 只新增表，不改历史迁移。
 - 迁移控制台展示目标提交批次、来源和已映射数量；未映射清单按全部归档表计数。旧资料的原件和未映射行仍必须保留在离线档案中。
+
+### 旧报告与原件关联（V17）
+
+- rawFiles：旧文件不存在 sys_file 记录但在完整档案中有原件时，用 `{"key":"old-orphan-file","archivePath":"reports/old.docx","filename":"旧报告.docx","mediaType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}` 明确映射；之后引用 `{"rawFileKey":"old-orphan-file"}`（或 `{"fileSourceId":1}`）。不重新生成原文件。
+- projectDocuments：`{"sourceTable":"zj_inspection_report","sourceId":2,"projectSourceId":20,"files":[{"rawFileKey":"old-orphan-file"}],"originalStatus":"原报告状态经人工确认"}`，支持 zj_report / zj_inspection_report / zj_project_document；未找到原件必须明示 missingOriginalConfirmed=true。历史档案显示于项目档案，旧版状态不等同于新版签发，原件下载同时要求 project:read、report:read、file:read（上传人仍按现有权限规则）。
+- projectIssues：`{"sourceId":3,"severity":"medium","status":"open"}`，旧项目关系按 ID，严重级别和状态经人工映射；原发现/整改日期及原始记录保全。
