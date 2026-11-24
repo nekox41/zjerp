@@ -131,13 +131,16 @@ async function createBatch() {
     await selectPackage(workPackage.value.id);await openBatch(b.id);notice.value='照片批次已创建'
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
-async function openBatch(id) {
+async function openBatch(id,changedIds=null) {
   try {
     if(batch.value?.id!==id)closeBatch()
     const generation=++previewGeneration
     const result=await api('/service-workflow/photo-batches/'+id)
     if(generation!==previewGeneration)return
-    batch.value=result;photoDrafts.value=Object.fromEntries(result.photos.map(p=>[p.id,draft(p)]))
+    const oldRows=new Map((batch.value?.photos||[]).map(p=>[p.id,p]))
+    const oldDrafts=photoDrafts.value
+    batch.value=result
+    photoDrafts.value=Object.fromEntries(result.photos.map(p=>[p.id,changedIds&&!changedIds.includes(p.id)&&oldRows.has(p.id)&&JSON.stringify(oldDrafts[p.id])!==JSON.stringify(draft(oldRows.get(p.id)))?oldDrafts[p.id]:draft(p)]))
     photoSelection.value=photoSelection.value.filter(id=>result.photos.some(p=>p.id===id))
     if(can('file:read')){
       const pending=result.photos.filter(p=>!previewUrls.value[p.file_id])
@@ -178,7 +181,7 @@ async function savePhoto(photo) {
   const d=photoDrafts.value[photo.id]
   try{
     await api('/service-workflow/photos/'+photo.id,{method:'PUT',body:JSON.stringify({...d,confirmed:d.confirmed})})
-    await openBatch(batch.value.id);notice.value='照片信息已保存'
+    await openBatch(batch.value.id,[photo.id]);notice.value='照片信息已保存'
   }catch(e){error.value=e.message}
 }
 async function movePhoto(photo,delta) {
@@ -193,12 +196,12 @@ async function movePhoto(photo,delta) {
       api('/service-workflow/photos/'+photo.id,{method:'PUT',body:JSON.stringify({...a,confirmed:a.confirmed})}),
       api('/service-workflow/photos/'+other.id,{method:'PUT',body:JSON.stringify({...b,confirmed:b.confirmed})})
     ])
-    await openBatch(batch.value.id)
+    await openBatch(batch.value.id,[photo.id,other.id])
   } catch(e){error.value=e.message}
 }
 async function removePhoto(photo) {
   if(!confirm('确定从当前批次移除这张照片？'))return
-  try{await api('/service-workflow/photos/'+photo.id,{method:'DELETE'});await openBatch(batch.value.id)}catch(e){error.value=e.message}
+  try{await api('/service-workflow/photos/'+photo.id,{method:'DELETE'});await openBatch(batch.value.id,[photo.id])}catch(e){error.value=e.message}
 }
 async function submitBatch() {
   try{const batchId=batch.value.id;await api('/service-workflow/photo-batches/'+batchId+'/submit',{method:'POST'});await selectPackage(workPackage.value.id);await openBatch(batchId);notice.value='照片批次已提交内部审核'}catch(e){error.value=e.message}
@@ -266,17 +269,17 @@ onBeforeUnmount(releasePreviews)
 
 <template>
 <section class="service-workflow">
-  <div class="sw-head"><div><span class="sw-kicker">TECHNICAL SERVICE · DELIVERY</span><h2>技术服务交付</h2><p>现场执行、问题整改、照片整理、报告审核和交付登记，按项目与服务批次留痕。</p></div><button @click="load">刷新</button></div>
+  <div class="sw-head"><div><span class="sw-kicker">TECHNICAL SERVICE · DELIVERY</span><h2>技术服务交付</h2><p>现场执行、问题整改、照片整理、报告审核和交付登记，按项目与服务批次留痕。</p></div><button :disabled="busy" @click="load">刷新</button></div>
   <p v-if="error" class="sw-msg error">{{ error }}</p><p v-if="notice" class="sw-msg success">{{ notice }}</p>
   <div v-if="project&&can('project:read')" class="report-actions"><button class="secondary-button" @click="emit('navigate','business','projects',project.id)">返回项目档案</button></div>
   <div class="sw-selects">
-    <label>项目<select :value="project?.id||''" @change="selectProject(Number($event.target.value)||null)"><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.project_no }} · {{ p.name }}</option></select></label>
-    <label>服务工作包<select :value="workPackage?.id||''" @change="selectPackage(Number($event.target.value)||null)" :disabled="!project"><option value="">选择服务工作包</option><option v-for="w in packages" :key="w.id" :value="w.id">{{ w.package_no }} · {{ w.title }}</option></select></label>
+    <label>项目<select :value="project?.id||''" :disabled="busy" @change="selectProject(Number($event.target.value)||null)"><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.project_no }} · {{ p.name }}</option></select></label>
+    <label>服务工作包<select :value="workPackage?.id||''" @change="selectPackage(Number($event.target.value)||null)" :disabled="busy||!project"><option value="">选择服务工作包</option><option v-for="w in packages" :key="w.id" :value="w.id">{{ w.package_no }} · {{ w.title }}</option></select></label>
   </div>
   <div v-if="!workPackage" class="sw-empty">选择项目和服务工作包后，管理现场服务、问题、照片与报告。</div>
   <template v-else>
     <nav class="sw-tabs">
-      <button v-for="t in visibleTabs" :key="t.id" :class="{active:tab===t.id}" @click="tab=t.id">{{ t.name }}</button>
+      <button v-for="t in visibleTabs" :key="t.id" :class="{active:tab===t.id}" :disabled="busy" @click="tab=t.id">{{ t.name }}</button>
     </nav>
 
     <div v-if="tab==='visits'" class="sw-panel">
@@ -326,7 +329,7 @@ onBeforeUnmount(releasePreviews)
         </div>
       </div>
       <div v-else class="sw-batch-view">
-        <div class="sw-panel-title"><div><button class="back" @click="closeBatch">← 批次列表</button><h3>{{ batch.title }}</h3><small>{{ batch.visit_date }} · {{ batch.photos.length }} 张照片</small></div><span class="sw-pill">{{ batchLabel(batch.status) }}</span></div>
+        <div class="sw-panel-title"><div><button class="back" :disabled="busy" @click="closeBatch">← 批次列表</button><h3>{{ batch.title }}</h3><small>{{ batch.visit_date }} · {{ batch.photos.length }} 张照片</small></div><span class="sw-pill">{{ batchLabel(batch.status) }}</span></div>
         <div class="sw-upload-row"><label v-if="photoEditable&&can('file:upload')" class="primary">＋ 批量导入照片<input type="file" hidden multiple accept="image/jpeg,image/png" :disabled="busy" @change="importPhotos"></label><button @click="photoView=photoView==='cards'?'table':'cards'">{{photoView==='cards'?'表格视图':'卡片视图'}}</button><small>支持 JPG / PNG；分类及拍摄日期需要人工核对。</small></div>
         <div class="photo-filters"><button v-for="g in photoGroups" :key="g.key" :class="{active:photoFilter===g.key}" @click="selectFilter(g.key)">{{g.name}} · {{g.count}}</button></div>
         <div v-if="photoEditable" class="sw-upload-row">
@@ -360,7 +363,7 @@ onBeforeUnmount(releasePreviews)
           <td v-if="photoEditable"><button  :disabled="busy" @click="movePhoto(p,-1)">↑</button> <button  :disabled="busy" @click="movePhoto(p,1)">↓</button> <button  :disabled="busy" @click="savePhoto(p)">保存</button> <button  :disabled="busy" @click="removePhoto(p)">移除</button></td><td v-else>—</td></tr>
         </tbody></table></div>
         <div v-if="focusedPhoto" class="photo-lightbox" role="dialog" aria-modal="true" aria-label="照片预览" @click.self="focusedPhoto=null" @keydown.esc="focusedPhoto=null"><div><button autofocus @click="focusedPhoto=null">关闭预览</button><p>{{focusedPhoto.original_name}} · {{focusedPhoto.system_code||'未分类'}}</p><img :src="previewUrls[focusedPhoto.file_id]" :alt="focusedPhoto.original_name"></div></div>
-        <div v-if="photoEditable" class="sw-bottom-actions"><button class="primary" :disabled="busy||photoRows.some(dirty)" @click="submitBatch">提交照片审核</button><small>所有照片必须完成分类、日期和人工确认。</small></div>
+        <div v-if="photoEditable" class="sw-bottom-actions"><button class="primary" :disabled="busy||photoRows.some(dirty)" @click="submitBatch">提交照片审核</button><small>{{photoRows.some(dirty)?'请先保存所有单张编辑，再提交审核。':'所有照片必须完成分类、日期和人工确认。'}}</small></div>
         <div v-if="batch.status==='submitted'&&can('report:review')&&Number(batch.created_by)!==props.userId" class="sw-bottom-actions"><button class="primary" @click="reviewBatch">审核通过照片批次</button></div>
       </div>
     </div>

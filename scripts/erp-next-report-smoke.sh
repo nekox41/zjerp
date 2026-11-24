@@ -25,7 +25,7 @@ test "$REG_FORBIDDEN" = "403"
 REG_WRITE=$(curl -sS -o /tmp/erp-reg-write.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/business/customers -H "Authorization: Bearer $REG_TOKEN" -H 'Content-Type: application/json' -d '{"customerCode":"CI-NO-WRITE","name":"Forbidden"}')
 test "$REG_WRITE" = "403"
 # A customer-only account must not gain access to other workspaces through direct API calls.
-for route in "business/projects/$PROJECT_ID" "business/contracts/$CONTRACT_ID" "business/projects/$PROJECT_ID/maintenance" "service-workflow/projects" "admin/identities"; do
+for route in "business/projects/$PROJECT_ID" "business/contracts/$CONTRACT_ID" "business/projects/$PROJECT_ID/maintenance" "service-workflow/projects" "service-workflow/photo-batches/$PHOTO_BATCH_ID" "admin/identities"; do
   HTTP_CODE=$(curl -sS -o /tmp/erp-reg-cross-module.json -w '%{http_code}' "http://127.0.0.1:8090/api/$route" -H "Authorization: Bearer $REG_TOKEN")
   if [ "$HTTP_CODE" != "403" ]; then echo "Expected 403 on $route; got $HTTP_CODE"; exit 1; fi
 done
@@ -109,3 +109,5 @@ REVISED=$(curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$REPORT_
 echo "$REVISED" | grep -q '"status":"draft"'
 echo "$REVISED" | grep -q '"revision_no":2'
 echo "$REVISED" | grep -q 'erp-report-ci.txt'
+
+curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/reports" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-RPT-001'
