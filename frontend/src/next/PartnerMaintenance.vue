@@ -94,6 +94,16 @@ async function unlinkPartner(partnerId){
     notice.value='已解除合作关系，并重新计算合同分成'
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
+async function unlinkProject(projectId){
+  const contractId=contractDetail.value?.id
+  if(!contractId||!confirm('确认解除草稿合同与此项目的关联？项目本身不会被删除。'))return
+  busy.value=true;error.value=''
+  try{
+    await api('/business/contracts/'+contractId+'/projects/'+projectId,{method:'DELETE'})
+    await load();await openContractDetail(contractId)
+    notice.value='合同项目关联已解除'
+  }catch(e){error.value=e.message}finally{busy.value=false}
+}
 async function linkProject(){
   try{await api('/business/contracts/'+projectLink.value.contractId+'/projects',{method:'POST',body:JSON.stringify({projectId:projectLink.value.projectId,relationType:projectLink.value.relationType})});notice.value='合同与项目关联已保存';await openContractDetail(Number(projectLink.value.contractId))}
   catch(e){error.value=e.message}
@@ -186,7 +196,7 @@ onMounted(load)
     </form><p class="pm-note">项目可以先建立，后续再关联合同；一份合同可以覆盖多个项目，一个项目也可以保留多份年度合同历史。</p>
       <div v-if="contractDetail" class="pm-detail"><h4>{{contractDetail.contract_no}} · 合同关联资料</h4>
         <div v-if="contractDetail.partners?.length" class="pm-contract"><b>合作方与分成</b><div v-for="p in contractDetail.partners" :key="p.id" class="pm-file"><span>{{p.name}} · {{p.share_percent}}%</span><button v-if="can('contract:write')" type="button" :disabled="busy" @click="unlinkPartner(p.id)">解除关联</button></div></div>
-        <div v-if="contractDetail.projects?.length" class="pm-contract"><b>关联合同项目</b><small v-for="p in contractDetail.projects" :key="p.id">{{p.project_no}} · {{p.name}} · {{p.relation_type}}</small></div>
+        <div v-if="contractDetail.projects?.length" class="pm-contract"><b>关联合同项目</b><div v-for="p in contractDetail.projects" :key="p.id" class="pm-file"><span>{{p.project_no}} · {{p.name}} · {{p.relation_type}}</span><button v-if="can('contract:write')&&['draft','pending'].includes(contractDetail.status)" type="button" :disabled="busy" @click="unlinkProject(p.id)">解除关联</button></div></div>
         <div v-if="contractDetail.files?.length" class="pm-contract"><b>合同及项目附件</b><div v-for="f in contractDetail.files" :key="f.id" class="pm-file"><span>{{f.title||f.original_name}} · {{f.file_type}}</span><button type="button" @click="downloadFile(f.file_id,f.original_name)">下载</button></div></div>
         <p v-if="!contractDetail.partners?.length&&!contractDetail.projects?.length&&!contractDetail.files?.length" class="pm-empty">暂无关联合作方、项目或附件</p>
       </div>
