@@ -184,14 +184,45 @@ public class BusinessController {
     public List<Map<String,Object>> contracts(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String status) {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
-          SELECT ct.*,c.name customer_name,e.full_name owner_name FROM erp_contract ct
+          SELECT ct.*,c.name customer_name,e.full_name owner_name,
+                 CASE WHEN ct.status='active' AND ct.ends_on IS NOT NULL THEN DATEDIFF(ct.ends_on,CURRENT_DATE) ELSE NULL END days_until_expiry
+          FROM erp_contract ct
           JOIN erp_customer c ON c.id=ct.customer_id LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id
           WHERE (?='' OR ct.title LIKE ? OR ct.contract_no LIKE ? OR c.name LIKE ?)
             AND (?='' OR ct.status=?) ORDER BY ct.id DESC LIMIT 500
           """,q.trim(),term,term,term,status,status);
     }
+    private void validateContractFields(Map<String,Object> b,Map<String,Object> current){
+        String status=Objects.toString(b.get("status"),Objects.toString(current.get("status"),"draft"));
+        if(!Set.of("draft","pending","active","completed","terminated").contains(status))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同状态无效");
+        String type=Objects.toString(b.get("serviceType"),Objects.toString(current.get("service_type"),"other"));
+        if(!Set.of("maintenance","fire_inspection","fire_assessment","fire_evaluation","other").contains(type))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同服务类型无效");
+        try{
+            java.math.BigDecimal amount=new BigDecimal(Objects.toString(b.get("amount"),Objects.toString(current.get("amount"),"0")));
+            if(amount.signum()<0||amount.scale()>2||amount.precision()-amount.scale()>16)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额必须为非负金额，最多两位小数");
+        }catch(NumberFormatException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额格式错误");}
+        java.time.LocalDate start=contractDate(b,current,"startsOn","starts_on");
+        java.time.LocalDate end=contractDate(b,current,"endsOn","ends_on");
+        contractDate(b,current,"signedOn","signed_on");
+        if(start!=null&&end!=null&&end.isBefore(start))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同结束日期不能早于开始日期");
+    }
+
+    private java.time.LocalDate contractDate(Map<String,Object>b,Map<String,Object>current,String key,String column){
+        Object value=b.get(key)==null?current.get(column):b.get(key);
+        if(value==null||value.toString().isBlank())return null;
+        try{return java.time.LocalDate.parse(value.toString());}
+        catch(java.time.format.DateTimeParseException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同日期格式错误："+key);}
+    }
+
     @PostMapping("/contracts") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> createContract(@RequestBody Map<String,Object>b,Authentication a) {
+        validateContractFields(b,Map.of());
+        if(!Set.of("draft","pending").contains(val(b,"status","draft")))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请先创建草稿或待生效合同，关联项目后再生效");
         String no=required(b,"contractNo"), title=required(b,"title"); Long customer=Long.valueOf(required(b,"customerId")), owner=optionalLong(b,"ownerEmployeeId");
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
         BigDecimal amount=new BigDecimal(val(b,"amount","0")); if(amount.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
@@ -204,7 +235,13 @@ public class BusinessController {
     }
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> updateContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_contract WHERE id=?",id);
+        Map<String,Object> current=one("SELECT * FROM erp_contract WHERE id=? FOR UPDATE",id);
+        validateContractFields(b,current);
+        if(b.containsKey("title"))required(b,"title");
+        if(b.containsKey("serviceType")&&!"maintenance".equals(b.get("serviceType"))){
+            Integer used=jdbc.queryForObject("SELECT COUNT(*) FROM erp_maintenance_project WHERE current_contract_id=?",Integer.class,id);
+            if(used!=null&&used>0)throw new ResponseStatusException(HttpStatus.CONFLICT,"当前维保合同不能改为其他服务类型");
+        }
         Long owner=optionalLong(b,"ownerEmployeeId");
         if(b.containsKey("ownerEmployeeId")&&owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
         if(b.containsKey("serviceType")) {
