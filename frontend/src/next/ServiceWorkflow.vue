@@ -18,6 +18,28 @@ const projects = ref([]), packages = ref([]), employees = ref([]), issues = ref(
 const visits = ref([]), batches = ref([]), reports = ref([]), deliveries = ref([])
 const project = ref(null), workPackage = ref(null), batch = ref(null), report = ref(null)
 const systems = ref([]), templateFile = ref(null), selectedBatches = ref([])
+const library=ref([]),templateMode=ref('legacy'),baseTemplateId=ref(''),sectionIds=ref([]),addSectionId=ref(''),photoQuality=ref('print')
+const baseOptions=computed(()=>library.value.filter(t=>t.template_kind==='base'))
+const sectionOptions=computed(()=>library.value.filter(t=>t.template_kind==='system'))
+const selectedBase=computed(()=>baseOptions.value.find(t=>t.id===baseTemplateId.value))
+const selectedSections=computed(()=>sectionIds.value.map(id=>sectionOptions.value.find(t=>t.id===id)).filter(Boolean))
+const modular=computed(()=>templateMode.value==='library')
+const templateReady=computed(()=>modular.value?!!selectedBase.value&&sectionIds.value.length>0:!!templateFile.value)
+const effectiveTemplateId=computed(()=>modular.value?Number(selectedBase.value?.file_id||0):Number(templateFile.value?.id||0))
+function resetTemplateSelection(){templateFile.value=null;showBodyBinding.value=false;baseTemplateId.value='';sectionIds.value=[];addSectionId.value='';templateMode.value='legacy'}
+function switchTemplateMode(){showBodyBinding.value=false;selectedBatches.value=[]}
+function addSection(){
+ const chosen=sectionOptions.value.find(t=>t.id===addSectionId.value)
+ if(!chosen)return
+ if(selectedSections.value.some(t=>t.system_name===chosen.system_name)){error.value='同一消防系统只能选择一个模板版本';return}
+ sectionIds.value.push(chosen.id);addSectionId.value='';showBodyBinding.value=false
+}
+function moveSection(i,delta){
+ const j=i+delta;if(j<0||j>=sectionIds.value.length)return
+ const ids=[...sectionIds.value];[ids[i],ids[j]]=[ids[j],ids[i]];sectionIds.value=ids;showBodyBinding.value=false
+}
+function removeSection(i){sectionIds.value.splice(i,1);showBodyBinding.value=false}
+async function loadLibrary(){try{library.value=await api('/inspection-templates')}catch(e){error.value=e.message}}
 const inspectionVersions=ref([]),inspectionVersion=ref(''),showBodyBinding=ref(false)
 const selectedArtifact=ref(''),deliveryVersion=ref(''),historyVersion=ref(null)
 const editableReport=computed(()=>!!report.value&&['draft','returned','withdrawn'].includes(report.value.status)&&can('report:write'))
@@ -49,7 +71,18 @@ const issueForm = ref({title:'',description:'',severity:'medium',ownerEmployeeId
 const batchForm = ref({title:'现场照片',visitDate:new Date().toISOString().slice(0,10),visitId:''})
 const reportForm = ref({reportNo:'',title:'',reportType:'inspection',summary:'',scope:'',methods:'',findings:'',conclusion:''})
 const deliveryForm = ref({deliveryMethod:'courier',recipientName:'',recipientPhone:'',recipientOrganization:'',recipientAddress:'',courierName:'',trackingNo:'',notes:''})
-const previewUrls = ref({})
+const previewUrls = ref({}),originalPreview=ref(''),originalLoading=ref(false)
+let originalGeneration=0
+function closeOriginal(){originalGeneration++;focusedPhoto.value=null;originalLoading.value=false;if(originalPreview.value)URL.revokeObjectURL(originalPreview.value);originalPreview.value=''}
+async function focusPhoto(p){
+ closeOriginal();focusedPhoto.value=p;const gen=++originalGeneration;originalLoading.value=true
+ try{
+  const token=sessionStorage.getItem('erp-next-token')
+  const response=await fetch((import.meta.env.VITE_NEXT_API_BASE||'/next-api')+'/files/'+p.file_id+'/download',{headers:token?{Authorization:'Bearer '+token}:{}})
+  if(!response.ok)throw Error('原图加载失败')
+  const blob=await response.blob();if(gen===originalGeneration)originalPreview.value=URL.createObjectURL(blob)
+ }catch(e){if(gen===originalGeneration)error.value=e.message}finally{if(gen===originalGeneration)originalLoading.value=false}
+}
 const photoView=ref('cards'),photoMode=ref('append')
 const photoDrafts = ref({})
 const photoFilter=ref('all'),photoSelection=ref([]),bulkSystem=ref(''),bulkConfirm=ref(false),focusedPhoto=ref(null)
@@ -64,7 +97,7 @@ const photoGroups=computed(()=>[
 const visiblePhotos=computed(()=>photoRows.value.filter(p=>photoFilter.value==='all'||(photoFilter.value==='unclassified'?!p.system_code:photoFilter.value==='pending'?p.confirmation_status!=='confirmed':p.system_code===photoFilter.value)))
 function selectFilter(key){photoFilter.value=key;photoSelection.value=[];bulkConfirm.value=false}
 function selectVisible(){photoSelection.value=visiblePhotos.value.map(p=>p.id);bulkConfirm.value=false}
-function resetPhotoSelection(){photoSelection.value=[];bulkSystem.value='';bulkConfirm.value=false;focusedPhoto.value=null}
+function resetPhotoSelection(){photoSelection.value=[];bulkSystem.value='';bulkConfirm.value=false;closeOriginal()}
 function draft(p){return {systemCode:p.system_code||'',takenOn:p.taken_on||'',caption:p.caption||'',confirmed:p.confirmation_status==='confirmed',sortOrder:p.sort_order}}
 function dirty(p){return JSON.stringify(photoDrafts.value[p.id])!==JSON.stringify(draft(p))}
 async function applyClassification(){
@@ -82,7 +115,7 @@ async function applyClassification(){
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 let previewGeneration=0
-function releasePreviews(){previewGeneration++;Object.values(previewUrls.value).forEach(URL.revokeObjectURL);previewUrls.value={}}
+function releasePreviews(){previewGeneration++;Object.values(previewUrls.value).forEach(URL.revokeObjectURL);previewUrls.value={};closeOriginal()}
 function closeBatch(){releasePreviews();batch.value=null;photoDrafts.value={};selectFilter('all');resetPhotoSelection()}
 const batchReviewReason = ref('')
 const visitIssueSelection = ref({})
@@ -186,7 +219,7 @@ async function openBatch(id,changedIds=null) {
 }
 async function loadPreview(fileId,generation=previewGeneration) {
   const token=sessionStorage.getItem('erp-next-token')
-  const response=await fetch((import.meta.env.VITE_NEXT_API_BASE||'/next-api')+'/files/'+fileId+'/download',{headers:token?{Authorization:'Bearer '+token}:{}})
+  const response=await fetch((import.meta.env.VITE_NEXT_API_BASE||'/next-api')+'/files/'+fileId+'/thumbnail',{headers:token?{Authorization:'Bearer '+token}:{}})
   if(!response.ok)throw new Error('照片预览加载失败')
   const blob=await response.blob()
   if(generation===previewGeneration&&!previewUrls.value[fileId])previewUrls.value[fileId]=URL.createObjectURL(blob)
@@ -253,7 +286,7 @@ async function createReport() {
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function openReport(id) {
-  if(report.value?.id!==id){templateFile.value=null;showBodyBinding.value=false;selectedBatches.value=[]}
+  if(report.value?.id!==id){resetTemplateSelection();selectedBatches.value=[];if(can('report:read'))await loadLibrary()}
   try{report.value=await api('/business/reports/'+id);const x=report.value.content||{};inspectionVersion.value=x.inspectionProfile?.versionNo||'';reportForm.value={reportNo:report.value.report_no,title:report.value.title,reportType:report.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''};syncReportSelection();deliveries.value=can('delivery:read')?await api('/service-workflow/reports/'+id+'/deliveries'):[]}
   catch(e){error.value=e.message}
 }
@@ -296,13 +329,13 @@ async function chooseTemplate(event) {
 }
 async function refreshGenerated(result){
   if(report.value?.id!==result.reportId)return
-  try{report.value=await api('/business/reports/'+result.reportId);syncReportSelection();batches.value=can('report:photo:read')?await api('/service-workflow/work-packages/'+workPackage.value.id+'/photo-batches'):[];selectedBatches.value=[];notice.value='DOCX 草稿已归档'}
+  try{report.value=await api('/business/reports/'+result.reportId);syncReportSelection();batches.value=can('report:photo:read')?await api('/service-workflow/work-packages/'+workPackage.value.id+'/photo-batches'):[];selectedBatches.value=[];notice.value='DOCX 草稿已归档'+(result.fileBytes?' · '+(result.fileBytes/1024/1024).toFixed(2)+' MB · '+result.lowDpiCount+' 张低于200 DPI（请核对原图）':'')}
   catch(e){error.value=e.message}
 }
 async function generateDocx() {
   if(!report.value||!templateFile.value||!selectedBatches.value.length){error.value='请先选择 DOCX 模板和已审核照片批次';return}
   try{
-    const result=await api('/service-workflow/reports/'+report.value.id+'/generate-docx',{method:'POST',body:JSON.stringify({templateFileId:templateFile.value.id,expectedVersionNo:report.value.current_version_no,batchIds:selectedBatches.value,photoMode:photoMode.value})})
+    const result=await api('/service-workflow/reports/'+report.value.id+'/generate-docx',{method:'POST',body:JSON.stringify({templateFileId:templateFile.value.id,expectedVersionNo:report.value.current_version_no,batchIds:selectedBatches.value,photoMode:photoMode.value,photoQuality:photoQuality.value})})
     await refreshGenerated(result);if(can('file:read'))await downloadFile(result.fileId,result.filename);notice.value='DOCX 已生成并归档到报告版本 '+result.versionNo
   }catch(e){error.value=e.message}
 }
@@ -405,7 +438,7 @@ onBeforeUnmount(releasePreviews)
         <div v-if="photoView==='cards'" class="sw-photo-grid">
           <article v-for="p in visiblePhotos" :key="p.id" class="sw-photo-card" :class="{picked:photoSelection.includes(p.id)}">
             <label v-if="photoEditable" class="photo-select"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" @change="bulkConfirm=false" aria-label="选择照片"> 选择</label>
-            <img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusedPhoto=p"><div v-else class="sw-photo-placeholder">{{can('file:read')?'加载预览…':'无文件查看权限'}}</div>
+            <img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusPhoto(p)"><div v-else class="sw-photo-placeholder">{{can('file:read')?'加载预览…':'无文件查看权限'}}</div>
             <div class="sw-photo-meta"><b :title="p.original_name">{{ p.original_name }}</b>
               <template v-if="photoEditable">
                 <label>所属系统<select v-model="photoDrafts[p.id].systemCode" @change="photoDrafts[p.id].confirmed=false"><option value="">请选择一级系统</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></label>
@@ -419,13 +452,13 @@ onBeforeUnmount(releasePreviews)
           </article>
         </div>
         <div v-else class="sw-photo-table-wrap"><table class="sw-photo-table"><thead><tr><th v-if="photoEditable">选择</th><th>预览</th><th>文件名</th><th>一级系统</th><th>拍摄日期</th><th>人工确认</th><th>操作</th></tr></thead><tbody>
-          <tr v-for="p in visiblePhotos" :key="p.id"><td v-if="photoEditable"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" @change="bulkConfirm=false" aria-label="选择照片"></td><td><img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusedPhoto=p"></td><td>{{p.original_name}}</td>
+          <tr v-for="p in visiblePhotos" :key="p.id"><td v-if="photoEditable"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" @change="bulkConfirm=false" aria-label="选择照片"></td><td><img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusPhoto(p)"></td><td>{{p.original_name}}</td>
           <td v-if="photoEditable"><select v-model="photoDrafts[p.id].systemCode" @change="photoDrafts[p.id].confirmed=false"><option value="">未分类</option><option v-for="x in systems" :key="x" :value="x">{{x}}</option></select></td><td v-else>{{p.system_code||'未分类'}}</td>
           <td v-if="photoEditable"><input v-model="photoDrafts[p.id].takenOn" @change="photoDrafts[p.id].confirmed=false" type="date"></td><td v-else>{{p.taken_on||'—'}}</td>
           <td v-if="photoEditable"><input v-model="photoDrafts[p.id].confirmed" type="checkbox"></td><td v-else>{{p.confirmation_status==='confirmed'?'已确认':'未确认'}}</td>
           <td v-if="photoEditable"><button  :disabled="busy" @click="movePhoto(p,-1)">↑</button> <button  :disabled="busy" @click="movePhoto(p,1)">↓</button> <button  :disabled="busy" @click="savePhoto(p)">保存</button> <button  :disabled="busy" @click="removePhoto(p)">移除</button></td><td v-else>—</td></tr>
         </tbody></table></div>
-        <div v-if="focusedPhoto" class="photo-lightbox" role="dialog" aria-modal="true" aria-label="照片预览" @click.self="focusedPhoto=null" @keydown.esc="focusedPhoto=null"><div><button autofocus @click="focusedPhoto=null">关闭预览</button><p>{{focusedPhoto.original_name}} · {{focusedPhoto.system_code||'未分类'}}</p><img :src="previewUrls[focusedPhoto.file_id]" :alt="focusedPhoto.original_name"></div></div>
+        <div v-if="focusedPhoto" class="photo-lightbox" role="dialog" aria-modal="true" aria-label="照片预览" @click.self="closeOriginal()" @keydown.esc="closeOriginal()"><div><button autofocus @click="closeOriginal()">关闭预览</button><p>{{focusedPhoto.original_name}} · {{focusedPhoto.system_code||'未分类'}}</p><p v-if="originalLoading">正在读取原始照片…</p><a v-if="originalPreview" :href="originalPreview" target="_blank" rel="noopener">以原始像素打开</a><img :src="originalPreview||previewUrls[focusedPhoto.file_id]" :alt="focusedPhoto.original_name"></div></div>
         <div v-if="photoEditable" class="sw-bottom-actions"><button class="primary" :disabled="busy||photoRows.some(dirty)" @click="submitBatch">提交照片审核</button><small>{{photoRows.some(dirty)?'请先保存所有单张编辑，再提交审核。':'所有照片必须完成分类、日期和人工确认。'}}</small></div>
         <div v-if="batch.status==='submitted'&&can('report:review')&&Number(batch.created_by)!==props.userId" class="sw-bottom-actions"><button class="primary" @click="reviewBatch">审核通过照片批次</button><button :disabled="busy" @click="returnBatch">退回整理</button></div><details v-if="batch.reviewHistory?.length"><summary>照片审核历史</summary><div v-for="(h,i) in batch.reviewHistory" :key="i">{{h.occurred_at}} · {{h.actor_name}} · {{({ 'report.photo_batch.submitted':'提交','report.photo_batch.reviewed':'通过','report.photo_batch.returned':'退回'})[h.action]}} · {{typeof h.summary_json==='string'?JSON.parse(h.summary_json).summary:h.summary_json?.summary}}</div></details>
       </div>
@@ -462,14 +495,22 @@ onBeforeUnmount(releasePreviews)
         <p v-else-if="report.selectedArtifactId">本版本固定送审文件 #{{report.selectedArtifactId}}</p>
         <p v-if="report.return_reason">退回意见：{{report.return_reason}}</p>
         <div class="sw-bottom-actions"><button v-if="editableReport" :disabled="busy" class="primary" @click="saveReport">保存新版本</button><button v-if="report.status==='draft'&&can('report:write')"  :disabled="busy||(report.report_type==='inspection'&&!selectedArtifact)" @click="reportAction('submit')">提交审核</button><button v-if="report.status==='submitted'&&can('report:review')&&Number(report.versionCreatedBy)!==props.userId&&Number(report.submittedBy)!==props.userId" :disabled="busy" @click="reportAction('start-review')">开始审核</button><button v-if="report.status==='reviewing'&&can('report:review')&&Number(report.reviewer_id)===props.userId" :disabled="busy" @click="reportAction('approve')">审核通过</button><button v-if="report.status==='reviewing'&&can('report:review')&&Number(report.reviewer_id)===props.userId" :disabled="busy" class="danger" @click="reportAction('return')">退回修改</button><button v-if="['submitted','reviewing','approved'].includes(report.status)&&can('report:write')&&(Number(report.versionCreatedBy)===props.userId||Number(report.submittedBy)===props.userId)" :disabled="busy" @click="reportAction('withdraw')">撤回重新编制</button><button v-if="report.status==='approved'&&can('report:issue')&&Number(report.reviewer_id)!==props.userId&&Number(report.versionCreatedBy)!==props.userId&&Number(report.submittedBy)!==props.userId" :disabled="busy" @click="reportAction('issue')">签发报告</button><button v-if="report.status==='issued'&&can('report:issue')" @click="reportAction('archive')">归档报告</button><button v-if="['issued','archived'].includes(report.status)&&can('report:write')" @click="reportAction('revise')">创建修订版</button></div>
-        <section v-if="report.status==='draft'&&can('report:write')&&can('file:upload')" class="sw-docx">
-          <h4>照片插入与 DOCX 生成</h4><label class="sw-upload">上传现有报告 DOCX 模板<input type="file" hidden accept=".docx" @change="chooseTemplate"></label><small>{{ templateFile?.original_name||'尚未选择模板' }}</small>
-          <div class="sw-batch-checks"><label v-for="b in batches.filter(x=>x.status==='reviewed'||(photoMode==='replace'&&x.status==='locked'&&Number(x.report_id)===Number(report.id)))" :key="b.id"><input type="checkbox" :value="b.id" v-model="selectedBatches">{{ b.title }} · {{ b.photo_count }} 张 · {{ batchLabel(b.status) }}</label></div>
-          <label class="sw-mode"><input type="radio" value="append" v-model="photoMode"> 保留模板现有照片，在对应系统照片表格中追加（默认，非破坏性）</label>
-          <label class="sw-mode"><input type="radio" value="replace" v-model="photoMode"> 替换模板中所有系统照片，仅保留本次已选批次（请确认模板原照片可替换）</label>
+        <section v-if="report.status==='draft'&&can('report:write')" class="sw-docx">
+          <h4>报告模板与 DOCX 生成</h4>
+          <div v-if="report.report_type==='inspection'" class="sw-form"><label class="wide">模板来源<select v-model="templateMode" @change="switchTemplateMode"><option value="legacy">上传完整 Word 模板</option><option value="library">模板库 · 选择系统章节</option></select></label></div>
+          <template v-if="modular">
+           <div class="sw-form"><label class="wide">公共基础模板<select v-model="baseTemplateId" @change="showBodyBinding=false"><option value="">选择基础模板</option><option v-for="t in baseOptions" :key="t.id" :value="t.id">{{t.template_name}} · v{{t.revision_no}}</option></select></label>
+           <label class="wide">加入系统章节<select v-model="addSectionId"><option value="">请选择</option><option v-for="t in sectionOptions" :key="t.id" :value="t.id">{{t.system_name}} · {{t.template_name}} · v{{t.revision_no}}</option></select></label><button :disabled="!addSectionId" @click="addSection">加入章节</button><button @click="loadLibrary">刷新模板库</button></div>
+           <div class="sw-list"><article v-for="(t,i) in selectedSections" :key="t.id"><div><b>{{i+1}}. {{t.system_name}}</b><small>{{t.template_name}} · v{{t.revision_no}}</small></div><div><button :disabled="i===0" @click="moveSection(i,-1)">上移</button><button :disabled="i===selectedSections.length-1" @click="moveSection(i,1)">下移</button><button @click="removeSection(i)">移除</button></div></article></div>
+           <small>生成时只包含选中的系统及其实际资料，未选择的系统不会生成章节；每份报告固定所选模板版本。</small>
+          </template><template v-else><label v-if="can('file:upload')" class="sw-upload">上传现有报告 DOCX 模板<input type="file" hidden accept=".docx" @change="chooseTemplate"></label><small>{{ templateFile?.original_name||'尚未选择模板' }}</small></template>
+          <label class="sw-mode">照片质量<select v-model="photoQuality"><option value="print">标准打印 · 300 DPI 上限（推荐）</option><option value="compact">轻量打印 · 240 DPI 上限</option><option value="detail">细节优先 · 360 DPI 上限</option></select></label><small>仅压缩 DOCX 内嵌副本，不修改原图、不放大低分辨率照片；审核可按需打开原图。</small>
+          <div class="sw-batch-checks"><label v-for="b in batches.filter(x=>x.status==='reviewed'||((modular||photoMode==='replace')&&x.status==='locked'&&Number(x.report_id)===Number(report.id)))" :key="b.id"><input type="checkbox" :value="b.id" v-model="selectedBatches">{{ b.title }} · {{ b.photo_count }} 张 · {{ batchLabel(b.status) }}</label></div>
+          <label v-if="!modular" class="sw-mode"><input type="radio" value="append" v-model="photoMode"> 保留模板现有照片，在对应系统照片表格中追加（默认，非破坏性）</label>
+          <label v-if="!modular" class="sw-mode"><input type="radio" value="replace" v-model="photoMode"> 替换模板中所有系统照片，仅保留本次已选批次（请确认模板原照片可替换）</label>
           <p class="sw-disclaimer">照片模式保留正文原样；正文填充仅使用已绑定的检测资料快照及明确绑定字段，不自动推导结论或签章。追加模式不能重复使用已归档照片批次。正文生成可不选照片，或与已审核照片共同生成。</p>
-          <div class="sw-bottom-actions"><button class="primary" :disabled="busy||!templateFile||!selectedBatches.length" @click="generateDocx">仅插入照片并生成 DOCX</button><button v-if="report.report_type==='inspection'" :disabled="busy||!templateFile||!report.content?.inspectionProfile" @click="showBodyBinding=!showBodyBinding">{{showBodyBinding?'收起正文工作台':'打开正文填充工作台'}}</button></div>
-          <InspectionDocxWorkbench v-if="showBodyBinding&&templateFile&&report.content?.inspectionProfile" :key="report.id+'-'+report.current_version_no+'-'+templateFile.id" :report-id="Number(report.id)" :version-no="Number(report.current_version_no)" :template-id="Number(templateFile.id)" :batch-ids="selectedBatches" :photo-mode="photoMode" :can-download="can('file:read')" @generated="refreshGenerated"/>
+          <div class="sw-bottom-actions"><button v-if="!modular" class="primary" :disabled="busy||!templateFile||!selectedBatches.length" @click="generateDocx">仅插入照片并生成 DOCX</button><button v-if="report.report_type==='inspection'" :disabled="busy||!templateReady||!report.content?.inspectionProfile" @click="showBodyBinding=!showBodyBinding">{{showBodyBinding?'收起正文工作台':'打开正文填充工作台'}}</button></div>
+          <InspectionDocxWorkbench v-if="showBodyBinding&&templateReady&&report.content?.inspectionProfile" :key="report.id+'-'+report.current_version_no+'-'+effectiveTemplateId+'-'+sectionIds.join(',')" :report-id="Number(report.id)" :version-no="Number(report.current_version_no)" :template-id="effectiveTemplateId" :base-template-id="modular?Number(baseTemplateId):null" :section-template-ids="modular?sectionIds:[]" :batch-ids="selectedBatches" :photo-mode="modular?'replace':photoMode" :photo-quality="photoQuality" :can-download="can('file:read')" @generated="refreshGenerated"/>
         </section>
         <section v-if="can('delivery:read')" class="sw-docx">
           <h4>报告邮寄 / 交付登记</h4>

@@ -1,7 +1,7 @@
 <script setup>
 import { computed,onMounted,ref,watch } from 'vue'
 import { api,downloadFile } from './api'
-const props=defineProps({reportId:{type:Number,required:true},versionNo:{type:Number,required:true},templateId:{type:Number,required:true},batchIds:{type:Array,default:()=>[]},photoMode:{type:String,default:'append'},canDownload:{type:Boolean,default:false}})
+const props=defineProps({reportId:{type:Number,required:true},versionNo:{type:Number,required:true},templateId:{type:Number,required:true},baseTemplateId:{type:Number,default:null},sectionTemplateIds:{type:Array,default:()=>[]},photoQuality:{type:String,default:'print'},batchIds:{type:Array,default:()=>[]},photoMode:{type:String,default:'append'},canDownload:{type:Boolean,default:false}})
 const emit=defineEmits(['generated'])
 const inspection=ref(null),bindings=ref([]),busy=ref(false),error=ref(''),notice=ref(''),reviewed=ref(false),checkedPlan=ref(''),search=ref(''),field=ref(''),target=ref(''),candidatePage=ref(1)
 const endpoint='/service-workflow/reports/'+props.reportId
@@ -11,7 +11,7 @@ const page=computed(()=>filtered.value.slice((candidatePage.value-1)*50,candidat
 const ready=computed(()=>!!inspection.value&&!inspection.value.inspection.errors.length&&checkedPlan.value===JSON.stringify(bindings.value)&&reviewed.value&&!busy.value)
 const labels={general:'工程基本信息',buildings:'建筑单体',facilities:'共用设施',records:'检测明细',instruments:'检测仪器',summaries:'系统判定',conclusion:'最终结论',report:'报告信息'}
 function invalidate(){reviewed.value=false;checkedPlan.value=''}
-watch(()=>[props.photoMode,JSON.stringify(props.batchIds)],()=>{reviewed.value=false})
+watch(()=>[props.photoMode,props.photoQuality,JSON.stringify(props.batchIds)],()=>{reviewed.value=false})
 function chooseCandidate(c){target.value=c.target}
 function addBinding(){
  const c=inspection.value?.inspection.candidates.find(x=>x.target===target.value)
@@ -53,7 +53,7 @@ function removeBinding(t){bindings.value=bindings.value.filter(b=>b.target!==t);
 async function inspect(){
  busy.value=true;error.value='';notice.value='';invalidate()
  try{
-  inspection.value=await api(endpoint+'/inspect-docx',{method:'POST',body:JSON.stringify({templateFileId:props.templateId,expectedVersionNo:props.versionNo,bodyBindings:bindings.value})})
+  inspection.value=await api(endpoint+'/inspect-docx',{method:'POST',body:JSON.stringify({templateFileId:props.templateId,baseTemplateId:props.baseTemplateId,sectionTemplateIds:props.sectionTemplateIds,expectedVersionNo:props.versionNo,bodyBindings:bindings.value})})
   checkedPlan.value=JSON.stringify(bindings.value)
  }catch(e){error.value=e.message}finally{busy.value=false}
 }
@@ -61,8 +61,8 @@ async function generate(){
  if(!ready.value)return
  busy.value=true;error.value=''
  try{
-  const result=await api(endpoint+'/generate-docx',{method:'POST',body:JSON.stringify({templateFileId:props.templateId,expectedVersionNo:props.versionNo,fillBody:true,bodyBindings:bindings.value,bodyPlanSha256:inspection.value.planSha256,templateSha256:inspection.value.templateSha256,templateReviewed:true,batchIds:props.batchIds,photoMode:props.batchIds.length?props.photoMode:'append'})})
-  notice.value='草稿已归档 · 报告 v'+result.versionNo+' / 文件 #'+result.artifactRevisionNo
+  const result=await api(endpoint+'/generate-docx',{method:'POST',body:JSON.stringify({templateFileId:props.templateId,baseTemplateId:props.baseTemplateId,sectionTemplateIds:props.sectionTemplateIds,expectedVersionNo:props.versionNo,photoQuality:props.photoQuality,fillBody:true,bodyBindings:bindings.value,bodyPlanSha256:inspection.value.planSha256,templateSha256:inspection.value.templateSha256,templateReviewed:true,batchIds:props.batchIds,photoMode:props.batchIds.length?props.photoMode:'append'})})
+  notice.value='草稿已归档 · 报告 v'+result.versionNo+' / 文件 #'+result.artifactRevisionNo+' · '+(result.fileBytes/1024/1024).toFixed(2)+' MB · '+result.lowDpiCount+' 张低于200 DPI（需核对原图）'
   emit('generated',result)
   if(props.canDownload)await downloadFile(result.fileId,result.filename)
  }catch(e){error.value=e.message}finally{busy.value=false;reviewed.value=false}
@@ -89,7 +89,7 @@ onMounted(inspect)
  <div v-if="inspection.inspection.errors.length" role="alert" class="binding-error"><b>预检问题</b><p v-for="(e,i) in inspection.inspection.errors" :key="i">{{e}}</p></div>
  <details open><summary>正文变更预览（{{inspection.inspection.changes.length}}）</summary><div class="binding-changes"><article v-for="c in inspection.inspection.changes" :key="c.target" class="binding-row"><b>{{c.target}} · {{c.fields.join('、')}}</b><label>原文<span>{{c.before}}</span></label><label>填充后<span>{{c.after}}</span></label></article></div></details>
  <details><summary>未映射资料字段（{{inspection.inspection.unmappedFields.length}}）</summary><p>未映射字段不会写入。未绑定的模板原文也不会自动删除，请逐项核对。</p><p v-for="k in inspection.inspection.unmappedFields" :key="k">{{k}}</p></details>
- <p v-if="!batchIds.length">未选择照片批次，本次仅填充正文，模板原有照片保持不变。</p>
+ <p v-if="!batchIds.length">{{baseTemplateId?'未选择照片批次，组合报告不生成空照片页。':'未选择照片批次，本次仅填充正文，模板原有照片保持不变。'}}</p>
  <label class="binding-ack"><input v-model="reviewed" type="checkbox" :disabled="busy||inspection.inspection.errors.length>0||checkedPlan!==JSON.stringify(bindings)">我已检查变更及未映射字段，确认模板中未遗留不适用的旧项目信息、照片、证照、签字或印章；生成文件仅作为人工审核草稿。</label>
  <button class="primary-button" :disabled="!ready" @click="generate">生成正文{{batchIds.length?'与 '+batchIds.length+' 批照片':''}}并归档草稿</button>
  </template>
