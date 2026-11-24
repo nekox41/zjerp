@@ -24,12 +24,25 @@ REG_FORBIDDEN=$(curl -sS -o /tmp/erp-reg-forbidden.json -w '%{http_code}' -X POS
 test "$REG_FORBIDDEN" = "403"
 REG_WRITE=$(curl -sS -o /tmp/erp-reg-write.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/business/customers -H "Authorization: Bearer $REG_TOKEN" -H 'Content-Type: application/json' -d '{"customerCode":"CI-NO-WRITE","name":"Forbidden"}')
 test "$REG_WRITE" = "403"
+# A customer-only account must not gain access to other workspaces through direct API calls.
+for route in "business/projects/$PROJECT_ID" "business/contracts/$CONTRACT_ID" "business/projects/$PROJECT_ID/maintenance" "service-workflow/projects" "admin/identities"; do
+  HTTP_CODE=$(curl -sS -o /tmp/erp-reg-cross-module.json -w '%{http_code}' "http://127.0.0.1:8090/api/$route" -H "Authorization: Bearer $REG_TOKEN")
+  if [ "$HTTP_CODE" != "403" ]; then echo "Expected 403 on $route; got $HTTP_CODE"; exit 1; fi
+done
+ADMIN_ROLE_ID_CHECK=$(curl -fsS http://127.0.0.1:8090/api/admin/roles -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; print(next(x["id"] for x in json.load(sys.stdin) if x["code"]=="admin"))')
+PROTECTED_ROLE=$(curl -sS -o /tmp/erp-reg-protected-role.json -w '%{http_code}' -X PUT "http://127.0.0.1:8090/api/admin/roles/$ADMIN_ROLE_ID_CHECK" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI Invalid Built-in","permissionIds":[]}')
+test "$PROTECTED_ROLE" = "400"
 curl -fsS -X PUT "http://127.0.0.1:8090/api/admin/roles/$REG_ROLE_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI Customer Read Removed","permissionIds":[]}' >/dev/null
 REG_OLD_SESSION=$(curl -sS -o /tmp/erp-reg-session.json -w '%{http_code}' http://127.0.0.1:8090/api/auth/me -H "Authorization: Bearer $REG_TOKEN")
 test "$REG_OLD_SESSION" = "401" || test "$REG_OLD_SESSION" = "403"
 REG_NEW_SESSION=$(curl -fsS -X POST http://127.0.0.1:8090/api/auth/login -H 'Content-Type: application/json' -d "$REG_LOGIN")
 python -c 'import json,sys; assert json.load(sys.stdin)["permissions"]==[]' <<< "$REG_NEW_SESSION"
+REG_NEW_TOKEN=$(python -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<< "$REG_NEW_SESSION")
 curl -fsS -X PUT "http://127.0.0.1:8090/api/admin/identities/$REG_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"disabled"}' >/dev/null
+REG_DISABLED_SESSION=$(curl -sS -o /tmp/erp-reg-disabled-session.json -w '%{http_code}' http://127.0.0.1:8090/api/auth/me -H "Authorization: Bearer $REG_NEW_TOKEN")
+test "$REG_DISABLED_SESSION" = "401" || test "$REG_DISABLED_SESSION" = "403"
+REG_DISABLED_LOGIN=$(curl -sS -o /tmp/erp-reg-disabled-login.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/auth/login -H 'Content-Type: application/json' -d "$REG_LOGIN")
+test "$REG_DISABLED_LOGIN" = "401"
 
 # Report author is the bootstrap administrator already authenticated as TOKEN.
 ROLES=$(curl -fsS http://127.0.0.1:8090/api/admin/roles -H "Authorization: Bearer $TOKEN")

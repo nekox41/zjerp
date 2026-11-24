@@ -53,7 +53,7 @@ const navigationKey = ref(0)
 function navigate(target, section=null, id=null) {
   const allowed = {
     business: section ? can(({customers:'customer:read',contracts:'contract:read',projects:'project:read',employees:'employee:read'})[section]) : ['customer:read','contract:read','project:read','employee:read'].some(can),
-    'partner-maintenance': section==='maintenance' ? can('maintenance:read')&&can('project:read') : section==='leadership' ? can('project:read') : section==='links' ? can('contract:read') : can('partner:read')||can('maintenance:read')||can('contract:read')||can('project:read'),
+    'partner-maintenance': section==='maintenance' ? can('maintenance:read')&&can('project:read') : section==='leadership' ? can('project:read')&&can('project:write') : section==='links' ? can('contract:read') : can('partner:read')||can('maintenance:read')||can('contract:read')||can('project:read'),
     'service-workflow': can('service:read')
   }
   if (!allowed[target]) return
@@ -260,7 +260,7 @@ onMounted(refresh)
       <button v-if="can('project:read')" :class="{active:tab==='dashboard'}" @click="tab='dashboard'"><span>◫</span>经营驾驶舱</button>
       <div class="side-caption">业务管理</div>
       <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="sidebar('business')"><span>▦</span>业务全生命周期</button>
-      <button v-if="can('partner:read') || can('maintenance:read') || can('contract:read') || can('project:read')" :class="{active:tab==='partner-maintenance'}" @click="sidebar('partner-maintenance')"><span>♧</span>合作方与维保</button>
+      <button v-if="can('partner:read') || can('contract:read') || (can('project:read')&&(can('maintenance:read')||can('project:write')))" :class="{active:tab==='partner-maintenance'}" @click="sidebar('partner-maintenance')"><span>♧</span>合作方与维保</button>
       <button v-if="can('service:read')" :class="{active:tab==='service-workflow'}" @click="sidebar('service-workflow')"><span>◈</span>技术服务交付</button>
       <div class="side-caption">财务管理</div>
       <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>

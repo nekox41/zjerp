@@ -68,6 +68,9 @@ curl -fsS -X POST "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID/pro
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"projectId\":$UNCOVERED_ID,\"relationType\":\"renewal\"}" | grep -q 'renewal'
 curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/contracts" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-CT-001'
+# Both directions must retain the same identifiers for workspace navigation.
+curl -fsS "http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; p=json.load(sys.stdin); assert p["customer_id"]==int(sys.argv[1]); assert any(c["id"]==int(sys.argv[2]) for c in p["contracts"])' "$CUSTOMER_ID" "$CONTRACT_ID"
+curl -fsS "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; c=json.load(sys.stdin); assert c["customer_id"]==int(sys.argv[1]); assert any(p["id"]==int(sys.argv[2]) for p in c["projects"])' "$CUSTOMER_ID" "$UNCOVERED_ID"
 curl -fsS -X PUT "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"CI 甲方客户已更新","customerType":"enterprise","phone":"13900000000"}' | grep -q 'CI 甲方客户已更新'

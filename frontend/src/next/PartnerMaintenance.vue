@@ -204,16 +204,16 @@ onMounted(async ()=>{
       <label>合作方<select v-model="linkForm.partnerId" required><option value="">选择合作方</option><option v-for="p in partners" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
       <label>合同分成比例（%）<input v-model="linkForm.sharePercent" type="number" min="0" max="100" step="0.01" required></label><label>备注<input v-model="linkForm.notes"></label><button v-if="can('contract:write')&&can('partner:read')" class="primary">保存合作关系</button>
     </form><p class="pm-note">一个合作方可以关联多份合同；每份合同可记录多个合作方，分成比例合计不得超过 100%。这里只记录约定比例，不登记实际付款。</p>
-    <label>附件类型<select v-model="linkForm.fileType"><option value="contract">合同原件</option><option value="maintenance_card">维保公示卡</option><option value="project_material">项目资料</option><option value="other">其他</option></select></label><label v-if="can('contract:write')&&can('file:write')" class="pm-upload">上传合同/维保资料<input type="file" hidden accept=".pdf,.docx" @change="uploadContractFile"></label></div>
+    <label>附件类型<select v-model="linkForm.fileType"><option value="contract">合同原件</option><option value="maintenance_card">维保公示卡</option><option value="project_material">项目资料</option><option value="other">其他</option></select></label><label v-if="can('contract:write')&&can('file:upload')" class="pm-upload">上传合同/维保资料<input type="file" hidden accept=".pdf,.docx" @change="uploadContractFile"></label></div>
     <div class="pm-panel"><h3>合同与项目关联</h3><form class="pm-form" @submit.prevent="linkProject">
-      <label>合同<select v-model="projectLink.contractId" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
+      <label>合同<select v-model="projectLink.contractId" @change="openContractDetail(Number(projectLink.contractId))" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
       <label>项目<select v-model="projectLink.projectId" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
       <label>关联类型<select v-model="projectLink.relationType"><option value="service">服务合同</option><option value="renewal">年度续签</option><option value="supplement">补充合同</option><option value="other">其他</option></select></label><button v-if="can('contract:write')&&can('project:read')" class="primary">关联项目</button>
     </form><p class="pm-note">项目可以先建立，后续再关联合同；一份合同可以覆盖多个项目，一个项目也可以保留多份年度合同历史。</p>
       <div v-if="contractDetail" class="pm-detail"><h4>{{contractDetail.contract_no}} · 合同关联资料</h4><button class="secondary-button" @click="emit('navigate','business','contracts',contractDetail.id)">返回合同档案</button>
         <div v-if="contractDetail.partners?.length" class="pm-contract"><b>合作方与分成</b><div v-for="p in contractDetail.partners" :key="p.id" class="pm-file"><span>{{p.name}} · {{p.share_percent}}%</span><button v-if="can('contract:write')" type="button" :disabled="busy" @click="unlinkPartner(p.id)">解除关联</button></div></div>
         <div v-if="contractDetail.projects?.length" class="pm-contract"><b>关联合同项目</b><div v-for="p in contractDetail.projects" :key="p.id" class="pm-file"><span>{{p.project_no}} · {{p.name}} · {{p.relation_type}}</span><button v-if="can('project:read')" type="button" @click="emit('navigate','business','projects',p.id)">项目档案</button><button v-if="can('contract:write')&&['draft','pending'].includes(contractDetail.status)" type="button" :disabled="busy" @click="unlinkProject(p.id)">解除关联</button></div></div>
-        <div v-if="contractDetail.files?.length" class="pm-contract"><b>合同及项目附件</b><div v-for="f in contractDetail.files" :key="f.id" class="pm-file"><span>{{f.title||f.original_name}} · {{f.file_type}}</span><button type="button" @click="downloadFile(f.file_id,f.original_name)">下载</button></div></div>
+        <div v-if="contractDetail.files?.length" class="pm-contract"><b>合同及项目附件</b><div v-for="f in contractDetail.files" :key="f.id" class="pm-file"><span>{{f.title||f.original_name}} · {{f.file_type}}</span><button v-if="can('file:read')" type="button" @click="downloadFile(f.file_id,f.original_name)">下载</button></div></div>
         <p v-if="!contractDetail.partners?.length&&!contractDetail.projects?.length&&!contractDetail.files?.length" class="pm-empty">暂无关联合作方、项目或附件</p>
       </div>
     </div>
@@ -260,7 +260,7 @@ onMounted(async ()=>{
           <b>{{renewalHistoryDetail.contract_no}} · 独立附件记录</b>
           <div v-for="file in renewalHistoryDetail.files||[]" :key="file.id" class="pm-file">
             <span>{{file.title||file.original_name}} · {{file.file_type}}</span>
-            <button type="button" @click="downloadFile(file.file_id,file.original_name)">下载</button>
+            <button v-if="can('file:read')" type="button" @click="downloadFile(file.file_id,file.original_name)">下载</button>
           </div>
           <p v-if="!renewalHistoryDetail.files?.length" class="pm-note">此合同暂无附件；请在「合同与项目关联」中上传本年度维保卡。</p>
         </div>
