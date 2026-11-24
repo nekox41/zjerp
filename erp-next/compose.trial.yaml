@@ -60,7 +60,9 @@ services:
       erp-next-schema:
         condition: service_completed_successfully
     volumes:
-      - ${ERP_TRIAL_FILES:?Set ERP_TRIAL_FILES}:/var/lib/erp-next/files
+      - type: bind
+        source: ${ERP_TRIAL_FILES:?Set ERP_TRIAL_FILES}
+        target: /var/lib/erp-next/files
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/actuator/health"]
       interval: 15s
@@ -90,7 +92,7 @@ services:
     volumes:
       - trial_legacy:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -u root --silent"]
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -u root --silent"]
       interval: 5s
       timeout: 5s
       retries: 40

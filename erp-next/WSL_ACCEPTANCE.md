@@ -46,7 +46,7 @@ bash deploy.sh archive
 bash deploy.sh plan
 # 编辑 ~/.local/share/zjerp-trial/review.json，按 LEGACY_MIGRATION.md 逐项确认
 bash deploy.sh preview
-# 核查预演输出，备份验收数据库与文件目录；替换为 preview 输出的完整 planSha256
+# 核查预演输出；apply 自动创建成对备份，替换为 preview 输出的完整 planSha256
 bash deploy.sh apply PLAN_SHA256
 bash deploy.sh reconcile
 bash deploy.sh
@@ -57,3 +57,5 @@ Python MySQL 驱动在专用容器内安装，宿主机不需要 pip。archive �
 ## 6. 反馈
 
 测试反馈发送 test-results/*.log；实际部署问题可用 bash deploy.sh status 或 bash deploy.sh logs（Ctrl+C 退出）。真实业务数据、日志、SQL、原件、.env、admin-password 均可能包含敏感信息，分享前脱敏。该环境专用于候选版验收，不视为正式生产迁移。禁止 docker compose down -v 或清理全部 Docker 卷。
+
+`bash deploy.sh backup` 可单独创建成对备份（停止 Web/API），`apply` 每次写入前亦自动创建。备份位于状态目录 backups/，只有 COMPLETE 标识存在且 SHA256SUMS 检查通过才视作完整备份；恢复仍需另行隔离演练。请勿将试迁移环境直接升格为正式生产。

@@ -7,7 +7,7 @@ cd "$ROOT"
 action="${1:-start}"
 shift || true
 usage(){ cat <<'EOF'
-Usage: bash deploy.sh [start|status|logs|stop|legacy-import SQL|legacy-shell|archive|plan|preview|apply PLAN_SHA256|reconcile]
+Usage: bash deploy.sh [start|status|logs|stop|legacy-import SQL|legacy-shell|archive|plan|preview|apply PLAN_SHA256|reconcile|backup]
 默认 start：创建或继续运行持久化验收环境（不是正式生产）。
 ERP_TRIAL_DIR 可指定独立状态目录；默认 ~/.local/share/zjerp-trial。
 首次启动前可设置 ERP_NEXT_WEB_PORT / ERP_NEXT_API_PORT（默认 8089/8090）。
@@ -18,10 +18,11 @@ plan：生成空白人工审核映射 review.json。
 preview：停止新版 Web/API 后演练，生成唯一凭据。
 apply SHA256：执行明确确认的同一计划（停止新版服务）。
 reconcile：核对目标映射与附件；完成后 start 恢复 Web/API。
+backup：停止新版 Web/API，创建数据库和附件成对备份。
 stop：停止容器，保留全部数据和凭据。不提供删库命令。
 EOF
 }
-case "$action" in help|-h|--help) usage; exit 0;; start|status|logs|stop|legacy-import|legacy-shell|archive|plan|preview|apply|reconcile) ;; *) usage >&2; exit 2;; esac
+case "$action" in help|-h|--help) usage; exit 0;; start|status|logs|stop|legacy-import|legacy-shell|archive|plan|preview|apply|reconcile|backup) ;; *) usage >&2; exit 2;; esac
 case "$action" in legacy-import|apply) [[ $# == 1 ]] || { usage >&2; exit 2; };; *) [[ $# == 0 ]] || { usage >&2; exit 2; };; esac
 for cmd in docker python3 flock curl; do command -v "$cmd" >/dev/null || { echo "缺少 $cmd" >&2; exit 1; }; done
 docker compose version >/dev/null
@@ -30,7 +31,9 @@ STATE="$(python3 -c 'from pathlib import Path;import sys; print(Path(sys.argv[1]
 # State must not be stored in the Git checkout or a Windows-mounted filesystem.
 case "$STATE/" in "$ROOT/"*|/mnt/[a-zA-Z]/*) echo "请在 WSL Linux 文件系统的仓库外设置 ERP_TRIAL_DIR" >&2; exit 1;; esac
 if [[ "$action" != start && ! -f "$STATE/.env" ]]; then echo "先执行 bash deploy.sh"; exit 1; fi
+[[ "$STATE" != / && "$STATE" != "$HOME" && "$STATE" != /tmp && "$STATE" != /var && "$STATE" != /usr ]] || { echo "请指定专用状态目录"; exit 1; }
 mkdir -p "$STATE"
+[[ -O "$STATE" ]] || { echo "状态目录不属于当前用户"; exit 1; }
 chmod 700 "$STATE"
 exec 9>"$STATE/.lock"
 flock -n 9 || { echo "另一个部署/迁移命令正在运行"; exit 1; }
@@ -98,7 +101,7 @@ SQL
 verify_marker(){
  local server row
  server="$(nextsql <<< 'SELECT @@server_uuid;')"
- row="$(nextsql <<< 'SELECT CONCAT(trial_id,":",server_uuid) FROM erp_trial_isolation_marker WHERE id=1;')"
+ row="$(nextsql <<< "SELECT CONCAT(trial_id,':',server_uuid) FROM erp_trial_isolation_marker WHERE id=1;")"
  [[ "$row" == "$TRIAL_ID:$server" ]] || { echo "数据库试迁移标识不符"; exit 1; }
  python3 - "$STATE/files/.erp-next-trial.json" "$TRIAL_ID" "$server" <<'PY'
 import json,sys
@@ -118,6 +121,21 @@ pytrial(){
    zjerp-trial-migration:local python "$@"
 }
 pause_app(){ dc stop erp-next-web erp-next-api; }
+backup_target(){
+ verify_marker
+ pause_app
+ local dest
+ mkdir -p "$STATE/backups"
+ dest="$(mktemp -d "$STATE/backups/target-$(date -u +%Y%m%dT%H%M%S)-XXXXXX")"
+ echo "正在创建数据库和附件成对备份：$dest"
+ dc exec -T erp-next-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -u root --single-transaction --no-tablespaces --routines --triggers --events --default-character-set=utf8mb4 erp_next' > "$dest/database.sql"
+ [[ -s "$dest/database.sql" ]] || { echo "数据库备份为空"; exit 1; }
+ tar -C "$STATE/files" -czf "$dest/files.tar.gz" .
+ (cd "$dest" && sha256sum database.sql files.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS)
+ printf '%s\n' "$(git rev-parse HEAD)" > "$dest/commit"
+ touch "$dest/COMPLETE"
+ echo "备份已完成：$dest（敏感数据，请勿分享）"
+}
 actor(){ nextsql <<< "SELECT id FROM erp_identity WHERE username='trial-admin';"; }
 migration(){
  verify_marker
@@ -183,8 +201,10 @@ PY
    [[ "$1" =~ ^[0-9a-f]{64}$ && -f "$STATE/latest-preview" ]] || { echo "先成功 preview，再提供完整 planSha256"; exit 1; }
    receipt="$(cat "$STATE/latest-preview")"
    [[ "$receipt" =~ ^preview-[0-9]{8}T[0-9]{6}-[0-9a-f]{8}\.json$ ]] || exit 1
+   backup_target
    migration apply --preview-receipt "/state/$receipt" --confirm-plan-sha256 "$1"
    echo "迁移完成；请执行 reconcile，再 start"
    ;;
  reconcile) migration reconcile; echo "核对通过；执行 bash deploy.sh 恢复页面";;
+ backup) backup_target; echo "Web/API 已停止；执行 bash deploy.sh 恢复";;
 esac
