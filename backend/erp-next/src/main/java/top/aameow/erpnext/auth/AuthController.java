@@ -37,6 +37,13 @@ public class AuthController {
         return Map.of("message", "管理员账号已创建，请登录");
     }
 
+    @PostMapping("/auth/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String,String> register(@Valid @RequestBody BootstrapRequest request) {
+        auth.register(request.username(),request.displayName(),request.password());
+        return Map.of("message","注册成功，请等待管理员审核启用并分配权限");
+    }
+
     @PostMapping("/auth/login")
     public AuthService.LoginResult login(@Valid @RequestBody LoginRequest request) {
         return auth.login(request.username(), request.password());
