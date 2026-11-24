@@ -108,6 +108,27 @@ public class InspectionTemplateController {
         int order=0;for(var item:items)jdbc.update("INSERT INTO erp_inspection_template_item(template_id,sort_order,item_name,clause_id) VALUES(?,?,?,?)",id,++order,item.get("item"),item.get("clauseId"));
         audit(a,id,"inspection.template.structured.created");return Map.of("id",id,"revisionNo",next,"itemCount",items.size());
     }
+    @PostMapping("/starter")
+    @PreAuthorize("hasAuthority('report:template:write') and hasAuthority('file:upload')") @Transactional(rollbackFor=Exception.class)
+    public Map<String,Object> createStarter(@RequestBody Map<String,Object>b,Authentication a)throws Exception{
+        String name=required(b,"name",150),notes=Objects.toString(b.get("notes"),"");
+        if(notes.length()>1000)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"备注过长");
+        if(!Boolean.TRUE.equals(b.get("confirmed")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请确认该基础模板仅为空白起点，需公司实际版式验收");
+        if(!(b.get("sections") instanceof List<?> list)||list.size()>4||list.stream().anyMatch(x->!(x instanceof String)||!InspectionBaseStarter.OPTIONAL.contains(x)))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"公共模板可选分区无效");
+        Set<String> sections=new HashSet<>();for(Object x:list)sections.add(x.toString());
+        jdbc.queryForObject("SELECT id FROM erp_permission WHERE code='report:template:write' FOR UPDATE",Long.class);
+        int next=jdbc.queryForObject("SELECT COALESCE(MAX(revision_no),0)+1 FROM erp_inspection_template WHERE template_kind='base' AND system_name='' AND template_name=?",Integer.class,name);
+        byte[] bytes=InspectionBaseStarter.create(sections);var info=InspectionTemplateComposer.inspect(bytes,true);
+        var stored=storage.storeBytes(bytes,"基础检测报告-v"+next+".docx",DOCX);
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){
+            @Override public void afterCompletion(int status){if(status==STATUS_ROLLED_BACK)storage.deleteQuietly(stored.key());}
+        });
+        jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
+        long file=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        jdbc.update("INSERT INTO erp_inspection_template(template_kind,system_name,template_name,revision_no,file_id,sha256,notes,created_by) VALUES('base','',?,?,?,?,?,?)",name,next,file,stored.sha256(),notes,actor(a));
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        audit(a,id,"inspection.template.starter.created");return Map.of("id",id,"revisionNo",next,"tables",info.tables(),"rows",info.rows());
+    }
     @PutMapping("/{id}/active")
     @PreAuthorize("hasAuthority('report:template:write')") @Transactional
     public Map<String,Object> active(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){

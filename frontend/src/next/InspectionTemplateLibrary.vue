@@ -4,7 +4,14 @@ import {api,downloadFile} from './api'
 import StructuredInspectionEditor from './StructuredInspectionEditor.vue'
 const props=defineProps({permissions:{type:Array,default:()=>[]}})
 const can=p=>props.permissions.includes(p)
-const structuredEditor=ref(null),structuredOpen=ref(false)
+const structuredEditor=ref(null),structuredOpen=ref(false),starterOpen=ref(false)
+const starter=ref({name:'消防检测公共基础模板',notes:'',sections:['buildings','instruments','summaries'],confirmed:false})
+const starterSections=[['buildings','建筑单体'],['facilities','共用设施'],['instruments','检测仪器'],['summaries','系统判定汇总']]
+async function createStarter(){
+ if(busy.value||!starter.value.confirmed)return
+ busy.value=true;error.value='';notice.value=''
+ try{const r=await api('/inspection-templates/starter',{method:'POST',body:JSON.stringify(starter.value)});notice.value='已建立空白基础模板 v'+r.revisionNo+'，可下载到 Word 修改公司版式。';starter.value.confirmed=false;await load()}catch(e){error.value=e.message}finally{busy.value=false}
+}
 async function editStructured(t){structuredOpen.value=true;await nextTick();await structuredEditor.value?.clone(t)}
 const rows=ref([]),busy=ref(false),error=ref(''),notice=ref(''),query=ref(''),file=ref(null)
 const form=ref({kind:'system',system:'',name:'',notes:'',cleanConfirmed:false,standardIds:[]})
@@ -43,9 +50,11 @@ onMounted(async()=>{await load();if(can('report:read'))await searchStandards()})
  <header><h2>检测报告模板库</h2><p>公共基础模板 + 独立消防系统章节。选择章节组合报告，历史版本不覆盖。</p></header>
  <p v-if="error" role="alert" class="tpl-error">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>
  <div v-if="can('file:upload')" class="tpl-panel"><button @click="structuredOpen=!structuredOpen">{{structuredOpen?'收起网页编辑器':'网页建立系统检测模板'}}</button><StructuredInspectionEditor v-show="structuredOpen" ref="structuredEditor" :systems="systems" @saved="load"/></div>
+ <div v-if="can('file:upload')" class="tpl-panel"><button @click="starterOpen=!starterOpen">{{starterOpen?'收起基础模板生成器':'建立空白公共基础模板'}}</button>
+ <form v-if="starterOpen" class="tpl-form" @submit.prevent="createStarter"><p class="wide">生成 A4 公共模板：封面、目录域、工程概况、检测范围与依据、系统章节插入标记、结论及页码域。不是经过公司核验的正式样式；可下载后用 Word 修改并上传新修订。选中的可重复表格至少需录入一条资料。</p><label>模板名称<input v-model="starter.name" required maxlength="150"></label><label>备注<input v-model="starter.notes" maxlength="1000"></label><label v-for="[key,label] in starterSections" :key="key" class="check"><input type="checkbox" v-model="starter.sections" :value="key">{{label}}</label><label class="wide check"><input type="checkbox" v-model="starter.confirmed">确认仅为待核验的空白基础模板</label><button class="primary" :disabled="busy||!starter.confirmed">生成并保存模板</button></form></div>
  <div class="tpl-panel">
   <h3>建立 / 更新 Word 模板</h3>
-  <p>基础 Word 模板保留封面、工程资料、通用报告内容、页眉页脚，在需要插入系统章节的位置单独放置 <code v-text="'{{erp.systemSections}}'"></code>。系统模板仅包含本系统的检测表格和纯文本说明，不含现场照片、签章、链接、自动编号或跨文档部件。复杂合并表格可保留，请从同一基础 Word 模板建立章节，确保样式一致。标准要求由公司人工确认，检测结果与结论不能预填旧项目数据。</p>
+  <p>基础 Word 模板保留封面、工程资料、通用报告内容、页眉页脚，在需要插入系统章节的位置单独放置 <code v-text="'{{erp.systemSections}}'"></code>。可在章节前单独放置 <code v-text="'{{erp.toc}}'"></code> 生成 Word 原生目录域，打开 Word 后更新整个目录并核对页码。系统模板仅包含本系统的检测表格和纯文本说明，不含现场照片、签章、链接、自动编号或跨文档部件。复杂合并表格可保留，请从同一基础 Word 模板建立章节，确保样式一致。标准要求由公司人工确认，检测结果与结论不能预填旧项目数据。</p>
   <form v-if="can('file:upload')" @submit.prevent="save" class="tpl-form">
    <label>模板类型<select v-model="form.kind"><option value="base">基础报告</option><option value="system">系统章节</option></select></label>
    <label v-if="form.kind==='system'">消防系统（可新增）<input v-model="form.system" list="tpl-system-list" required maxlength="80"><datalist id="tpl-system-list"><option v-for="s in systems" :key="s" :value="s"/></datalist></label>

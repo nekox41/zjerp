@@ -40,7 +40,7 @@ function repeatItem(row){
 const section=computed(()=>sections.find(s=>s.key===active.value))
 const editing=computed(()=>canWrite.value&&!historical.value&&!busy.value)
 const dirty=computed(()=>profile.value&&JSON.stringify(profile.value)!==saved.value)
-function normalize(content={}){return {general:{projectName:props.projectName,...content.general},buildings:content.buildings||[],facilities:content.facilities||[],records:content.records||[],instruments:content.instruments||[],summaries:content.summaries||[],conclusion:{text:'',...content.conclusion},basisReferences:content.basisReferences||[]}}
+function normalize(content={}){return {general:{...Object.fromEntries(general.map(([key])=>[key,''])),projectName:props.projectName,...content.general},buildings:content.buildings||[],facilities:content.facilities||[],records:content.records||[],instruments:content.instruments||[],summaries:content.summaries||[],conclusion:{text:'',...content.conclusion},basisReferences:content.basisReferences||[]}}
 async function load(force=false){
  if(!force&&dirty.value&&!confirm('放弃未保存的修改？'))return
  busy.value=true;error.value='';try{const [r,h]=await Promise.all([api(endpoint),api(endpoint+'/versions')]);profile.value=normalize(r.content);version.value=r.versionNo;history.value=h;historical.value=null;saved.value=JSON.stringify(profile.value)}catch(e){error.value=e.message}finally{busy.value=false}
