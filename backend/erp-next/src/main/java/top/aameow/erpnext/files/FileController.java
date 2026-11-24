@@ -40,7 +40,7 @@ public class FileController {
             Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_fire_standard WHERE file_id=?",Integer.class,f.get("id"));
             if(linked!=null&&linked>0)return;
         }
-        boolean photoRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:photo:read")||x.getAuthority().equals("report:photo:write"));
+        boolean photoRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:photo:read"));
         if(photoRead){
             Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_report_photo p JOIN erp_report_photo_batch b ON b.id=p.batch_id WHERE p.file_id=?",Integer.class,f.get("id"));
             if(linked!=null&&linked>0)return;
@@ -105,6 +105,7 @@ public class FileController {
     public ResponseEntity<InputStreamResource> download(@PathVariable long id,Authentication a)throws Exception{
         Map<String,Object> f=one(id);assertReadable(f,a);
         var path=storage.resolve(f.get("storage_key").toString());
+        if(Files.size(path)!=((Number)f.get("file_size")).longValue())throw new ResponseStatusException(HttpStatus.CONFLICT,"文件大小与归档记录不一致，请联系管理员核查原件");
         var resource=new InputStreamResource(Files.newInputStream(path));
         String name=f.get("original_name").toString();
         ContentDisposition disposition=ContentDisposition.attachment().filename(name,java.nio.charset.StandardCharsets.UTF_8).build();

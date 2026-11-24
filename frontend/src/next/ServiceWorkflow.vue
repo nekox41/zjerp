@@ -146,12 +146,12 @@ async function selectProject(id) {
   packageOpen.value=false;workPackage.value=null; closeBatch(); report.value=null
   packages.value=[];visits.value=[];batches.value=[];reports.value=[];issues.value=[];deliveries.value=[];selectedBatches.value=[];templateFile.value=null
   if(!project.value)return
-  try { packages.value=await api('/service-workflow/projects/'+id+'/work-packages') }
+  try { const rows=await api('/service-workflow/projects/'+id+'/work-packages');if(project.value?.id===id)packages.value=rows }
   catch(e){error.value=e.message}
 }
 async function selectPackage(id) {
   workPackage.value=packages.value.find(x=>x.id===id)||null
-  closeBatch(); report.value=null; selectedBatches.value=[];templateFile.value=null;showBodyBinding.value=false;inspectionVersions.value=[];inspectionVersion.value=''
+  closeBatch(); report.value=null; selectedBatches.value=[];templateFile.value=null;showBodyBinding.value=false;inspectionVersions.value=[];inspectionVersion.value='';visits.value=[];batches.value=[];reports.value=[];issues.value=[];deliveries.value=[]
   if(!id)return
   try {
     const [v,b,r,i]=await Promise.all([
@@ -514,7 +514,7 @@ onBeforeUnmount(releasePreviews)
         <ReportReviewEvidence v-if="reviewArtifact" :key="reviewArtifact.id" :artifact="reviewArtifact" :content="report.content" :can-file="can('file:read')" :can-photo="can('report:photo:read')"/>
         <p v-if="report.return_reason">退回意见：{{report.return_reason}}</p>
         <div class="sw-bottom-actions"><button v-if="editableReport" :disabled="busy" class="primary" @click="saveReport">保存新版本</button><button v-if="report.status==='draft'&&can('report:write')"  :disabled="busy||(report.report_type==='inspection'&&!selectedArtifact)" @click="reportAction('submit')">提交审核</button><button v-if="report.status==='submitted'&&can('report:review')&&Number(report.versionCreatedBy)!==props.userId&&Number(report.submittedBy)!==props.userId" :disabled="busy" @click="reportAction('start-review')">开始审核</button><button v-if="report.status==='reviewing'&&can('report:review')&&Number(report.reviewer_id)===props.userId" :disabled="busy" @click="reportAction('approve')">审核通过</button><button v-if="report.status==='reviewing'&&can('report:review')&&Number(report.reviewer_id)===props.userId" :disabled="busy" class="danger" @click="reportAction('return')">退回修改</button><button v-if="['submitted','reviewing','approved'].includes(report.status)&&can('report:write')&&(Number(report.versionCreatedBy)===props.userId||Number(report.submittedBy)===props.userId)" :disabled="busy" @click="reportAction('withdraw')">撤回重新编制</button><button v-if="report.status==='approved'&&can('report:issue')&&Number(report.reviewer_id)!==props.userId&&Number(report.versionCreatedBy)!==props.userId&&Number(report.submittedBy)!==props.userId" :disabled="busy" @click="reportAction('issue')">签发报告</button><button v-if="report.status==='issued'&&can('report:issue')" @click="reportAction('archive')">归档报告</button><button v-if="['issued','archived'].includes(report.status)&&can('report:write')" @click="reportAction('revise')">创建修订版</button></div>
-        <section v-if="report.status==='draft'&&can('report:write')" class="sw-docx">
+        <section v-if="report.status==='draft'&&can('report:write')&&can('file:upload')" class="sw-docx">
           <h4>报告模板与 DOCX 生成</h4>
           <div v-if="report.report_type==='inspection'" class="sw-form"><label class="wide">模板来源<select v-model="templateMode" @change="switchTemplateMode"><option value="legacy">上传完整 Word 模板</option><option value="library">模板库 · 选择系统章节</option></select></label></div>
           <template v-if="modular">

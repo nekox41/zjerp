@@ -43,7 +43,8 @@ async function saveRole(){
     await api(id?'/admin/roles/'+id:'/admin/roles',{method:id?'PUT':'POST',body:JSON.stringify({name,permissionIds})})
     roleEditor.value=false
     roles.value=await api('/admin/roles')
-    notice.value='角色已保存。已关联账户的权限将在重新登录后更新。'
+    user.value=await api('/auth/me')
+    notice.value='角色已保存。服务端权限即时生效，其他用户可刷新页面同步界面。'
   }catch(e){error.value=e.message}finally{submitting.value=false}
 }
 const identities = ref([])
@@ -119,7 +120,9 @@ async function loadWorkspace() {
   if (can('identity:read')) requests.push(api('/admin/roles').then(v => { roles.value = v }))
   if (can('identity:read')) requests.push(api('/admin/identities').then(v => { identities.value = v }))
   if (can('audit:read')) requests.push(api('/admin/audit?limit=30').then(v => { audit.value = v }))
-  await Promise.all(requests)
+  const results=await Promise.allSettled(requests)
+  const rejected=results.find(r=>r.status==='rejected')
+  if(rejected)error.value='部分工作台数据未加载：'+rejected.reason.message
 }
 async function bootstrap() {
   error.value = ''; notice.value = ''

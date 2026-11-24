@@ -55,7 +55,7 @@ async function openVersion(v){
 }
 function addRow(s){const row=Object.fromEntries(s.fields.map(([key])=>[key,'']));if(s.key==='records'&&recordFilter.value)row.system=recordFilter.value;profile.value[s.key].push(row)}
 const visibleRows=computed(()=>section.value&&profile.value?profile.value[section.value.key].map((row,index)=>({row,index})).filter(x=>section.value.key!=='records'||!recordFilter.value||x.row.system===recordFilter.value):[])
-onMounted(async()=>{try{systems.value=await api('/inspection-templates/systems')}catch(e){error.value=e.message}await loadTemplates();await load(true)})
+onMounted(async()=>{try{systems.value=await api('/inspection-templates/systems')}catch(e){error.value=e.message}if(canWrite.value)await loadTemplates();await load(true)})
 </script>
 <template>
 <section class="ip-panel">

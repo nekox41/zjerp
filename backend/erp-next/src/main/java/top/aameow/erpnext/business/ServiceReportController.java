@@ -116,7 +116,7 @@ public class ServiceReportController {
         one("SELECT id FROM erp_service_work_package WHERE id=?",workPackageId);
         return jdbc.queryForList("SELECT id,report_no,title,report_type,status,revision_no,current_version_no,updated_at FROM erp_service_report WHERE work_package_id=? ORDER BY updated_at DESC",workPackageId);
     }
-    @PostMapping("/work-packages/{workPackageId}/reports") @PreAuthorize("hasAuthority('report:write')") @Transactional
+    @PostMapping("/work-packages/{workPackageId}/reports") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> create(@PathVariable long workPackageId,@RequestBody Map<String,Object>b,Authentication a){
         one("SELECT id FROM erp_service_work_package WHERE id=?",workPackageId);
         String no=req(b,"reportNo"),title=req(b,"title"),type=b.get("reportType")==null?"service":b.get("reportType").toString();
@@ -141,7 +141,7 @@ public class ServiceReportController {
         v.put("artifacts",jdbc.queryForList("SELECT a.id,a.file_id,a.artifact_revision_no,a.sha256,f.original_name FROM erp_service_report_artifact a JOIN erp_file_object f ON f.id=a.file_id WHERE a.report_id=? AND a.version_no=? ORDER BY a.artifact_revision_no DESC",id,no));
         return v;
     }
-    @PutMapping("/reports/{id}") @PreAuthorize("hasAuthority('report:write')") @Transactional
+    @PutMapping("/reports/{id}") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> update(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);assertDraft(r);requireVersion(b,r);
         String title=b.get("title")!=null?req(b,"title"):r.get("title").toString();
@@ -159,7 +159,7 @@ public class ServiceReportController {
         jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('version',?))",actor(a),"report.version.updated","erp_service_report",Long.toString(id),UUID.randomUUID().toString(),next);
         return detail(id);
     }
-    @PostMapping("/reports/{id}/attachments") @PreAuthorize("hasAuthority('report:write')") @Transactional
+    @PostMapping("/reports/{id}/attachments") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> attach(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);if(!"draft".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"仅草稿可添加附件");long fileId=Long.parseLong(req(b,"fileId"));
         Map<String,Object> f=one("SELECT id,uploaded_by FROM erp_file_object WHERE id=?",fileId);
@@ -169,7 +169,7 @@ public class ServiceReportController {
         jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('fileId',?))",actor(a),"report.attachment.added","erp_service_report",Long.toString(id),UUID.randomUUID().toString(),fileId);
         return detail(id);
     }
-    @PostMapping("/reports/{id}/submit") @PreAuthorize("hasAuthority('report:write')") @Transactional
+    @PostMapping("/reports/{id}/submit") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> submit(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);if(!"draft".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿报告可以提交");
         Map<String,Object> v=content(id,r);Map<String,Object> data=mapper.convertValue(parse(v.get("content_json").toString()),new TypeReference<Map<String,Object>>(){});
@@ -202,14 +202,14 @@ public class ServiceReportController {
         jdbc.update("UPDATE erp_service_report SET status='submitted',reviewer_id=NULL,return_reason=NULL WHERE id=?",id);
         event(id,"draft","submitted",actor(a),layout?"提交审核；人工确认已核对送审文件目录、分页及照片":"提交审核");return detail(id);
     }
-    @PostMapping("/reports/{id}/start-review") @PreAuthorize("hasAuthority('report:review')") @Transactional
+    @PostMapping("/reports/{id}/start-review") @PreAuthorize("hasAuthority('report:review') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> startReview(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!"submitted".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已提交报告可以开始审核");
         requireEngineerReviewer(actor(a));
         requireNotContributor(id,r,actor(a));
         jdbc.update("UPDATE erp_service_report SET status='reviewing',reviewer_id=? WHERE id=?",actor(a),id);event(id,"submitted","reviewing",actor(a),"开始审核");return detail(id);
     }
-    @PostMapping("/reports/{id}/return") @PreAuthorize("hasAuthority('report:review')") @Transactional
+    @PostMapping("/reports/{id}/return") @PreAuthorize("hasAuthority('report:review') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> returnReport(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!"reviewing".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有审核中的报告可以退回");
         if(((Number)r.get("reviewer_id")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只有当前审核人可以退回");
@@ -221,7 +221,7 @@ public class ServiceReportController {
         if(row.get("generation_manifest")==null)return false;
         return "modular-photo-pages-v1".equals(mapper.valueToTree(parse(row.get("generation_manifest").toString())).path("layout").asText());
     }
-    @PostMapping("/reports/{id}/approve") @PreAuthorize("hasAuthority('report:review')") @Transactional
+    @PostMapping("/reports/{id}/approve") @PreAuthorize("hasAuthority('report:review') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> approve(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!"reviewing".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有审核中的报告可以通过");
         if(((Number)r.get("reviewer_id")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只有当前审核人可以审核");
@@ -231,7 +231,7 @@ public class ServiceReportController {
         jdbc.update("UPDATE erp_service_report_version SET reviewed_by=? WHERE report_id=? AND version_no=?",actor(a),id,r.get("current_version_no"));
         jdbc.update("UPDATE erp_service_report SET status='approved' WHERE id=?",id);event(id,"reviewing","approved",actor(a),layout?"审核通过；人工确认已核对固定文件目录、分页及照片":"审核通过");return detail(id);
     }
-    @PostMapping("/reports/{id}/issue") @PreAuthorize("hasAuthority('report:issue')") @Transactional
+    @PostMapping("/reports/{id}/issue") @PreAuthorize("hasAuthority('report:issue') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> issue(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!"approved".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有审核通过的报告可以签发");
         requireNotContributor(id,r,actor(a));
@@ -241,7 +241,7 @@ public class ServiceReportController {
         jdbc.update("UPDATE erp_service_report_version SET issued_by=?,version_issued_at=CURRENT_TIMESTAMP(3) WHERE report_id=? AND version_no=?",actor(a),id,r.get("current_version_no"));
         jdbc.update("UPDATE erp_service_report SET status='issued',issuer_id=?,issued_at=CURRENT_TIMESTAMP(3) WHERE id=?",actor(a),id);event(id,"approved","issued",actor(a),"报告签发");return detail(id);
     }
-    @PostMapping("/reports/{id}/archive") @PreAuthorize("hasAuthority('report:issue')") @Transactional
+    @PostMapping("/reports/{id}/archive") @PreAuthorize("hasAuthority('report:issue') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> archive(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!"issued".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已签发报告可以归档");
         Map<String,Object> v=content(id,r);
@@ -251,13 +251,13 @@ public class ServiceReportController {
         jdbc.update("UPDATE erp_service_report SET status='archived',archived_at=CURRENT_TIMESTAMP(3),archive_manifest=? WHERE id=?",json(manifest),id);
         event(id,"issued","archived",actor(a),"归档快照已固定");return detail(id);
     }
-    @PostMapping("/reports/{id}/withdraw") @PreAuthorize("hasAuthority('report:write')") @Transactional
+    @PostMapping("/reports/{id}/withdraw") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> withdraw(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!Set.of("submitted","reviewing","approved").contains(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前状态不可撤回");
         if(versionAuthor(id,r)!=actor(a)&&!(content(id,r).get("submitted_by") instanceof Number submitter&&submitter.longValue()==actor(a)))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只有本版本编制人或提交人可以撤回");
         String reason=req(b,"reason");String old=r.get("status").toString();jdbc.update("UPDATE erp_service_report SET status='withdrawn' WHERE id=?",id);event(id,old,"withdrawn",actor(a),reason);return detail(id);
     }
-    @PostMapping("/reports/{id}/revise") @PreAuthorize("hasAuthority('report:write')") @Transactional
+    @PostMapping("/reports/{id}/revise") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> revise(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!Set.of("issued","archived").contains(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已签发或已归档报告可以创建修订版");
         int old=((Number)r.get("current_version_no")).intValue(),next=old+1;

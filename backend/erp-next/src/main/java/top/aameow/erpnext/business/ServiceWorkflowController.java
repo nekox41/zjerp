@@ -224,7 +224,7 @@ public class ServiceWorkflowController {
         Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e JOIN erp_employee_qualification q ON q.employee_id=e.id WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)",Integer.class,identity);
         if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片批次审核必须由具有有效工程师资格的员工完成");
     }
-    @PostMapping("/photo-batches/{id}/review") @PreAuthorize("hasAuthority('report:review')") @Transactional
+    @PostMapping("/photo-batches/{id}/review") @PreAuthorize("hasAuthority('report:review') and hasAuthority('report:photo:read')") @Transactional
     public Map<String,Object> reviewBatch(@PathVariable long id,Authentication a){
         Map<String,Object>b=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",id);
         if(!"submitted".equals(b.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已提交的照片批次可以审核");
@@ -392,7 +392,7 @@ public class ServiceWorkflowController {
         audit(actor(a),"report.docx.registered","erp_service_report",id,"version="+version+",artifact="+artifactId);
         return Map.of("reportId",id,"versionNo",version,"artifactId",artifactId,"fileId",fileId,"filename",f.get("original_name"));
     }
-    @PostMapping("/reports/{id}/generate-docx") @PreAuthorize("hasAuthority('report:write')") @Transactional(rollbackFor=Exception.class)
+    @PostMapping("/reports/{id}/generate-docx") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read') and hasAuthority('file:upload')") @Transactional(rollbackFor=Exception.class)
     public Map<String,Object> generateDocx(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) throws Exception {
         var report=reportForGeneration(id,true);
         boolean fillBody=Boolean.TRUE.equals(b.get("fillBody"));

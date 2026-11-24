@@ -27,7 +27,7 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             String rawToken = header.substring(7).trim();
-            if (!rawToken.isEmpty()) {
+            if (rawToken.matches("[A-Za-z0-9_-]{43}")) {
                 String hash = TokenUtil.sha256(rawToken);
                 List<Map<String,Object>> rows = jdbc.queryForList("""
                     SELECT i.id, i.username, i.display_name, i.organization_id
