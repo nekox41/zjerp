@@ -50,6 +50,24 @@ public class AuthService {
         audit(identityId, "identity.bootstrap", "erp_identity", identityId.toString(), "管理员初始化");
     }
 
+    @Transactional
+    public void register(String username, String displayName, String password) {
+        if (!isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT,"请先初始化管理员");
+        username=username.trim();
+        displayName=displayName.trim();
+        if(username.isBlank()||displayName.isBlank()||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"账号和姓名不能为空，密码不得超过72字节");
+        try {
+            jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'disabled')",
+                username,passwords.encode(password),displayName);
+        } catch(org.springframework.dao.DuplicateKeyException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"账号不可用，请选择其他账号");
+        }
+        Long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        // Public registrations never acquire roles, employee records or sessions.
+        audit(id,"identity.registered","erp_identity",id.toString(),"自主注册，等待管理员启用及授权");
+    }
+
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public LoginResult login(String username, String password) {
         List<Map<String,Object>> rows = jdbc.queryForList("""
