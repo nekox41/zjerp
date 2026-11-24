@@ -1,8 +1,11 @@
 <script setup>
-import {computed,onMounted,ref} from 'vue'
+import {computed,onMounted,ref,nextTick} from 'vue'
 import {api,downloadFile} from './api'
+import StructuredInspectionEditor from './StructuredInspectionEditor.vue'
 const props=defineProps({permissions:{type:Array,default:()=>[]}})
 const can=p=>props.permissions.includes(p)
+const structuredEditor=ref(null),structuredOpen=ref(false)
+async function editStructured(t){structuredOpen.value=true;await nextTick();await structuredEditor.value?.clone(t)}
 const rows=ref([]),busy=ref(false),error=ref(''),notice=ref(''),query=ref(''),file=ref(null)
 const form=ref({kind:'system',system:'',name:'',notes:'',cleanConfirmed:false,standardIds:[]})
 const standardQuery=ref(''),standardRows=ref([]),standardLabels=ref({})
@@ -39,8 +42,9 @@ onMounted(async()=>{await load();if(can('report:read'))await searchStandards()})
 <section class="tpl-page">
  <header><h2>检测报告模板库</h2><p>公共基础模板 + 独立消防系统章节。选择章节组合报告，历史版本不覆盖。</p></header>
  <p v-if="error" role="alert" class="tpl-error">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>
+ <div v-if="can('file:upload')" class="tpl-panel"><button @click="structuredOpen=!structuredOpen">{{structuredOpen?'收起网页编辑器':'网页建立系统检测模板'}}</button><StructuredInspectionEditor v-show="structuredOpen" ref="structuredEditor" :systems="systems" @saved="load"/></div>
  <div class="tpl-panel">
-  <h3>建立 / 更新模板</h3>
+  <h3>建立 / 更新 Word 模板</h3>
   <p>基础 Word 模板保留封面、工程资料、通用报告内容、页眉页脚，在需要插入系统章节的位置单独放置 <code v-text="'{{erp.systemSections}}'"></code>。系统模板仅包含本系统的检测表格和纯文本说明，不含现场照片、签章、链接、自动编号或跨文档部件。复杂合并表格可保留，请从同一基础 Word 模板建立章节，确保样式一致。标准要求由公司人工确认，检测结果与结论不能预填旧项目数据。</p>
   <form v-if="can('file:upload')" @submit.prevent="save" class="tpl-form">
    <label>模板类型<select v-model="form.kind"><option value="base">基础报告</option><option value="system">系统章节</option></select></label>
@@ -54,7 +58,7 @@ onMounted(async()=>{await load();if(can('report:read'))await searchStandards()})
   </form><p v-else>当前角色没有上传文件权限，仅能维护已存在模板的启用状态。</p>
  </div>
  <div class="tpl-panel"><h3>模板版本</h3><input v-model="query" placeholder="搜索系统、模板、文件名称"><p v-if="!filtered.length">暂无模板，请先准备空白 Word 原件。</p>
-  <article v-for="t in filtered" :key="t.id"><div><b>{{t.system_name||'公共基础'}} · {{t.template_name}} · v{{t.revision_no}}</b><small>{{t.original_name}} · {{(t.byte_size/1024).toFixed(0)}} KB · {{t.active?'启用':'停用'}}</small><small>{{t.notes||'无版本备注'}} · {{t.sha256.slice(0,16)}}</small><small v-if="t.recommendedStandards?.length">参考规范：{{t.recommendedStandards.map(s=>s.standard_no+' '+s.edition+(s.active?'':'（停用）')).join('、')}}</small></div><div class="tpl-actions"><button v-if="can('file:read')" @click="download(t)">下载模板</button><button @click="newVersion(t)">新增修订</button><button :disabled="busy" @click="toggle(t)">{{t.active?'停用':'启用'}}</button></div></article>
+  <article v-for="t in filtered" :key="t.id"><div><b>{{t.system_name||'公共基础'}} · {{t.template_name}} · v{{t.revision_no}}</b><small>{{t.original_name}} · {{(t.byte_size/1024).toFixed(0)}} KB · {{t.active?'启用':'停用'}}</small><small v-if="t.item_count">网页检测项目 {{t.item_count}} 项</small><small>{{t.notes||'无版本备注'}} · {{t.sha256.slice(0,16)}}</small><small v-if="t.recommendedStandards?.length">参考规范：{{t.recommendedStandards.map(s=>s.standard_no+' '+s.edition+(s.active?'':'（停用）')).join('、')}}</small></div><div class="tpl-actions"><button v-if="can('file:read')" @click="download(t)">下载模板</button><button v-if="t.item_count&&can('file:upload')" @click="editStructured(t)">编辑检测项目 / 新修订</button><button v-else @click="newVersion(t)">新增修订</button><button :disabled="busy" @click="toggle(t)">{{t.active?'停用':'启用'}}</button></div></article>
  </div>
 </section>
 </template>
