@@ -26,7 +26,7 @@ public class InspectionProfileController {
         "general",Set.of("projectName","address","projectCategory","constructionUnit","constructionQualification","designUnit","designQualification","contractor","contractorQualification","supervisionUnit","supervisionQualification","totalArea","commissioningUnit","contact","phone","commissionedOn","inspectionDates","reportNo","reportDate","inspectionCategory","overview","introduction","scope","basis","designDate","designReviewDate","completionDate","acceptanceDate","renovationDate","inspectionDate","applicabilityNotes"),
         "buildings",Set.of("name","structure","use","fireResistance","aboveGroundFloors","belowGroundFloors","height","length","footprint","aboveGroundArea","belowGroundArea","constructionYear","designReviewDate","acceptanceDate","renovationDate"),
         "facilities",Set.of("system","name","location","servedAreas","description"),
-        "records",Set.of("system","item","standard","location","result","judgment"),
+        "records",Set.of("system","item","standard","location","result","judgment","templateItemId","templateId","clauseId","standardId","clauseReference","sourceLocator","sequence"),
         "instruments",Set.of("name","model","serialNo","calibrationExpiry"),
         "summaries",Set.of("system","judgment","notes"),
         "conclusion",Set.of("text")
@@ -122,6 +122,39 @@ public class InspectionProfileController {
         if(result.toString().length()>2_000_000)throw bad("检测资料与引用快照超过大小限制");
         return result;
     }
+    private void resolveTemplateRecords(com.fasterxml.jackson.databind.node.ObjectNode data,JsonNode previous){
+        var records=data.path("records");if(!records.isArray())return;
+        Map<Long,Map<String,Object>> cache=new HashMap<>();
+        Set<Long> oldItems=new HashSet<>();
+        for(JsonNode old:previous.path("records"))if(old.path("templateItemId").isTextual())try{oldItems.add(Long.parseLong(old.path("templateItemId").asText()));}catch(NumberFormatException ignored){}
+        Map<String,Integer> sequences=new HashMap<>();
+        for(JsonNode node:records){
+            var row=(com.fasterxml.jackson.databind.node.ObjectNode)node;
+            String raw=row.path("templateItemId").asText("");
+            if(raw.isBlank()){
+                for(String key:List.of("templateItemId","templateId","clauseId","standardId","clauseReference","sourceLocator"))row.remove(key);
+            }else{
+                long id;try{id=Long.parseLong(raw);if(id<=0)throw new NumberFormatException();}catch(NumberFormatException e){throw bad("无效模板项目编号");}
+                var item=cache.get(id);
+                if(item==null){
+                    var found=jdbc.queryForList("SELECT i.template_id,i.item_name,t.system_name,t.active template_active,c.id clause_id,c.clause_no,c.requirement_summary,c.source_locator,c.active clause_active,s.id standard_id,s.standard_no,s.edition,s.title,s.active standard_active,s.verified FROM erp_inspection_template_item i JOIN erp_inspection_template t ON t.id=i.template_id JOIN erp_fire_standard_clause c ON c.id=i.clause_id JOIN erp_fire_standard s ON s.id=c.standard_id WHERE i.id=?",id);
+                    if(found.size()!=1)throw bad("模板检测项目不存在："+id);
+                    item=found.get(0);cache.put(id,item);
+                }
+                if(!oldItems.contains(id)&&(!enabled(item.get("template_active"))||!enabled(item.get("clause_active"))||!enabled(item.get("standard_active"))||!enabled(item.get("verified"))))throw bad("新记录不能使用停用或未核验的模板及条款："+id);
+                row.put("templateItemId",Long.toString(id));row.put("templateId",item.get("template_id").toString());
+                row.put("clauseId",item.get("clause_id").toString());row.put("standardId",item.get("standard_id").toString());
+                row.put("system",item.get("system_name").toString());row.put("item",item.get("item_name").toString());
+                String citation=item.get("standard_no")+" "+Objects.toString(item.get("edition"),"")+" 第"+item.get("clause_no")+"条";
+                row.put("clauseReference",citation.trim());row.put("sourceLocator",item.get("source_locator").toString());
+                row.put("standard",item.get("requirement_summary")+"\n（"+citation.trim()+"）");
+            }
+            String system=row.path("system").asText("");row.put("sequence",Integer.toString(sequences.merge(system,1,Integer::sum)));
+            for(String key:List.of("location","result","judgment"))if(!row.has(key))row.put(key,"");
+        }
+        if(data.toString().length()>2_000_000)throw bad("检测资料与模板项目快照超过大小限制");
+    }
+    private boolean enabled(Object v){return Boolean.TRUE.equals(v)||v instanceof Number n&&n.intValue()==1;}
     @PutMapping @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read') and hasAuthority('service:read')") @Transactional
     public Map<String,Object> save(@PathVariable long id,@RequestBody SaveRequest request,Authentication a){
         scope(id,true);
@@ -129,7 +162,7 @@ public class InspectionProfileController {
         if(request.expectedVersionNo()==null||request.expectedVersionNo()!=latest)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"资料版本已更新，请刷新后重试");
         JsonNode previous=latest==0?mapper.createObjectNode():(JsonNode)read(id,latest).get("content");
-        var data=withBasis(request,previous);
+        var data=withBasis(request,previous);resolveTemplateRecords(data,previous);
         long actor=((CurrentUser)a.getPrincipal()).id();
         jdbc.update("INSERT INTO erp_inspection_profile_version(work_package_id,version_no,content_json,created_by) VALUES(?,?,?,?)",id,latest+1,data.toString(),actor);
         jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('version',?))",

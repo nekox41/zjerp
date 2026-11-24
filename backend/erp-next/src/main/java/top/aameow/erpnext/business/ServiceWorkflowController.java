@@ -284,6 +284,28 @@ public class ServiceWorkflowController {
         String hash=sha(json(revisions).getBytes(StandardCharsets.UTF_8));
         return new TemplatePlan(InspectionTemplateComposer.compose(bytes,sections),hash,List.copyOf(revisions),systems);
     }
+    private void checkStructuredRecords(TemplatePlan plan,com.fasterxml.jackson.databind.JsonNode data){
+        Set<String> basis=new HashSet<>();for(var ref:data.path("basisReferences"))basis.add(ref.path("id").asText());
+        for(var template:plan.revisions()){
+            if(!template.containsKey("system_name"))continue;
+            long tid=((Number)template.get("id")).longValue();
+            String system=template.get("system_name").toString();
+            var items=jdbc.queryForList("SELECT i.id,c.standard_id FROM erp_inspection_template_item i JOIN erp_fire_standard_clause c ON c.id=i.clause_id WHERE i.template_id=? ORDER BY i.sort_order",tid);
+            if(items.isEmpty())continue;
+            Map<String,String> required=new LinkedHashMap<>();
+            for(var item:items)required.put(item.get("id").toString(),item.get("standard_id").toString());
+            Set<String> covered=new HashSet<>();
+            for(var row:data.path("records")){
+                if(!system.equals(row.path("system").asText()))continue;
+                String item=row.path("templateItemId").asText();
+                if(!Long.toString(tid).equals(row.path("templateId").asText())||!required.containsKey(item)||!required.get(item).equals(row.path("standardId").asText()))
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,"检测资料中存在不属于所选结构化模板版本的项目："+system);
+                if(!basis.contains(required.get(item)))throw new ResponseStatusException(HttpStatus.CONFLICT,"检测项目引用的规范尚未选为报告依据："+row.path("clauseReference").asText());
+                covered.add(item);
+            }
+            if(!covered.equals(required.keySet()))throw new ResponseStatusException(HttpStatus.CONFLICT,"所选系统模板的检测项目尚未完整导入："+system);
+        }
+    }
     private com.fasterxml.jackson.databind.JsonNode inspectionSnapshot(long id,Map<String,Object> report)throws Exception{
         if(!"inspection".equals(report.get("report_type")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"只有消防检测报告支持正文资料绑定");
         var version=one("SELECT content_json FROM erp_service_report_version WHERE report_id=? AND version_no=?",id,report.get("current_version_no"));
@@ -313,6 +335,7 @@ public class ServiceWorkflowController {
         var template=templateForGeneration(b,a);
         var snapshot=inspectionSnapshot(id,report);
         var plan=prepareTemplate(b,template);
+        checkStructuredRecords(plan,snapshot.path("content"));
         byte[] prepared=InspectionDocxRepeatRows.prepare(plan.bytes(),snapshot.path("content"));
         try(var doc=new XWPFDocument(new ByteArrayInputStream(prepared))){
             var result=binder.inspect(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),bindings(b));
@@ -395,7 +418,7 @@ public class ServiceWorkflowController {
         }
         byte[] templateBytes=plan.bytes();
         var bodySnapshot=fillBody?inspectionSnapshot(id,report):null;
-        if(fillBody)templateBytes=InspectionDocxRepeatRows.prepare(templateBytes,bodySnapshot.path("content"));
+        if(fillBody){checkStructuredRecords(plan,bodySnapshot.path("content"));templateBytes=InspectionDocxRepeatRows.prepare(templateBytes,bodySnapshot.path("content"));}
         byte[] output;
         Map<String,Object> manifest=new LinkedHashMap<>();
         manifest.put("templateFileId",templateId);manifest.put("templateSha256",plan.sha256());manifest.put("templateRevisions",plan.revisions());

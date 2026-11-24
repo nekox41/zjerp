@@ -15,6 +15,28 @@ const sections=[
  {key:'summaries',name:'系统判定汇总（人工填写）',fields:[['system','所属系统'],['judgment','系统判定'],['notes','备注']]}
 ]
 const active=ref('general'),recordFilter=ref(''),profile=ref(null),version=ref(0),history=ref([]),busy=ref(false),error=ref(''),notice=ref(''),historical=ref(null),saved=ref('')
+const templateOptions=ref([]),importTemplate=ref(''),importBusy=ref(false)
+async function loadTemplates(){try{templateOptions.value=(await api('/inspection-templates')).filter(t=>t.template_kind==='system'&&t.item_count>0)}catch(e){error.value=e.message}}
+async function importItems(){
+ if(!editing.value||!importTemplate.value||importBusy.value)return
+ importBusy.value=true;error.value=''
+ try{
+  const template=templateOptions.value.find(t=>String(t.id)===String(importTemplate.value));if(!template)throw Error('模板已不可用')
+  const existing=profile.value.records.filter(r=>r.system===template.system_name)
+  if(existing.some(r=>String(r.templateId||'')!==String(template.id)))throw Error('该系统已有手工记录或不同模板版本。请先人工处理旧记录，不自动覆盖。')
+  const items=await api('/inspection-templates/'+template.id+'/items')
+  if(items.some(i=>!i.clause_active||!i.standard_active||!i.verified))throw Error('模板有停用规范或条款，请先修订模板')
+  const seen=new Set(existing.map(r=>String(r.templateItemId)));let added=0
+  for(const i of items)if(!seen.has(String(i.id))){
+   profile.value.records.push({system:template.system_name,item:i.item_name,standard:i.requirement_summary+'\n（'+i.standard_no+' '+i.edition+' 第'+i.clause_no+'条）',templateItemId:String(i.id),templateId:String(template.id),clauseId:String(i.clause_id),standardId:String(i.standard_id),clauseReference:i.standard_no+' '+i.edition+' 第'+i.clause_no+'条',sourceLocator:i.source_locator,location:'',result:'',judgment:''});added++
+  }
+  recordFilter.value=template.system_name;notice.value='新增 '+added+' 项，已有记录保留；请填写实际检测结果及人工判定后保存'
+ }catch(e){error.value=e.message}finally{importBusy.value=false}
+}
+function repeatItem(row){
+ if(!editing.value)return
+ profile.value.records.push({...row,location:'',result:'',judgment:''})
+}
 const section=computed(()=>sections.find(s=>s.key===active.value))
 const editing=computed(()=>canWrite.value&&!historical.value&&!busy.value)
 const dirty=computed(()=>profile.value&&JSON.stringify(profile.value)!==saved.value)
@@ -33,7 +55,7 @@ async function openVersion(v){
 }
 function addRow(s){const row=Object.fromEntries(s.fields.map(([key])=>[key,'']));if(s.key==='records'&&recordFilter.value)row.system=recordFilter.value;profile.value[s.key].push(row)}
 const visibleRows=computed(()=>section.value&&profile.value?profile.value[section.value.key].map((row,index)=>({row,index})).filter(x=>section.value.key!=='records'||!recordFilter.value||x.row.system===recordFilter.value):[])
-onMounted(async()=>{try{systems.value=await api('/inspection-templates/systems')}catch(e){error.value=e.message}await load(true)})
+onMounted(async()=>{try{systems.value=await api('/inspection-templates/systems')}catch(e){error.value=e.message}await loadTemplates();await load(true)})
 </script>
 <template>
 <section class="ip-panel">
@@ -48,8 +70,9 @@ onMounted(async()=>{try{systems.value=await api('/inspection-templates/systems')
  <div v-else-if="active==='conclusion'"><label>最终检测结论（人工填写，须按正式流程审核）<textarea v-model="profile.conclusion.text" rows="5" maxlength="12000"></textarea></label></div>
  <template v-else-if="section">
  <div class="ip-head"><label v-if="active==='records'">筛选消防系统<select v-model="recordFilter"><option value="">全部</option><option v-for="s in systems" :key="s">{{s}}</option></select></label><button v-if="editing" class="secondary-button" @click="addRow(section)">新增{{section.name}}记录</button></div>
+ <div v-if="active==='records'&&editing" class="ip-record"><b>从系统模板建立检测项目</b><div class="ip-head"><select v-model="importTemplate"><option value="">选择已建立检测项目的系统模板</option><option v-for="t in templateOptions" :key="t.id" :value="t.id">{{t.system_name}} · {{t.template_name}} v{{t.revision_no}} · {{t.item_count}}项</option></select><button :disabled="!importTemplate||importBusy" @click="importItems">导入缺少项目</button><button @click="loadTemplates">刷新模板</button></div><p>只新增缺少项，不覆盖已有检测结果。导入不会自动选用规范或产生判定。</p></div>
  <p v-if="!visibleRows.length">暂无记录</p>
- <article v-for="{row,index} in visibleRows" :key="index" class="ip-record"><div class="ip-head"><b>#{{index+1}}</b><button v-if="editing" class="secondary-button" @click="profile[section.key].splice(index,1)">移除</button></div><div class="ip-grid"><label v-for="[key,label] in section.fields" :key="key">{{label}}<select v-if="key==='system'" v-model="row[key]"><option value="">待填写</option><option v-for="s in systems" :key="s">{{s}}</option></select><input v-else-if="key.endsWith('Date')" type="date" v-model="row[key]"><textarea v-else v-model="row[key]" rows="2" maxlength="12000"></textarea></label></div></article>
+ <article v-for="{row,index} in visibleRows" :key="index" class="ip-record"><div class="ip-head"><b>#{{index+1}} <small v-if="row.templateItemId">模板 #{{row.templateId}} · {{row.clauseReference}}</small></b><button v-if="editing&&section.key==='records'&&row.templateItemId" @click="repeatItem(row)">新增同项目检测部位</button><button v-if="editing" class="secondary-button" @click="profile[section.key].splice(index,1)">移除</button></div><div class="ip-grid"><label v-for="[key,label] in section.fields" :key="key">{{label}}<select v-if="key==='system'" v-model="row[key]" :disabled="!!row.templateItemId"><option value="">待填写</option><option v-for="s in systems" :key="s">{{s}}</option></select><input v-else-if="key.endsWith('Date')" type="date" v-model="row[key]"><textarea v-else v-model="row[key]" :readonly="!!row.templateItemId&&['item','standard'].includes(key)" rows="2" maxlength="12000"></textarea></label></div></article>
  </template>
  </fieldset>
  </template>
