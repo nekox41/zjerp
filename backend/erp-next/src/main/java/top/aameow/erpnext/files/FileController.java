@@ -86,6 +86,16 @@ public class FileController {
     public Map<String,Object> metadata(@PathVariable long id,Authentication a){
         Map<String,Object> f=one(id);assertReadable(f,a);f.remove("storage_key");return f;
     }
+    @GetMapping("/{id}/thumbnail")
+    @PreAuthorize("hasAuthority('file:read')")
+    public ResponseEntity<byte[]> thumbnail(@PathVariable long id,Authentication a)throws Exception{
+        var f=one(id);assertReadable(f,a);
+        if(!Set.of("image/jpeg","image/png").contains(f.get("media_type")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"仅照片支持缩略图");
+        var path=storage.resolve(f.get("storage_key").toString());
+        if(Files.size(path)>25L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"图片过大");
+        byte[] thumb=PhotoEncoding.thumbnail(Files.readAllBytes(path));
+        return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).header(HttpHeaders.CACHE_CONTROL,"private, no-store").header("X-Content-Type-Options","nosniff").body(thumb);
+    }
     @GetMapping("/{id}/download")
     @PreAuthorize("hasAuthority('file:read')")
     public ResponseEntity<InputStreamResource> download(@PathVariable long id,Authentication a)throws Exception{

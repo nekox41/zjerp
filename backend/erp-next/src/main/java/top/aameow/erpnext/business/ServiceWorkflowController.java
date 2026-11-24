@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import top.aameow.erpnext.auth.CurrentUser;
 import top.aameow.erpnext.files.PrivateFileStorage;
+import top.aameow.erpnext.files.PhotoEncoding;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -366,7 +367,9 @@ public class ServiceWorkflowController {
         if(!batchIds.isEmpty()&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:photo:read")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权读取照片批次");
         int version=((Number)report.get("current_version_no")).intValue();
-        List<ReportDocxPhotoInserter.Photo> photos=new ArrayList<>();long totalPhotoBytes=0;
+        String photoQuality=Objects.toString(b.get("photoQuality"),"print");PhotoEncoding.dpi(photoQuality);
+        List<ReportDocxPhotoInserter.Photo> photos=new ArrayList<>();long totalPhotoBytes=0,embeddedBytes=0;
+        List<Map<String,Object>> photoEvidence=new ArrayList<>();
         for(Long batchId:batchIds){
             Map<String,Object> batch=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",batchId);
             if(!"reviewed".equals(batch.get("status"))&&!"locked".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"照片批次尚未通过审核");
@@ -378,12 +381,16 @@ public class ServiceWorkflowController {
                 if(!"confirmed".equals(photo.get("confirmation_status"))||photo.get("system_code")==null||photo.get("taken_on")==null)throw new ResponseStatusException(HttpStatus.CONFLICT,"存在未确认的照片");
                 var path=storage.resolve(photo.get("storage_key").toString());
                 long size=Files.size(path);
-                if(size!=((Number)photo.get("byte_size")).longValue()||size>25L*1024*1024||size<=0||totalPhotoBytes+size>180L*1024*1024||photos.size()>=300)
-                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"照片文件大小异常或本次超过 300 张/180MB，请分批生成");
+                if(size!=((Number)photo.get("byte_size")).longValue()||size>25L*1024*1024||size<=0||totalPhotoBytes+size>1024L*1024*1024||photos.size()>=500)
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"照片文件大小异常或本次超过500张/1GB原图");
                 byte[] data=Files.readAllBytes(path);
                 if(!sha(data).equals(photo.get("sha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"照片原件校验失败");
                 totalPhotoBytes+=size;
-                photos.add(new ReportDocxPhotoInserter.Photo(photo.get("system_code").toString(),data,photo.get("original_name").toString(),photo.get("taken_on").toString(),Objects.toString(photo.get("caption"),"")));
+                var copy=PhotoEncoding.report(data,photoQuality);embeddedBytes+=copy.bytes().length;
+                if(embeddedBytes>160L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"内嵌照片超过160MB，请减少照片或调整打印质量");
+                String name=photo.get("original_name").toString();
+                photos.add(new ReportDocxPhotoInserter.Photo(photo.get("system_code").toString(),copy.bytes(),name,photo.get("taken_on").toString(),Objects.toString(photo.get("caption"),"")));
+                Map<String,Object> evidence=new LinkedHashMap<>();evidence.put("photoId",photo.get("id"));evidence.put("fileId",photo.get("file_id"));evidence.put("sourceSha256",photo.get("sha256"));evidence.put("embeddedSha256",sha(copy.bytes()));evidence.put("sourceBytes",size);evidence.put("embeddedBytes",copy.bytes().length);evidence.put("sourcePixels",List.of(copy.sourceWidth(),copy.sourceHeight()));evidence.put("embeddedPixels",List.of(copy.width(),copy.height()));evidence.put("effectiveDpi",copy.effectiveDpi());evidence.put("orientation",copy.orientation());photoEvidence.add(evidence);
             }
         }
         byte[] templateBytes=plan.bytes();
@@ -393,7 +400,7 @@ public class ServiceWorkflowController {
         Map<String,Object> manifest=new LinkedHashMap<>();
         manifest.put("templateFileId",templateId);manifest.put("templateSha256",plan.sha256());manifest.put("templateRevisions",plan.revisions());
         manifest.put("reportVersionNo",version);manifest.put("batchIds",batchIds);manifest.put("photoMode",photoMode);
-        manifest.put("fillBody",fillBody);
+        manifest.put("fillBody",fillBody);manifest.put("photoQuality",photoQuality);manifest.put("sourcePhotoBytes",totalPhotoBytes);manifest.put("embeddedPhotoBytes",embeddedBytes);manifest.put("photos",photoEvidence);
         try(XWPFDocument doc=new XWPFDocument(new ByteArrayInputStream(templateBytes));java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
             if(fillBody){
                 var snapshot=bodySnapshot;
@@ -425,7 +432,7 @@ public class ServiceWorkflowController {
             jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
             for(Long batchId:batchIds)jdbc.update("UPDATE erp_report_photo_batch SET report_id=?,status='locked',locked_at=CURRENT_TIMESTAMP(3) WHERE id=?",id,batchId);
             audit(actor(a),"report.docx.generated","erp_service_report",id,"version="+version+",photos="+photos.size());
-            return Map.of("reportId",id,"versionNo",version,"artifactRevisionNo",artifactRevision,"fileId",fileId,"filename",filename,"sha256",stored.sha256(),"photoCount",photos.size(),"photoMode",photoMode,"bodyFilled",fillBody);
+            Map<String,Object> result=new LinkedHashMap<>();result.put("reportId",id);result.put("versionNo",version);result.put("artifactRevisionNo",artifactRevision);result.put("fileId",fileId);result.put("filename",filename);result.put("sha256",stored.sha256());result.put("photoCount",photos.size());result.put("photoMode",photoMode);result.put("bodyFilled",fillBody);result.put("fileBytes",stored.size());result.put("sourcePhotoBytes",totalPhotoBytes);result.put("embeddedPhotoBytes",embeddedBytes);result.put("lowDpiCount",photoEvidence.stream().filter(p->((Number)p.get("effectiveDpi")).intValue()<200).count());return result;
         } catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }
 

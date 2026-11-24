@@ -177,6 +177,7 @@ public class ReportDocxPhotoInserter {
         return false;
     }
     private static void ensureTwoCells(XWPFTableRow row) {
+        row.setCantSplitRow(true);
         while(row.getTableCells().size()<2) row.addNewTableCell();
     }
 
@@ -196,7 +197,7 @@ public class ReportDocxPhotoInserter {
             }
             if(imageWidth<=0||imageHeight<=0||(long)imageWidth*imageHeight>60000000L)throw new IllegalArgumentException("invalid image dimensions");
             int type=photo.bytes().length>3 && (photo.bytes()[0]&255)==255 ? Document.PICTURE_TYPE_JPEG : Document.PICTURE_TYPE_PNG;
-            double scale=Math.min(1.0,Math.min(245.0/imageWidth,160.0/imageHeight));
+            double scale=Math.min((81.0/25.4*72)/imageWidth,(108.0/25.4*72)/imageHeight);
             int width=Math.max(1,(int)Math.round(imageWidth*scale));
             int height=Math.max(1,(int)Math.round(imageHeight*scale));
             image.createRun().addPicture(new ByteArrayInputStream(photo.bytes()),type,photo.filename(),Units.toEMU(width),Units.toEMU(height));
