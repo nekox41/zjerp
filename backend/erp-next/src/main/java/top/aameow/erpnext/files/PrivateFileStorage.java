@@ -30,6 +30,7 @@ public class PrivateFileStorage {
         if(original.isBlank()) original="upload";
         if(original.length()>240) original=original.substring(original.length()-240);
         String key=UUID.randomUUID().toString();
+        Path written=null;
         try {
             byte[] signature;
             try(var in=file.getInputStream()){signature=in.readNBytes(8);}
@@ -47,12 +48,13 @@ public class PrivateFileStorage {
             if(!target.getParent().equals(root)) throw new IllegalStateException("Invalid storage key");
             MessageDigest digest=MessageDigest.getInstance("SHA-256");
             try(var in=file.getInputStream();var out=Files.newOutputStream(target,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)) {
+                written=target;
                 byte[] buf=new byte[8192]; int n;
                 while((n=in.read(buf))!=-1){digest.update(buf,0,n);out.write(buf,0,n);}
             }
             return new StoredFile(key,original,media,file.getSize(),HexFormat.of().formatHex(digest.digest()),target);
         } catch(ResponseStatusException e) { throw e; }
-        catch(Exception e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"文件保存失败",e); }
+        catch(Exception e) { if(written!=null)deleteQuietly(key);throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"文件保存失败",e); }
     }
     public StoredFile storeBytes(byte[] bytes,String filename,String mediaType) {
         if(bytes==null||bytes.length==0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"文件内容为空");
@@ -65,6 +67,7 @@ public class PrivateFileStorage {
         if(original.isBlank()) original="generated";
         if(original.length()>240) original=original.substring(original.length()-240);
         String key=UUID.randomUUID().toString();
+        Path written=null;
         try {
             byte[] signature=Arrays.copyOf(bytes,Math.min(bytes.length,8));
             boolean valid=switch(media) {
@@ -81,10 +84,12 @@ public class PrivateFileStorage {
             if(!target.getParent().equals(root)) throw new IllegalStateException("Invalid storage key");
             MessageDigest digest=MessageDigest.getInstance("SHA-256");
             digest.update(bytes);
-            Files.write(target,bytes,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);
+            try(var out=Files.newOutputStream(target,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){
+                written=target;out.write(bytes);
+            }
             return new StoredFile(key,original,media,bytes.length,HexFormat.of().formatHex(digest.digest()),target);
         } catch(ResponseStatusException e) { throw e; }
-        catch(Exception e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"文件保存失败",e); }
+        catch(Exception e) { if(written!=null)deleteQuietly(key);throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"文件保存失败",e); }
     }
     private boolean starts(byte[] b,int... values){if(b.length<values.length)return false;for(int i=0;i<values.length;i++)if((b[i]&255)!=values[i])return false;return true;}
     private boolean containsZero(byte[] b){for(byte x:b)if(x==0)return true;return false;}
@@ -92,10 +97,10 @@ public class PrivateFileStorage {
         try {
             UUID.fromString(key);
             Path p=root.resolve(key).normalize();
-            if(!p.getParent().equals(root)||!Files.isRegularFile(p)) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"文件不存在");
+            if(!p.getParent().equals(root)||!Files.isRegularFile(p,LinkOption.NOFOLLOW_LINKS)) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"文件不存在");
             return p;
         } catch(IllegalArgumentException e) { throw new ResponseStatusException(HttpStatus.NOT_FOUND,"文件不存在"); }
     }
-    public void deleteQuietly(String key) { try { Files.deleteIfExists(root.resolve(key).normalize()); } catch(IOException ignored) { } }
+    public void deleteQuietly(String key) { try { if(!UUID.fromString(key).toString().equals(key))return;Path p=root.resolve(key).normalize();if(p.getParent().equals(root))Files.deleteIfExists(p); } catch(IOException|IllegalArgumentException ignored) { } }
     public record StoredFile(String key,String originalName,String mediaType,long size,String sha256,Path path) {}
 }

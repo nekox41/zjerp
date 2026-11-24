@@ -146,6 +146,9 @@ GEN_BODY=$(python -c 'import json,sys; b=json.loads(sys.argv[1]); p=json.loads(s
 BAD_GEN=$(python -c 'import json,sys; b=json.loads(sys.argv[1]); b["bodyPlanSha256"]="bad"; print(json.dumps(b))' "$GEN_BODY")
 BAD_STATUS=$(curl -sS -o /tmp/erp-bad-plan.json -w '%{http_code}' -X POST "$DOCX_API/generate-docx" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$BAD_GEN")
 test "$BAD_STATUS" = "409"
+# A returned batch is editable again; preserve the reason, then resubmit.
+curl -fsS -X POST "http://127.0.0.1:8090/api/service-workflow/photo-batches/$PHOTO_BATCH_ID/return" -H "Authorization: Bearer $REVIEW_TOKEN" -H 'Content-Type: application/json' -d '{"reason":"CI 核查分类"}' | python -c 'import json,sys; b=json.load(sys.stdin); assert b["status"]=="collecting" and any(h["action"]=="report.photo_batch.returned" for h in b["reviewHistory"])'
+curl -fsS -X POST "http://127.0.0.1:8090/api/service-workflow/photo-batches/$PHOTO_BATCH_ID/submit" -H "Authorization: Bearer $TOKEN" | grep -q '"status":"submitted"'
 # Review the real persisted photo batch using a different qualified employee.
 curl -fsS -X POST "http://127.0.0.1:8090/api/service-workflow/photo-batches/$PHOTO_BATCH_ID/review" -H "Authorization: Bearer $REVIEW_TOKEN" | grep -q '"status":"reviewed"'
 GEN_BODY=$(python -c 'import json,sys; b=json.loads(sys.argv[1]); b["batchIds"]=[int(sys.argv[2])]; print(json.dumps(b))' "$GEN_BODY" "$PHOTO_BATCH_ID")
@@ -175,3 +178,19 @@ DELIVERY_ROW_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])'
 curl -fsS -X POST "http://127.0.0.1:8090/api/service-workflow/deliveries/$DELIVERY_ROW_ID/status" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"dispatched"}' | grep -q '"status":"dispatched"'
 curl -fsS -X POST "http://127.0.0.1:8090/api/service-workflow/deliveries/$DELIVERY_ROW_ID/status" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"delivered"}' | grep -q '"status":"delivered"'
 curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/deliveries" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert any(x["report_no"]=="CI-INSPECTION-PROFILE" and x["status"]=="delivered" and x["tracking_no"]=="CI-TRACKING" for x in json.load(sys.stdin)["rows"])'
+
+
+# V18: the exact issued DOCX is pinned, even after the report is revised.
+SELECTED_ARTIFACT=$(curl -fsS "$DOCX_API/deliveries" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; r=json.load(sys.stdin)[0]; assert r["artifact_id"] and r["version_no"]==3 and r["artifact_sha256"]; print(r["artifact_id"])')
+UNISSUED=$(curl -sS -o /tmp/erp-report-unissued-delivery.json -w '%{http_code}' -X POST "$DOCX_API/deliveries" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"versionNo":2,"recipientName":"CI","recipientAddress":"CI"}')
+test "$UNISSUED" = "409"
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/revise" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; r=json.load(sys.stdin); assert r["current_version_no"]==4 and r["status"]=="draft" and not r["attachments"]'
+curl -fsS "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/versions/3" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; r=json.load(sys.stdin); assert r["submitted_artifact_id"]==int(sys.argv[1]) and r["version_issued_at"] and r["title_snapshot"]=="CI 保留资料快照"' "$SELECTED_ARTIFACT"
+MISSING_DOCX=$(curl -sS -o /tmp/erp-report-missing-docx.json -w '%{http_code}' -X POST "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/submit" -H "Authorization: Bearer $TOKEN")
+test "$MISSING_DOCX" = "409"
+EDITED_UPLOAD=$(curl -fsS -X POST http://127.0.0.1:8090/api/files -H "Authorization: Bearer $TOKEN" -F 'file=@/tmp/erp-inspection-filled.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+EDITED_FILE=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$EDITED_UPLOAD")
+EDITED_ARTIFACT=$(curl -fsS -X POST "$DOCX_API/register-docx" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"expectedVersionNo\":4,\"fileId\":$EDITED_FILE,\"manualReviewed\":true}" | python -c 'import json,sys; print(json.load(sys.stdin)["artifactId"])')
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/submit" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"expectedVersionNo\":4,\"artifactId\":$EDITED_ARTIFACT}" | grep -q '"status":"submitted"'
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/withdraw" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"expectedVersionNo":4,"reason":"CI 撤回重新编制"}' | grep -q '"status":"withdrawn"'
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/reports/$BOUND_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"expectedVersionNo":4,"content":{"summary":"CI 再次编制","conclusion":"人工确认"}}' | python -c 'import json,sys; r=json.load(sys.stdin); assert r["status"]=="draft" and r["current_version_no"]==5 and not r["attachments"]'

@@ -66,7 +66,7 @@ public class FileController {
     public Map<String,Object> upload(@RequestPart("file") MultipartFile file,Authentication a){
         PrivateFileStorage.StoredFile stored=storage.store(file);
         org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){
-            @Override public void afterCompletion(int status){if(status!=STATUS_COMMITTED)storage.deleteQuietly(stored.key());}
+            @Override public void afterCompletion(int status){if(status==STATUS_ROLLED_BACK)storage.deleteQuietly(stored.key());}
         });
         try{
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",

@@ -96,7 +96,7 @@ public class MaintenanceDocumentController {
         if(no.matches("[0-9]{1,18}"))jdbc.update("UPDATE erp_maintenance_card_sequence SET last_number=? WHERE id=1",Math.max(last,Long.parseLong(no)));
         var stored=storage.storeBytes(pdf,"maintenance-card.pdf","application/pdf");
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){
-            @Override public void afterCompletion(int status){if(status!=STATUS_COMMITTED)storage.deleteQuietly(stored.key());}
+            @Override public void afterCompletion(int status){if(status==STATUS_ROLLED_BACK)storage.deleteQuietly(stored.key());}
         });
         jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",
             stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
@@ -139,7 +139,7 @@ public class MaintenanceDocumentController {
     public Map<String,Object> addMaterial(@RequestBody Map<String,Object>b,Authentication a){
         long file=number(b,"fileId");String name=field(b,"name",200,true);
         Map<String,Object> f=one("SELECT * FROM erp_file_object WHERE id=?",file);
-        if(((Number)f.get("uploaded_by")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能登记自己上传的文件");
+        if(!(f.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能登记自己上传的文件");
         if(!"application/pdf".equals(f.get("media_type")))throw bad("附带资料必须为 PDF");
         try(var pdf=Loader.loadPDF(storage.resolve(f.get("storage_key").toString()).toFile())){
             if(pdf.isEncrypted()||pdf.getNumberOfPages()<1||pdf.getNumberOfPages()>300)throw bad("仅支持未加密的 1 至 300 页 PDF");

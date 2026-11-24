@@ -83,7 +83,7 @@ python scripts/erp-next-legacy-import.py apply --archive /secure/erp-legacy-arch
 
 ## 本地验证入口
 
-`bash scripts/erp-next-local-verify.sh --smoke`（Linux/WSL，Docker Compose、Python、curl、flock）启动随机命名测试栈，校验 V1–V17 幂等执行，调用与手动 Actions 相同的 API Smoke。脚本检查 8089/8090 空闲、改写测试专用卷名，退出只清理测试栈，不使用生产 Compose 卷。
+`bash scripts/erp-next-local-verify.sh --smoke`（Linux/WSL，Docker Compose、Python、curl、flock）启动随机命名测试栈，校验 V1–V18 幂等执行，调用与手动 Actions 相同的 API Smoke。脚本检查 8089/8090 空闲、改写测试专用卷名，退出只清理测试栈，不使用生产 Compose 卷。
 
 `bash scripts/erp-next-local-verify.sh --build-only` 本地 Maven ERP Next verify + npm ci / 前端构建；`--full` 另执行旧版 Maven reactor 和隔离 Smoke。需已安装 JDK 17、Maven、Node 22 及依赖访问环境。此轮没有调用 Actions；这些命令由用户在完成第一版后手动执行。
 
