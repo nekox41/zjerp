@@ -10,6 +10,14 @@ NO_PROJECT_ACTIVE=$(curl -sS -o /tmp/erp-contract-no-project.json -w '%{http_cod
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"status":"active"}')
 test "$NO_PROJECT_ACTIVE" = "400"
+# Contract create cannot bypass the project relationship prerequisite.
+NO_PROJECT_CREATE=$(curl -sS -o /tmp/erp-active-create.json -w '%{http_code}' -X POST http://127.0.0.1:8090/api/business/contracts \
+ -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractNo\":\"CI-ACTIVE-CREATE\",\"title\":\"无项目生效\",\"customerId\":$CUSTOMER_ID,\"status\":\"active\"}")
+test "$NO_PROJECT_CREATE" = "400"
+BAD_DATES=$(curl -sS -o /tmp/erp-contract-dates.json -w '%{http_code}' -X PUT "http://127.0.0.1:8090/api/business/contracts/$UNLINKED_DRAFT_ID" \
+ -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"startsOn":"2028-01-01","endsOn":"2027-12-31"}')
+test "$BAD_DATES" = "400"
+
 
 PARTNER=$(curl -fsS -X POST http://127.0.0.1:8090/api/business/partners \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -135,3 +143,17 @@ curl -fsS -X POST "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID/fil
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"fileId\":$ATTACH_ID,\"fileType\":\"maintenance_card\",\"title\":\"CI 维保公示卡\"}" | grep -q 'maintenance_card'
 curl -fsS "http://127.0.0.1:8090/api/business/contracts/$CONTRACT_ID" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 维保公示卡'
+
+# Draft association can be corrected without deleting a project; active history is protected.
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/contracts/$UNLINKED_DRAFT_ID/projects" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectId\":$UNCOVERED_ID}" >/dev/null
+curl -fsS -X DELETE "http://127.0.0.1:8090/api/business/contracts/$UNLINKED_DRAFT_ID/projects/$UNCOVERED_ID" -H "Authorization: Bearer $TOKEN" >/dev/null
+ACTIVE_UNLINK=$(curl -sS -o /tmp/erp-active-unlink.json -w '%{http_code}' -X DELETE "http://127.0.0.1:8090/api/business/contracts/$RENEWAL_ID/projects/$UNCOVERED_ID" -H "Authorization: Bearer $TOKEN")
+test "$ACTIVE_UNLINK" = "409"
+# Unified customer history must include repairs, projects and maintenance visits.
+REPAIR=$(curl -fsS -X POST "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/repairs" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectId\":$UNCOVERED_ID,\"repairDate\":\"2026-11-23\",\"title\":\"CI 维修记录\",\"description\":\"现场维修登记\",\"resultSummary\":\"完成\",\"employeeIds\":[$EMP_ID,$TECH_ID]}")
+REPAIR_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REPAIR")
+curl -fsS -X PUT "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/repairs/$REPAIR_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectId\":$UNCOVERED_ID,\"repairDate\":\"2026-11-24\",\"title\":\"CI 维修记录已更新\",\"description\":\"现场维修登记\",\"resultSummary\":\"完成\",\"employeeIds\":[$TECH_ID]}" | grep -q 'CI 维修记录已更新'
+curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/repairs?limit=1" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; r=json.load(sys.stdin); assert len(r["rows"])==1; assert r["rows"][0]["title"]=="CI 维修记录已更新"; assert "技术负责人" in r["rows"][0]["staff_names"]'
+curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/maintenance" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 维护到场'
+curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/contracts" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-RENEWAL-001'
+curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/projects" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert any(x["id"]==int(sys.argv[1]) for x in json.load(sys.stdin)["rows"])' "$UNCOVERED_ID"
