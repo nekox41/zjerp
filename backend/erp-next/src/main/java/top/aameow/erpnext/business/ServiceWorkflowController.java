@@ -265,11 +265,34 @@ public class ServiceWorkflowController {
         }catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 模板无效或损坏",e);}
     }
 
+    @PostMapping("/reports/{id}/register-docx")
+    @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read') and hasAuthority('file:upload')") @Transactional(rollbackFor=Exception.class)
+    public Map<String,Object> registerDocx(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a)throws Exception{
+        var report=reportForGeneration(id,true);checkExpectedVersion(b,report,true);
+        if(!Boolean.TRUE.equals(b.get("manualReviewed")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请确认已人工核对 Word 正文、照片、报告结论和旧资料");
+        var f=templateForGeneration(Map.of("templateFileId",req(b,"fileId")),a);
+        long fileId=((Number)f.get("id")).longValue();
+        byte[] bytes=templateBytes(f);
+        try(var doc=new XWPFDocument(new ByteArrayInputStream(bytes))){
+            if(doc.getBodyElements().isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Word 正文为空");
+        }catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 文件无效",e);}
+        int version=((Number)report.get("current_version_no")).intValue();
+        if(jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_artifact WHERE file_id=?",Integer.class,fileId)>0)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"该文件已登记，请上传新的人工编辑文件");
+        int revision=jdbc.queryForObject("SELECT COALESCE(MAX(artifact_revision_no),0)+1 FROM erp_service_report_artifact WHERE report_id=? AND version_no=? AND artifact_type='docx'",Integer.class,id,version);
+        var manifest=Map.of("source","manual_docx","reportVersionNo",version,"sourceSha256",f.get("sha256"),"manualReviewed",true);
+        jdbc.update("INSERT INTO erp_service_report_artifact(report_id,version_no,file_id,artifact_type,artifact_revision_no,sha256,created_by,generation_manifest) VALUES(?,?,?,'docx',?,?,?,?)",id,version,fileId,revision,f.get("sha256"),actor(a),json(manifest));
+        long artifactId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        if(jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment WHERE report_id=? AND version_no=? AND file_id=?",Integer.class,id,version,fileId)==0)
+            jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
+        audit(actor(a),"report.docx.registered","erp_service_report",id,"version="+version+",artifact="+artifactId);
+        return Map.of("reportId",id,"versionNo",version,"artifactId",artifactId,"fileId",fileId,"filename",f.get("original_name"));
+    }
     @PostMapping("/reports/{id}/generate-docx") @PreAuthorize("hasAuthority('report:write')") @Transactional(rollbackFor=Exception.class)
     public Map<String,Object> generateDocx(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) throws Exception {
         var report=reportForGeneration(id,true);
         boolean fillBody=Boolean.TRUE.equals(b.get("fillBody"));
-        checkExpectedVersion(b,report,fillBody);
+        checkExpectedVersion(b,report,true);
         if(fillBody&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:read")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权读取报告资料");
         var template=templateForGeneration(b,a);
@@ -286,17 +309,23 @@ public class ServiceWorkflowController {
         if(!batchIds.isEmpty()&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:photo:read")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权读取照片批次");
         int version=((Number)report.get("current_version_no")).intValue();
-        List<ReportDocxPhotoInserter.Photo> photos=new ArrayList<>();
+        List<ReportDocxPhotoInserter.Photo> photos=new ArrayList<>();long totalPhotoBytes=0;
         for(Long batchId:batchIds){
             Map<String,Object> batch=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",batchId);
             if(!"reviewed".equals(batch.get("status"))&&!"locked".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"照片批次尚未通过审核");
             if("append".equals(photoMode)&&"locked".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"追加模式不能重复使用已生成过的照片批次；如需重做请选择替换模式，或以上一版 DOCX 作为模板追加新批次");
             if(batch.get("report_id")!=null&&((Number)batch.get("report_id")).longValue()!=id)throw new ResponseStatusException(HttpStatus.CONFLICT,"照片批次已关联其他报告");
             if(((Number)batch.get("work_package_id")).longValue()!=((Number)report.get("work_package_id")).longValue())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片批次与报告不属于同一服务工作包");
-            List<Map<String,Object>> rows=jdbc.queryForList("SELECT p.*,f.storage_key,f.original_name FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.batch_id=? ORDER BY p.system_code,p.sort_order,p.id",batchId);
+            List<Map<String,Object>> rows=jdbc.queryForList("SELECT p.*,f.storage_key,f.original_name,f.sha256,f.byte_size FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.batch_id=? ORDER BY p.system_code,p.sort_order,p.id",batchId);
             for(Map<String,Object> photo:rows){
                 if(!"confirmed".equals(photo.get("confirmation_status"))||photo.get("system_code")==null||photo.get("taken_on")==null)throw new ResponseStatusException(HttpStatus.CONFLICT,"存在未确认的照片");
-                byte[] data=Files.readAllBytes(storage.resolve(photo.get("storage_key").toString()));
+                var path=storage.resolve(photo.get("storage_key").toString());
+                long size=Files.size(path);
+                if(size!=((Number)photo.get("byte_size")).longValue()||size>25L*1024*1024||size<=0||totalPhotoBytes+size>180L*1024*1024||photos.size()>=300)
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"照片文件大小异常或本次超过 300 张/180MB，请分批生成");
+                byte[] data=Files.readAllBytes(path);
+                if(!sha(data).equals(photo.get("sha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"照片原件校验失败");
+                totalPhotoBytes+=size;
                 photos.add(new ReportDocxPhotoInserter.Photo(photo.get("system_code").toString(),data,photo.get("original_name").toString(),photo.get("taken_on").toString(),Objects.toString(photo.get("caption"),"")));
             }
         }
