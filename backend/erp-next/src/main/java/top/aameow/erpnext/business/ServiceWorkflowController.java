@@ -256,7 +256,8 @@ public class ServiceWorkflowController {
         checkExpectedVersion(b,report,true);
         var template=templateForGeneration(b,a);
         var snapshot=inspectionSnapshot(id,report);
-        try(var doc=new XWPFDocument(new ByteArrayInputStream(templateBytes(template)))){
+        byte[] prepared=InspectionDocxRepeatRows.prepare(templateBytes(template),snapshot.path("content"));
+        try(var doc=new XWPFDocument(new ByteArrayInputStream(prepared))){
             var result=binder.inspect(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),bindings(b));
             return Map.of("inspection",result,"planSha256",planHash(report,template,result),"templateSha256",template.get("sha256"),"versionNo",report.get("current_version_no"),"profileVersionNo",snapshot.path("versionNo").asInt());
         }catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 模板无效或损坏",e);}
@@ -293,6 +294,8 @@ public class ServiceWorkflowController {
             }
         }
         byte[] templateBytes=templateBytes(template);
+        var bodySnapshot=fillBody?inspectionSnapshot(id,report):null;
+        if(fillBody)templateBytes=InspectionDocxRepeatRows.prepare(templateBytes,bodySnapshot.path("content"));
         byte[] output;
         Map<String,Object> manifest=new LinkedHashMap<>();
         manifest.put("templateFileId",templateId);manifest.put("templateSha256",template.get("sha256"));
@@ -300,7 +303,7 @@ public class ServiceWorkflowController {
         manifest.put("fillBody",fillBody);
         try(XWPFDocument doc=new XWPFDocument(new ByteArrayInputStream(templateBytes));java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
             if(fillBody){
-                var snapshot=inspectionSnapshot(id,report);
+                var snapshot=bodySnapshot;
                 var mapping=bindings(b);
                 var inspection=binder.inspect(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),mapping);
                 if(!inspection.errors().isEmpty())throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,String.join("；",inspection.errors().stream().limit(8).toList()));

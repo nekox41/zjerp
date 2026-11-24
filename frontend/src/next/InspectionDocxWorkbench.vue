@@ -24,6 +24,30 @@ function applySuggestions(){
  bindings.value=[...bindings.value,...suggestions.filter(b=>!existing.has(b.target))]
  invalidate()
 }
+function exportMapping(){
+ if(!inspection.value)return
+ const payload={format:'erp-inspection-mapping-v1',templateSha256:inspection.value.templateSha256,bindings:bindings.value}
+ const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}))
+ const a=document.createElement('a');a.href=url;a.download='inspection-mapping.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+async function importMapping(event){
+ const file=event.target.files?.[0];event.target.value=''
+ if(!file||!inspection.value)return
+ error.value=''
+ try{
+  if(file.size>5*1024*1024)throw Error('映射文件超过 5MB')
+  const data=JSON.parse(await file.text())
+  if(data.format!=='erp-inspection-mapping-v1'||data.templateSha256!==inspection.value.templateSha256||!Array.isArray(data.bindings)||data.bindings.length>20000)throw Error('映射文件格式错误或模板 SHA256 不一致')
+  const targets=new Set()
+  const candidates=new Map(inspection.value.inspection.candidates.map(c=>[c.target,c.text]))
+  for(const b of data.bindings){
+   if(typeof b?.target!=='string'||typeof b.expectedText!=='string'||typeof b.field!=='string'||targets.has(b.target)||!candidates.has(b.target)||candidates.get(b.target)!==b.expectedText)throw Error('映射目标、原文或重复行结构不一致，请重新绑定')
+   targets.add(b.target)
+  }
+  bindings.value=data.bindings.map(b=>({target:b.target,expectedText:b.expectedText,field:b.field}))
+  invalidate();await inspect()
+ }catch(e){error.value=e.message}
+}
 function removeBinding(t){bindings.value=bindings.value.filter(b=>b.target!==t);invalidate()}
 async function inspect(){
  busy.value=true;error.value='';notice.value='';invalidate()
@@ -46,7 +70,7 @@ onMounted(inspect)
 </script>
 <template>
 <section class="binding-workbench">
- <h4>检测正文填充与预检</h4><p>可使用 Word 中的 <code v-text="'{{erp.general.projectName}}'"></code> 标记，或手动将实际正文段落绑定到资料字段。表格按真实单元格定位，不按网格列号猜测。多个楼栋/检测记录通过字段索引分别绑定。</p>
+ <h4>检测正文填充与预检</h4><p>可使用 Word 中的 <code v-text="'{{erp.general.projectName}}'"></code> 标记，或手动将实际正文段落绑定到资料字段。表格按真实单元格定位，不按网格列号猜测。多个楼栋/检测记录通过字段索引分别绑定；独立无纵向合并的模板行可使用 <code v-text="'{{erp.buildings.*.name}}'"></code> 或 <code v-text="'{{erp.records[消防给水系统].*.result}}'"></code> 自动展开。页眉页脚支持普通文字段落绑定，复杂域及签署位置仍不自动改写。</p>
  <p v-if="error" role="alert" class="binding-error">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>
  <template v-if="inspection">
  <div class="binding-summary"><b>报告 v{{inspection.versionNo}} · 资料 v{{inspection.profileVersionNo}}</b><span>可选段落 {{inspection.inspection.candidates.length}} · 待填充 {{inspection.inspection.changes.length}} · 未映射字段 {{inspection.inspection.unmappedFields.length}}</span></div>
@@ -57,6 +81,7 @@ onMounted(inspect)
  </div>
  <div class="binding-candidates"><button v-for="c in page" :key="c.target" type="button" :class="{picked:target===c.target}" @click="chooseCandidate(c)"><small>{{c.target}}</small><span>{{c.text||'（空白单元格）'}}</span></button></div>
  <div class="binding-actions"><button :disabled="candidatePage<=1" @click="candidatePage--">上一页</button><span>{{candidatePage}} / {{maxPages}} 页</span><button :disabled="candidatePage>=maxPages" @click="candidatePage++">下一页</button><button class="primary-button" :disabled="busy||!target||!field" @click="addBinding">绑定选中段落</button></div>
+ <div class="binding-actions"><button :disabled="busy||!bindings.length" @click="exportMapping">导出可复用映射 JSON</button><label>导入同一模板映射<input type="file" accept=".json,application/json" :disabled="busy" @change="importMapping"></label><small>映射包含模板原文，仅在公司内部保存；同一模板哈希和目标原文均须匹配，导入后重新预检。</small></div>
  <details open><summary>手动绑定（{{bindings.length}}）</summary><article v-for="b in bindings" :key="b.target" class="binding-row"><b>{{b.target}} → {{b.field}}</b><span>{{b.expectedText}}</span><button :disabled="busy" @click="removeBinding(b.target)">移除</button></article></details>
  <button class="secondary-button" :disabled="busy" @click="inspect">重新预检全部绑定</button>
  <p v-if="checkedPlan!==JSON.stringify(bindings)" class="binding-error">绑定已修改，须重新预检。</p>

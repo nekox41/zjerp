@@ -75,7 +75,7 @@ public class InspectionDocxBinder {
         if(node==null)return;
         if(node.isTextual()){
             String value=node.asText();
-            if(!value.isBlank())result.put(prefix,value);
+            result.put(prefix,value);
         }else if(node.isArray()){
             for(int i=0;i<node.size();i++)flatten(prefix+"."+i,node.get(i),result);
         }else if(node.isObject()){
@@ -149,9 +149,11 @@ public class InspectionDocxBinder {
         List<Target> targets=new ArrayList<>();
         walk(doc.getBodyElements(),"",targets,false);
         List<String> errors=new ArrayList<>();
-        // Header/footer fields require a separate reviewed mapping; never silently leave tokens behind.
-        doc.getHeaderList().forEach(h->{if(h.getText().contains("{{erp."))errors.add("页眉含 ERP 标记，当前只支持正文绑定");});
-        doc.getFooterList().forEach(f->{if(f.getText().contains("{{erp."))errors.add("页脚含 ERP 标记，当前只支持正文绑定");});
+        // Actual part ordering is stable for a particular template SHA256.
+        int part=0;
+        for(var h:doc.getHeaderList())walk(h.getBodyElements(),"H"+(++part)+"/",targets,false);
+        part=0;
+        for(var f:doc.getFooterList())walk(f.getBodyElements(),"F"+(++part)+"/",targets,false);
         Map<String,Binding> manual=new LinkedHashMap<>();
         if(bindings!=null){
             if(bindings.size()>MAX_TARGETS)throw bad("手动绑定过多");
