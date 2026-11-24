@@ -293,9 +293,11 @@ async function createReport() {
     await selectPackage(workPackage.value.id);await openReport(r.id);notice.value='报告草稿已创建'
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
+let reportRequest=0
 async function openReport(id) {
+  const generation=++reportRequest,packageId=workPackage.value?.id
   if(report.value?.id!==id){resetTemplateSelection();selectedBatches.value=[];if(can('report:read'))await loadLibrary()}
-  try{report.value=await api('/business/reports/'+id);const x=report.value.content||{};inspectionVersion.value=x.inspectionProfile?.versionNo||'';reportForm.value={reportNo:report.value.report_no,title:report.value.title,reportType:report.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''};syncReportSelection();deliveries.value=can('delivery:read')?await api('/service-workflow/reports/'+id+'/deliveries'):[]}
+  try{const next=await api('/business/reports/'+id);if(generation!==reportRequest||workPackage.value?.id!==packageId)return;report.value=next;const x=report.value.content||{};inspectionVersion.value=x.inspectionProfile?.versionNo||'';reportForm.value={reportNo:report.value.report_no,title:report.value.title,reportType:report.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''};syncReportSelection();const rows=can('delivery:read')?await api('/service-workflow/reports/'+id+'/deliveries'):[];if(generation===reportRequest&&report.value?.id===id)deliveries.value=rows}
   catch(e){error.value=e.message}
 }
 async function saveReport() {

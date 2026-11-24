@@ -45,14 +45,22 @@ V15 增加旧 ID→新 ID 映射与已提交迁移批次账本，为后续显式
 
 ## 核心业务隔离试迁移（M03/M05 初版）
 
-先完成离线档案验证并备份隔离新版数据库及私有文件卷（包括管理员初始化）。停止目标业务写入；只对可丢弃的独立试迁移 `erp_next` 操作。脚本不连接旧库，只使用已校验档案。
+先完成离线档案验证。使用下面的专用脚本建立随机命名、动态本机端口、独立 MySQL 数据卷和附件目录，自动初始化临时管理员并停止 API。普通部署数据库没有试迁移标识，导入工具将拒绝。脚本不连接旧库，只使用已校验档案。不要手工在生产库创建试迁移标识。
 
 ```bash
+bash scripts/erp-next-trial-provision.sh /secure/erp-trial-001
+# 读取专用目录 mysql-address、admin-id；不得使用生产密码。
+TRIAL=/secure/erp-trial-001
+set -a; source "$TRIAL/.env"; set +a
+PORT="$(cut -d: -f2 "$TRIAL/mysql-address")"
+ACTOR="$(cat "$TRIAL/admin-id")"
 python scripts/erp-next-legacy-import.py new-plan --archive /secure/erp-legacy-archive --plan /secure/review.json
-# 编辑 review.json，依据预检结果和真实业务资料填写各项明确映射。
-python scripts/erp-next-legacy-import.py preview --archive /secure/erp-legacy-archive --plan /secure/review.json --host 127.0.0.1 --user erp_next --actor 1 --files-root /path/to/isolated-private-files --isolated-trial
-# 确认输出的 planSha256 及计划，不得在生产目标运行。
-python scripts/erp-next-legacy-import.py apply --archive /secure/erp-legacy-archive --plan /secure/review.json --host 127.0.0.1 --user erp_next --actor 1 --files-root /path/to/isolated-private-files --isolated-trial --confirm-plan-sha256 <preview输出>
+# 人工核对并编辑 review.json。preview 会生成新凭据文件。
+python scripts/erp-next-legacy-import.py preview --archive /secure/erp-legacy-archive --plan /secure/review.json --host 127.0.0.1 --port "$PORT" --user erp_next --actor "$ACTOR" --files-root "$TRIAL/files" --isolated-trial --preview-receipt "$TRIAL/preview.json"
+# 核查输出、备份试迁移库及附件。确认完整计划哈希后才执行 apply。
+python scripts/erp-next-legacy-import.py apply --archive /secure/erp-legacy-archive --plan /secure/review.json --host 127.0.0.1 --port "$PORT" --user erp_next --actor "$ACTOR" --files-root "$TRIAL/files" --isolated-trial --preview-receipt "$TRIAL/preview.json" --confirm-plan-sha256 <preview输出>
+python scripts/erp-next-legacy-import.py reconcile --archive /secure/erp-legacy-archive --plan /secure/review.json --host 127.0.0.1 --port "$PORT" --user erp_next --actor "$ACTOR" --files-root "$TRIAL/files" --isolated-trial
+unset ERP_NEXT_DB_PASSWORD ERP_NEXT_DB_ROOT_PASSWORD ERP_BOOTSTRAP_TOKEN
 ```
 
 映射 JSON 各数组示例（以下 ID 仅演示字段，不代表真实数据；保留 new-plan 生成的 format/archiveSha256）：
@@ -90,3 +98,7 @@ python scripts/erp-next-legacy-import.py apply --archive /secure/erp-legacy-arch
 原始档案除类型化 JSONL 外增加 raw.jsonl：保留 MySQL raw cursor 返回的每列字节（base64，NULL 独立表示），与 DDL、类型化投影各自核对哈希和记录数，避免零日期等类型转换导致无声丢失。仍须保留 MySQL 标准备份以覆盖过程、触发器、事件、授权等非表对象。
 
 纯函数校验可单独执行 `python scripts/erp-next-legacy-unit-test.py`，不连接数据库、不访问网络。覆盖金额精度、路径安全、原始档案哈希/篡改检测与二进制保全。数据库迁移回归必须在独立试迁移库执行；本轮没有运行。
+
+### 最终试迁移保护
+
+试迁移专用库的标识与私有附件目录标识必须同时匹配 MySQL server_uuid；preview 凭据绑定档案、计划及试迁移目标，apply 重新验证且再次执行全部业务规则。凭据不是加密签名，也不证明管理员未在预览后更改目标，整个过程必须停止目标业务写入。reconcile 独立检查全部该来源映射的旧行哈希、目标存在性及目标附件大小/哈希；失败返回非零，仍需人工核对业务字段与关系。已映射原件被再次引用时也必须校验。普通生产库不运行试迁移工具；正式迁移切换须另行审核和恢复演练。保留原始档案、计划、凭据、批次账本、核对输出及试迁移前备份，禁止把试迁移标识/账号/密码直接作为正式部署凭据。清理只能针对 project-name 记录的专用 Compose 栈，先人工核对容器、卷和备份，不提供自动删除命令。

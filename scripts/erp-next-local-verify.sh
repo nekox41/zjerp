@@ -4,8 +4,16 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 mode="${1:---smoke}"
+# Validate scripts and offline migration helpers before starting any test service.
+command -v python >/dev/null
+for script in scripts/erp-next-*.sh; do bash -n "$script"; done
+python scripts/erp-next-legacy-unit-test.py
+if [[ "$mode" == "--static" ]]; then
+  echo "Shell syntax and offline migration tests passed (not a Java/frontend build)."
+  exit 0
+fi
 if [[ "$mode" != "--smoke" && "$mode" != "--build-only" && "$mode" != "--full" ]]; then
-  echo "Usage: bash scripts/erp-next-local-verify.sh [--smoke|--build-only|--full]" >&2
+  echo "Usage: bash scripts/erp-next-local-verify.sh [--static|--smoke|--build-only|--full]" >&2
   exit 2
 fi
 if [[ "$mode" != "--smoke" ]]; then
@@ -59,6 +67,7 @@ for original in ("erp_next_mysql_data","erp_next_private_files"):
 s=s.replace('"${ERP_NEXT_WEB_PORT:-8089}:80"','"127.0.0.1:${ERP_NEXT_WEB_PORT:-8089}:80"')
 Path(sys.argv[1]).write_text(s)
 PY
+unset COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES
 export ERP_NEXT_DB_ROOT_PASSWORD="$(python -c 'import secrets; print(secrets.token_hex(24))')"
 export ERP_NEXT_DB_PASSWORD="$(python -c 'import secrets; print(secrets.token_hex(24))')"
 export ERP_BOOTSTRAP_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"

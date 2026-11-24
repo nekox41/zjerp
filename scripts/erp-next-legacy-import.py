@@ -112,7 +112,13 @@ def source_index(root,manifest):
     return data
 
 def read_plan(path,archive_hash):
-    p=json.loads(Path(path).read_text(encoding="utf-8"))
+    def unique_pairs(pairs):
+        result={}
+        for k,v in pairs:
+            if k in result:raise ValueError("Duplicate JSON key in reviewed plan: "+k)
+            result[k]=v
+        return result
+    p=json.loads(Path(path).read_text(encoding="utf-8"),object_pairs_hook=unique_pairs)
     if p.get("format")!="erp-legacy-review-v1" or p.get("archiveSha256")!=archive_hash:
         raise ValueError("Review plan does not refer to this verified archive")
     if set(p)-{"format","archiveSha256","note",*SECTIONS}:

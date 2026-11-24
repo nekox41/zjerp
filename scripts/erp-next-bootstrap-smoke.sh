@@ -46,6 +46,7 @@ curl -fsS "http://127.0.0.1:8090/api/business/projects/$PROJECT_ID/members" -H "
 source scripts/erp-next-service-smoke.sh
 source scripts/erp-next-partner-maintenance-smoke.sh
 source scripts/erp-next-report-smoke.sh
+source scripts/erp-next-inspection-library-smoke.sh
 source scripts/erp-next-expense-smoke.sh
 source scripts/erp-next-invoice-smoke.sh
 source scripts/erp-next-dashboard-smoke.sh
