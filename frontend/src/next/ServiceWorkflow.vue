@@ -24,6 +24,38 @@ const reportForm = ref({reportNo:'',title:'',reportType:'inspection',summary:'',
 const deliveryForm = ref({deliveryMethod:'courier',recipientName:'',recipientPhone:'',recipientOrganization:'',recipientAddress:'',courierName:'',trackingNo:'',notes:''})
 const previewUrls = ref({})
 const photoDrafts = ref({})
+const photoFilter=ref('all'),photoSelection=ref([]),bulkSystem=ref(''),bulkConfirm=ref(false),focusedPhoto=ref(null)
+const photoEditable=computed(()=>batch.value?.status==='collecting'&&can('report:photo:write'))
+const photoRows=computed(()=>batch.value?.photos||[])
+const photoGroups=computed(()=>[
+  {key:'all',name:'全部',count:photoRows.value.length},
+  {key:'unclassified',name:'未分类',count:photoRows.value.filter(p=>!p.system_code).length},
+  {key:'pending',name:'待确认',count:photoRows.value.filter(p=>p.confirmation_status!=='confirmed').length},
+  ...systems.value.map(s=>({key:s,name:s,count:photoRows.value.filter(p=>p.system_code===s).length})).filter(g=>g.count)
+])
+const visiblePhotos=computed(()=>photoRows.value.filter(p=>photoFilter.value==='all'||(photoFilter.value==='unclassified'?!p.system_code:photoFilter.value==='pending'?p.confirmation_status!=='confirmed':p.system_code===photoFilter.value)))
+function selectFilter(key){photoFilter.value=key;photoSelection.value=[];bulkConfirm.value=false}
+function selectVisible(){photoSelection.value=visiblePhotos.value.map(p=>p.id);bulkConfirm.value=false}
+function resetPhotoSelection(){photoSelection.value=[];bulkSystem.value='';bulkConfirm.value=false;focusedPhoto.value=null}
+function draft(p){return {systemCode:p.system_code||'',takenOn:p.taken_on||'',caption:p.caption||'',confirmed:p.confirmation_status==='confirmed',sortOrder:p.sort_order}}
+function dirty(p){return JSON.stringify(photoDrafts.value[p.id])!==JSON.stringify(draft(p))}
+async function applyClassification(){
+  if(busy.value||!photoEditable.value||!photoSelection.value.length)return
+  const ids=[...photoSelection.value],id=batch.value.id
+  if(photoRows.value.some(p=>ids.includes(p.id)&&dirty(p))&&!confirm('所选照片有未保存的单张编辑。批量操作将以已保存记录为准，继续？'))return
+  if(bulkConfirm.value&&!confirm('确认已人工核对所选全部照片的系统与已保存日期？'))return
+  busy.value=true;error.value=''
+  try{
+    const result=await api('/service-workflow/photo-batches/'+id+'/classification',{method:'PUT',body:JSON.stringify({photoIds:ids,systemCode:bulkSystem.value||null,confirmed:bulkConfirm.value})})
+    if(batch.value?.id!==id)return
+    batch.value=result
+    for(const p of result.photos)if(ids.includes(p.id))photoDrafts.value[p.id]=draft(p)
+    resetPhotoSelection();notice.value='已保存 '+ids.length+' 张照片的分类'
+  }catch(e){error.value=e.message}finally{busy.value=false}
+}
+let previewGeneration=0
+function releasePreviews(){previewGeneration++;Object.values(previewUrls.value).forEach(URL.revokeObjectURL);previewUrls.value={}}
+function closeBatch(){releasePreviews();batch.value=null;photoDrafts.value={};selectFilter('all');resetPhotoSelection()}
 const batchReviewReason = ref('')
 const visitIssueSelection = ref({})
 
@@ -42,7 +74,7 @@ async function load() {
 }
 async function selectProject(id) {
   error.value=''; project.value=projects.value.find(x=>x.id===id)||null
-  workPackage.value=null; batch.value=null; report.value=null
+  workPackage.value=null; closeBatch(); report.value=null
   packages.value=[];visits.value=[];batches.value=[];reports.value=[];issues.value=[];deliveries.value=[];selectedBatches.value=[];templateFile.value=null
   if(!project.value)return
   try { packages.value=await api('/service-workflow/projects/'+id+'/work-packages') }
@@ -50,7 +82,7 @@ async function selectProject(id) {
 }
 async function selectPackage(id) {
   workPackage.value=packages.value.find(x=>x.id===id)||null
-  batch.value=null; report.value=null; selectedBatches.value=[]
+  closeBatch(); report.value=null; selectedBatches.value=[]
   if(!id)return
   try {
     const [v,b,r,i]=await Promise.all([
@@ -101,22 +133,34 @@ async function createBatch() {
 }
 async function openBatch(id) {
   try {
-    batch.value=await api('/service-workflow/photo-batches/'+id)
-    for(const photo of batch.value.photos){
-      photoDrafts.value[photo.id]={systemCode:photo.system_code||'',takenOn:photo.taken_on||batch.value.visit_date,caption:photo.caption||'',confirmed:photo.confirmation_status==='confirmed',sortOrder:photo.sort_order}
-      if(!previewUrls.value[photo.file_id]) await loadPreview(photo.file_id)
+    if(batch.value?.id!==id)closeBatch()
+    const generation=++previewGeneration
+    const result=await api('/service-workflow/photo-batches/'+id)
+    if(generation!==previewGeneration)return
+    batch.value=result;photoDrafts.value=Object.fromEntries(result.photos.map(p=>[p.id,draft(p)]))
+    photoSelection.value=photoSelection.value.filter(id=>result.photos.some(p=>p.id===id))
+    if(can('file:read')){
+      const pending=result.photos.filter(p=>!previewUrls.value[p.file_id])
+      // Four concurrent downloads, independent failure, stop when changing batches.
+      await Promise.all(Array.from({length:Math.min(4,pending.length)},async ()=>{
+        while(pending.length&&generation===previewGeneration){
+          const p=pending.shift()
+          try{await loadPreview(p.file_id,generation)}catch(e){if(generation===previewGeneration)error.value='部分照片预览加载失败，可刷新重试'}
+        }
+      }))
     }
   }catch(e){error.value=e.message}
 }
-async function loadPreview(fileId) {
+async function loadPreview(fileId,generation=previewGeneration) {
   const token=sessionStorage.getItem('erp-next-token')
   const response=await fetch((import.meta.env.VITE_NEXT_API_BASE||'/next-api')+'/files/'+fileId+'/download',{headers:token?{Authorization:'Bearer '+token}:{}})
   if(!response.ok)throw new Error('照片预览加载失败')
-  previewUrls.value[fileId]=URL.createObjectURL(await response.blob())
+  const blob=await response.blob()
+  if(generation===previewGeneration&&!previewUrls.value[fileId])previewUrls.value[fileId]=URL.createObjectURL(blob)
 }
 async function importPhotos(event) {
   const files=Array.from(event.target.files||[]);event.target.value=''
-  if(!batch.value||batch.value.status!=='collecting')return
+  if(!photoEditable.value||busy.value)return
   busy.value=true;error.value='';let added=0
   try{
     for(const file of files){
@@ -124,10 +168,10 @@ async function importPhotos(event) {
       const form=new FormData();form.append('file',file)
       const uploaded=await api('/files',{method:'POST',body:form})
       await api('/service-workflow/photo-batches/'+batch.value.id+'/photos',{method:'POST',body:JSON.stringify({fileId:uploaded.id,takenOn:batch.value.visit_date})})
-      await loadPreview(uploaded.id);added++
+      added++
     }
     const batchId=batch.value.id;await selectPackage(workPackage.value.id);await openBatch(batchId)
-    notice.value='已导入 '+added+' 张照片；请逐张确认系统分类和拍摄日期'
+    notice.value='已导入 '+added+' 张照片；可多选批量分类，日期需人工核对'
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function savePhoto(photo) {
@@ -217,7 +261,7 @@ onMounted(async ()=>{
     if(packages.value.length===1)await selectPackage(packages.value[0].id)
   }
 })
-onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL))
+onBeforeUnmount(releasePreviews)
 </script>
 
 <template>
@@ -271,7 +315,7 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
     <div v-if="tab==='photos'" class="sw-panel">
       <div class="sw-panel-title"><h3>现场照片批次</h3><span>{{ batches.length }} 批</span></div>
       <div v-if="!batch" class="sw-two">
-        <form class="sw-form" @submit.prevent="createBatch">
+        <form v-if="can('report:photo:write')" class="sw-form" @submit.prevent="createBatch">
           <label>批次名称<input v-model="batchForm.title" required></label><label>现场日期<input v-model="batchForm.visitDate" type="date" required></label>
           <label class="wide">关联现场服务<select v-model="batchForm.visitId"><option value="">不关联特定到场记录</option><option v-for="v in visits" :key="v.id" :value="v.id">{{ v.visit_date }} · {{ v.title }}</option></select></label>
           <button class="primary">创建照片批次</button>
@@ -282,31 +326,41 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
         </div>
       </div>
       <div v-else class="sw-batch-view">
-        <div class="sw-panel-title"><div><button class="back" @click="batch=null">← 批次列表</button><h3>{{ batch.title }}</h3><small>{{ batch.visit_date }} · {{ batch.photos.length }} 张照片</small></div><span class="sw-pill">{{ batchLabel(batch.status) }}</span></div>
-        <div v-if="batch.status==='collecting'" class="sw-upload-row"><label class="primary">＋ 批量导入照片<input type="file" hidden multiple accept="image/jpeg,image/png" @change="importPhotos"></label><button @click="photoView=photoView==='cards'?'table':'cards'">{{photoView==='cards'?'表格视图':'卡片视图'}}</button><small>支持 JPG / PNG，导入后需人工确认一级系统分类和拍摄日期。</small></div>
+        <div class="sw-panel-title"><div><button class="back" @click="closeBatch">← 批次列表</button><h3>{{ batch.title }}</h3><small>{{ batch.visit_date }} · {{ batch.photos.length }} 张照片</small></div><span class="sw-pill">{{ batchLabel(batch.status) }}</span></div>
+        <div class="sw-upload-row"><label v-if="photoEditable&&can('file:upload')" class="primary">＋ 批量导入照片<input type="file" hidden multiple accept="image/jpeg,image/png" :disabled="busy" @change="importPhotos"></label><button @click="photoView=photoView==='cards'?'table':'cards'">{{photoView==='cards'?'表格视图':'卡片视图'}}</button><small>支持 JPG / PNG；分类及拍摄日期需要人工核对。</small></div>
+        <div class="photo-filters"><button v-for="g in photoGroups" :key="g.key" :class="{active:photoFilter===g.key}" @click="selectFilter(g.key)">{{g.name}} · {{g.count}}</button></div>
+        <div v-if="photoEditable" class="sw-upload-row">
+          <button :disabled="busy||!visiblePhotos.length" @click="selectVisible">全选当前 {{visiblePhotos.length}} 张</button><button :disabled="busy" @click="resetPhotoSelection">取消选择</button><b>已选 {{photoSelection.length}} 张</b>
+          <select v-model="bulkSystem" :disabled="busy" @change="bulkConfirm=false"><option value="">设为未分类</option><option v-for="s in systems" :key="s">{{s}}</option></select>
+          <label><input v-model="bulkConfirm" type="checkbox" :disabled="busy||!bulkSystem"> 已核对所选照片分类和日期</label>
+          <button class="primary" :disabled="busy||!photoSelection.length" @click="applyClassification">批量保存分类</button>
+        </div>
+        <p v-if="!visiblePhotos.length" class="sw-empty small">当前分组暂无照片</p>
         <div v-if="photoView==='cards'" class="sw-photo-grid">
-          <article v-for="p in batch.photos" :key="p.id" class="sw-photo-card">
-            <img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name"><div v-else class="sw-photo-placeholder">加载预览…</div>
+          <article v-for="p in visiblePhotos" :key="p.id" class="sw-photo-card" :class="{picked:photoSelection.includes(p.id)}">
+            <label v-if="photoEditable" class="photo-select"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" aria-label="选择照片"> 选择</label>
+            <img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusedPhoto=p"><div v-else class="sw-photo-placeholder">{{can('file:read')?'加载预览…':'无文件查看权限'}}</div>
             <div class="sw-photo-meta"><b :title="p.original_name">{{ p.original_name }}</b>
-              <template v-if="batch.status==='collecting'">
+              <template v-if="photoEditable">
                 <label>所属系统<select v-model="photoDrafts[p.id].systemCode"><option value="">请选择一级系统</option><option v-for="s in systems" :key="s" :value="s">{{ s }}</option></select></label>
                 <label>拍摄日期<input v-model="photoDrafts[p.id].takenOn" type="date"></label>
                 <label>照片说明<input v-model="photoDrafts[p.id].caption" placeholder="可选"></label>
                 <label class="confirm"><input v-model="photoDrafts[p.id].confirmed" type="checkbox"> 已人工核对</label>
-                <div class="sw-row-actions"><button @click="movePhoto(p,-1)">↑</button><button @click="movePhoto(p,1)">↓</button><button @click="savePhoto(p)">保存</button><button class="danger" @click="removePhoto(p)">移除</button></div>
+                <div class="sw-row-actions"><button  :disabled="busy" @click="movePhoto(p,-1)">↑</button><button  :disabled="busy" @click="movePhoto(p,1)">↓</button><button  :disabled="busy" @click="savePhoto(p)">保存</button><button class="danger"  :disabled="busy" @click="removePhoto(p)">移除</button></div>
               </template>
               <template v-else><small>{{ p.system_code||'未分类' }} · {{ p.taken_on||'无日期' }}</small><small>{{ p.confirmation_status==='confirmed'?'人工已确认':'未确认' }}</small></template>
             </div>
           </article>
         </div>
-        <div v-else class="sw-photo-table-wrap"><table class="sw-photo-table"><thead><tr><th>预览</th><th>文件名</th><th>一级系统</th><th>拍摄日期</th><th>人工确认</th><th>操作</th></tr></thead><tbody>
-          <tr v-for="p in batch.photos" :key="p.id"><td><img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name"></td><td>{{p.original_name}}</td>
-          <td v-if="batch.status==='collecting'"><select v-model="photoDrafts[p.id].systemCode"><option value="">未分类</option><option v-for="x in systems" :key="x" :value="x">{{x}}</option></select></td><td v-else>{{p.system_code||'未分类'}}</td>
-          <td v-if="batch.status==='collecting'"><input v-model="photoDrafts[p.id].takenOn" type="date"></td><td v-else>{{p.taken_on||'—'}}</td>
-          <td v-if="batch.status==='collecting'"><input v-model="photoDrafts[p.id].confirmed" type="checkbox"></td><td v-else>{{p.confirmation_status==='confirmed'?'已确认':'未确认'}}</td>
-          <td v-if="batch.status==='collecting'"><button @click="movePhoto(p,-1)">↑</button> <button @click="movePhoto(p,1)">↓</button> <button @click="savePhoto(p)">保存</button> <button @click="removePhoto(p)">移除</button></td><td v-else>—</td></tr>
+        <div v-else class="sw-photo-table-wrap"><table class="sw-photo-table"><thead><tr><th v-if="photoEditable">选择</th><th>预览</th><th>文件名</th><th>一级系统</th><th>拍摄日期</th><th>人工确认</th><th>操作</th></tr></thead><tbody>
+          <tr v-for="p in visiblePhotos" :key="p.id"><td v-if="photoEditable"><input type="checkbox" v-model="photoSelection" :value="p.id" :disabled="busy" aria-label="选择照片"></td><td><img v-if="previewUrls[p.file_id]" :src="previewUrls[p.file_id]" :alt="p.original_name" loading="lazy" class="photo-zoom" @click="focusedPhoto=p"></td><td>{{p.original_name}}</td>
+          <td v-if="photoEditable"><select v-model="photoDrafts[p.id].systemCode"><option value="">未分类</option><option v-for="x in systems" :key="x" :value="x">{{x}}</option></select></td><td v-else>{{p.system_code||'未分类'}}</td>
+          <td v-if="photoEditable"><input v-model="photoDrafts[p.id].takenOn" type="date"></td><td v-else>{{p.taken_on||'—'}}</td>
+          <td v-if="photoEditable"><input v-model="photoDrafts[p.id].confirmed" type="checkbox"></td><td v-else>{{p.confirmation_status==='confirmed'?'已确认':'未确认'}}</td>
+          <td v-if="photoEditable"><button  :disabled="busy" @click="movePhoto(p,-1)">↑</button> <button  :disabled="busy" @click="movePhoto(p,1)">↓</button> <button  :disabled="busy" @click="savePhoto(p)">保存</button> <button  :disabled="busy" @click="removePhoto(p)">移除</button></td><td v-else>—</td></tr>
         </tbody></table></div>
-        <div v-if="batch.status==='collecting'" class="sw-bottom-actions"><button class="primary" @click="submitBatch">提交照片审核</button><small>所有照片必须完成分类、日期和人工确认。</small></div>
+        <div v-if="focusedPhoto" class="photo-lightbox" role="dialog" aria-modal="true" aria-label="照片预览" @click.self="focusedPhoto=null" @keydown.esc="focusedPhoto=null"><div><button autofocus @click="focusedPhoto=null">关闭预览</button><p>{{focusedPhoto.original_name}} · {{focusedPhoto.system_code||'未分类'}}</p><img :src="previewUrls[focusedPhoto.file_id]" :alt="focusedPhoto.original_name"></div></div>
+        <div v-if="photoEditable" class="sw-bottom-actions"><button class="primary" :disabled="busy||photoRows.some(dirty)" @click="submitBatch">提交照片审核</button><small>所有照片必须完成分类、日期和人工确认。</small></div>
         <div v-if="batch.status==='submitted'&&can('report:review')&&Number(batch.created_by)!==props.userId" class="sw-bottom-actions"><button class="primary" @click="reviewBatch">审核通过照片批次</button></div>
       </div>
     </div>
@@ -360,4 +414,5 @@ onBeforeUnmount(()=>Object.values(previewUrls.value).forEach(URL.revokeObjectURL
 
 <style scoped>
 .service-workflow{display:grid;gap:16px;color:#24344b}.sw-head{display:flex;justify-content:space-between;align-items:flex-start}.sw-head h2{margin:4px 0;font-size:23px}.sw-head p{margin:0;color:#7b899b;font-size:12px}.sw-kicker{font-size:10px;letter-spacing:.14em;color:#5579bb;font-weight:700}.sw-head button,.sw-tabs button,.sw-list button,.sw-bottom-actions button,.sw-row-actions button,.sw-issue-actions button,.back{border:1px solid #dfe6ef;background:#fff;color:#52647b;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer}.sw-selects{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:15px;background:#fff;border:1px solid #e6ebf2;border-radius:12px}.sw-selects label,.sw-form label{display:grid;gap:6px;color:#64748b;font-size:11px}.sw-selects select,.sw-form input,.sw-form select,.sw-form textarea,.sw-photo-meta select,.sw-photo-meta input{width:100%;min-width:0;border:1px solid #dfe6ef;border-radius:8px;padding:9px;background:#fff;color:#34465e;font:inherit;font-size:12px}.sw-form select[multiple]{min-height:76px}.sw-tabs{display:flex;gap:8px;border-bottom:1px solid #e6ebf2;padding-bottom:10px}.sw-tabs button.active{background:#edf3ff;border-color:#c8d7fa;color:#315bb3}.sw-panel{background:#fff;border:1px solid #e6ebf2;border-radius:13px;padding:18px;display:grid;gap:16px}.sw-panel-title{display:flex;justify-content:space-between;align-items:center;gap:12px}.sw-panel-title h3{font-size:16px;margin:4px 0;color:#293d59}.sw-panel-title span,.sw-panel-title small{font-size:11px;color:#8290a3}.sw-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.sw-form .wide{grid-column:1/-1}.sw-form .primary,.primary{background:#315fca;color:#fff;border:1px solid #315fca;border-radius:8px;padding:10px 14px;font-size:12px;cursor:pointer}.sw-list{display:grid;gap:8px}.sw-list article{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:12px;border:1px solid #edf0f5;border-radius:10px}.sw-list article>div:first-child{display:grid;gap:4px;min-width:0}.sw-list b{font-size:12px}.sw-list small,.sw-list p{font-size:11px;color:#8290a3;margin:0;overflow-wrap:anywhere}.sw-list article>div:last-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sw-pill{white-space:nowrap;background:#f0f4fa;color:#5e6f86;border-radius:20px;padding:5px 9px;font-size:10px}.sw-issue-actions{display:grid;justify-items:end;gap:6px}.sw-resolution{color:#367c58!important}.sw-two{display:grid;grid-template-columns:minmax(260px,.9fr) minmax(0,1.1fr);gap:18px}.sw-empty{padding:35px 15px;text-align:center;border:1px dashed #d6deea;border-radius:10px;color:#8290a3;font-size:12px}.sw-empty.small{padding:18px}.sw-msg{padding:10px 13px;border-radius:8px;font-size:12px}.sw-msg.error{background:#fff0ed;color:#a33}.sw-msg.success{background:#eaf7ef;color:#287449}.sw-upload-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.sw-upload{display:inline-flex;align-items:center;background:#315fca;color:#fff;border-radius:8px;padding:10px 14px;font-size:12px;cursor:pointer}.sw-upload-row small,.sw-bottom-actions small{font-size:11px;color:#8290a3}.sw-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px}.sw-photo-card{border:1px solid #e4eaf2;border-radius:10px;overflow:hidden;background:#fff}.sw-photo-table-wrap{overflow:auto;border:1px solid #e6ebf2;border-radius:10px}.sw-photo-table{width:100%;border-collapse:collapse;background:#fff}.sw-photo-table th,.sw-photo-table td{padding:8px;border-bottom:1px solid #edf0f5;text-align:left;font-size:11px;white-space:nowrap}.sw-photo-table img{width:88px;height:62px;object-fit:contain;background:#f1f4f8}.sw-photo-table select,.sw-photo-table input:not([type=checkbox]){border:1px solid #dfe6ef;border-radius:6px;padding:6px;font:inherit;font-size:11px;max-width:210px}.sw-photo-table button{border:1px solid #dfe6ef;background:#fff;border-radius:6px;padding:6px 8px;font-size:10px;color:#56677d}.sw-photo-card>img,.sw-photo-placeholder{width:100%;height:150px;object-fit:contain;background:#f1f4f8}.sw-photo-placeholder{display:grid;place-items:center;color:#8794a6;font-size:12px}.sw-photo-meta{display:grid;gap:8px;padding:10px}.sw-photo-meta b{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sw-photo-meta label{display:grid;gap:4px;color:#7c899a;font-size:10px}.sw-photo-meta .confirm{display:flex;align-items:center;gap:6px}.sw-photo-meta .confirm input{width:auto}.sw-row-actions{display:flex;justify-content:space-between}.sw-row-actions .danger,.sw-bottom-actions .danger{color:#b54e4e}.sw-bottom-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.sw-docx{display:grid;gap:12px;padding:16px;border:1px solid #e3eaf4;border-radius:10px;background:#f9fbfe}.sw-docx h4,.sw-history h4{font-size:13px;margin:0;color:#405675}.sw-batch-checks{display:flex;gap:12px;flex-wrap:wrap}.sw-batch-checks label{font-size:11px;color:#607189}.sw-mode{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:#607189}.sw-mode input{margin-top:2px}.sw-disclaimer{font-size:11px;line-height:1.7;color:#987044;background:#fff8ed;border:1px solid #f1e1c8;padding:9px 11px;border-radius:8px}.sw-visit-links{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.sw-visit-links select{max-width:210px;border:1px solid #dfe6ef;border-radius:7px;padding:6px;font-size:11px;color:#56677d}.sw-visit-links button:disabled{opacity:.45;cursor:not-allowed}.sw-history{display:grid;gap:8px;padding:14px;border-top:1px solid #edf0f5;font-size:11px;color:#7b899a}.sw-history h4{margin-top:8px}.back{padding:4px 8px;margin-bottom:6px}@media(max-width:800px){.sw-two{grid-template-columns:1fr}.sw-selects{grid-template-columns:1fr}}@media(max-width:560px){.sw-form{grid-template-columns:1fr}.sw-form .wide{grid-column:auto}.sw-list article{align-items:flex-start;flex-direction:column}.sw-issue-actions{display:flex;justify-items:start}}
+.photo-filters{display:flex;flex-wrap:wrap;gap:6px}.photo-filters button{background:#fff;border:1px solid #dfe6ef;border-radius:7px;padding:7px 10px;font-size:12px}.photo-filters button.active{background:#ecf2ff;border-color:#86a3e8;color:#315fca}.sw-photo-card.picked{outline:2px solid #5680cf}.photo-select{display:flex;align-items:center;gap:5px;padding:7px;font-size:12px}.photo-zoom{cursor:zoom-in}.photo-lightbox{position:fixed;inset:0;z-index:100;background:#152033d9;display:grid;place-items:center;padding:20px}.photo-lightbox>div{background:white;padding:14px;border-radius:10px;max-width:95vw;max-height:95vh}.photo-lightbox img{display:block;max-width:90vw;max-height:75vh;object-fit:contain}
 </style>

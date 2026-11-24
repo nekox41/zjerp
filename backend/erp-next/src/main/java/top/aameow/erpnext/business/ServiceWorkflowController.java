@@ -135,16 +135,45 @@ public class ServiceWorkflowController {
         audit(actor(a),"report.photo.added","erp_report_photo",photoId,"batch="+id);
         return one("SELECT p.*,f.original_name,f.media_type,f.byte_size file_size FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.id=?",photoId);
     }
+    // One transaction, one batch lock, and no implicit confirmation after changing a system.
+    public record BatchClassification(List<Long> photoIds,String systemCode,Boolean confirmed){}
+    @PutMapping("/photo-batches/{id}/classification")
+    @PreAuthorize("hasAuthority('report:photo:write')") @Transactional
+    public Map<String,Object> classifyPhotos(@PathVariable long id,@RequestBody BatchClassification b,Authentication a){
+        Map<String,Object> batch=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",id);
+        if(!"collecting".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前批次已提交，照片不可修改");
+        if(b.photoIds()==null||b.photoIds().isEmpty()||b.photoIds().size()>300||b.photoIds().stream().anyMatch(x->x==null||x<=0)||new HashSet<>(b.photoIds()).size()!=b.photoIds().size())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择 1 至 300 张不重复的照片");
+        String system=b.systemCode()==null||b.systemCode().isBlank()?null:b.systemCode().trim();
+        if(system!=null&&!inserter.supportedSystems().contains(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效消防系统分类");
+        boolean confirmed=Boolean.TRUE.equals(b.confirmed());
+        if(confirmed&&system==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"未分类照片不能确认");
+        var ids=b.photoIds().stream().sorted().toList();
+        for(Long photoId:ids){
+            var rows=jdbc.queryForList("SELECT id,taken_on FROM erp_report_photo WHERE id=? AND batch_id=? FOR UPDATE",photoId,id);
+            if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片不属于当前批次");
+            if(confirmed&&rows.get(0).get("taken_on")==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"所选照片包含未登记拍摄日期的记录");
+        }
+        String status=confirmed?"confirmed":"pending";
+        jdbc.batchUpdate("UPDATE erp_report_photo SET system_code=?,confirmation_status=?,confirmed_by=?,confirmed_at=CASE WHEN ? THEN CURRENT_TIMESTAMP(3) ELSE NULL END WHERE id=? AND batch_id=?",
+            ids.stream().map(photoId->new Object[]{system,status,confirmed?actor(a):null,confirmed,photoId,id}).toList());
+        audit(actor(a),"report.photo.batch_classified","erp_report_photo_batch",id,"count="+ids.size()+",system="+system+",confirmed="+confirmed);
+        return batchDetail(id);
+    }
+
     @PutMapping("/photos/{id}") @PreAuthorize("hasAuthority('report:photo:write')") @Transactional
     public Map<String,Object> updatePhoto(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         Map<String,Object> p=one("SELECT p.*,b.status batch_status FROM erp_report_photo p JOIN erp_report_photo_batch b ON b.id=p.batch_id WHERE p.id=? FOR UPDATE",id);
         if(!"collecting".equals(p.get("batch_status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前批次已提交，照片不可修改");
-        String system=b.get("systemCode")==null?null:b.get("systemCode").toString();
+        Object requestedSystem=b.containsKey("systemCode")?b.get("systemCode"):p.get("system_code");
+        String system=requestedSystem==null?null:requestedSystem.toString();
         if(system!=null&&system.isBlank())system=null;
         if(system!=null&&!inserter.supportedSystems().contains(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效消防系统分类");
         String confirmation=b.get("confirmed")==null?null:(Boolean.parseBoolean(b.get("confirmed").toString())?"confirmed":"pending");
         Object takenOn=b.containsKey("takenOn")?b.get("takenOn"):p.get("taken_on");
         if(takenOn!=null&&takenOn.toString().isBlank())takenOn=null;
+        if(confirmation==null&&(!Objects.equals(system,p.get("system_code"))||!Objects.equals(Objects.toString(takenOn,""),Objects.toString(p.get("taken_on"),""))))confirmation="pending";
+        if("confirmed".equals(confirmation)&&(system==null||takenOn==null))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"确认前须完成系统分类及拍摄日期");
         jdbc.update("UPDATE erp_report_photo SET system_code=?,taken_on=?,caption=?,sort_order=COALESCE(?,sort_order),confirmation_status=COALESCE(?,confirmation_status),confirmed_by=CASE WHEN ?='confirmed' THEN ? WHEN ?='pending' THEN NULL ELSE confirmed_by END,confirmed_at=CASE WHEN ?='confirmed' THEN CURRENT_TIMESTAMP(3) WHEN ?='pending' THEN NULL ELSE confirmed_at END WHERE id=?",
             system,takenOn,b.containsKey("caption")?b.get("caption"):p.get("caption"),
             opt(b,"sortOrder"),confirmation,confirmation,actor(a),confirmation,confirmation,confirmation,id);
