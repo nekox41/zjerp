@@ -17,7 +17,8 @@ def canonical(obj):
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 def encode(value):
-    if isinstance(value, bytes):
+    if isinstance(value, (bytes,bytearray,memoryview)):
+        value=bytes(value)
         return {"$type": "bytes", "base64": base64.b64encode(value).decode("ascii")}
     if isinstance(value, decimal.Decimal):
         return {"$type": "decimal", "value": str(value)}
@@ -107,6 +108,22 @@ def export(args):
                         f.write(canonical(dict(zip(cols, (encode(v) for v in row)))) + "\n")
                         count += 1
                 entry.update(data=path, sha256=digest(partial / path), rows=count, columns=cols)
+                # Preserve raw wire bytes as well; typed conversion may turn legacy zero dates into NULL.
+                raw_path=prefix+".raw.jsonl"
+                raw_cur=conn.cursor(raw=True)
+                try:
+                    raw_cur.execute("SELECT * FROM "+quote_ident(name))
+                    raw_count=0
+                    with (partial/raw_path).open("x",encoding="utf-8",newline="\n") as f:
+                        for raw_row in raw_cur:
+                            encoded=[None if v is None else base64.b64encode(bytes(v)).decode("ascii") for v in raw_row]
+                            f.write(canonical(dict(zip(cols,encoded)))+"\n")
+                            raw_count+=1
+                    if raw_count!=count:
+                        raise ValueError("Raw and typed row counts differ: "+name)
+                finally:
+                    raw_cur.close()
+                entry.update(rawData=raw_path,rawSha256=digest(partial/raw_path))
             manifest["tables"].append(entry)
         conn.rollback()
         # The source copy and its file directory must remain offline/unchanged while exporting.
@@ -174,6 +191,15 @@ def verify(root):
             if count != table["rows"]:
                 raise ValueError("Row count mismatch: " + name)
             expected.add(table["data"])
+            if "rawData" not in table:
+                raise ValueError("Raw row preservation missing: "+name)
+            raw=safe_path(root,table["rawData"])
+            if digest(raw)!=table["rawSha256"]:
+                raise ValueError("Raw row checksum mismatch: "+name)
+            with raw.open("r",encoding="utf-8") as f:
+                if sum(1 for line in f if line.strip())!=table["rows"]:
+                    raise ValueError("Raw row count mismatch: "+name)
+            expected.add(table["rawData"])
     file_names = set()
     for f in manifest["files"]:
         if f["path"] in file_names:

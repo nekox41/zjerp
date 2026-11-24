@@ -80,3 +80,11 @@ python scripts/erp-next-legacy-import.py apply --archive /secure/erp-legacy-arch
 - rawFiles：旧文件不存在 sys_file 记录但在完整档案中有原件时，用 `{"key":"old-orphan-file","archivePath":"reports/old.docx","filename":"旧报告.docx","mediaType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}` 明确映射；之后引用 `{"rawFileKey":"old-orphan-file"}`（或 `{"fileSourceId":1}`）。不重新生成原文件。
 - projectDocuments：`{"sourceTable":"zj_inspection_report","sourceId":2,"projectSourceId":20,"files":[{"rawFileKey":"old-orphan-file"}],"originalStatus":"原报告状态经人工确认"}`，支持 zj_report / zj_inspection_report / zj_project_document；未找到原件必须明示 missingOriginalConfirmed=true。历史档案显示于项目档案，旧版状态不等同于新版签发，原件下载同时要求 project:read、report:read、file:read（上传人仍按现有权限规则）。
 - projectIssues：`{"sourceId":3,"severity":"medium","status":"open"}`，旧项目关系按 ID，严重级别和状态经人工映射；原发现/整改日期及原始记录保全。
+
+## 本地验证入口
+
+`bash scripts/erp-next-local-verify.sh --smoke`（Linux/WSL，Docker Compose、Python、curl、flock）启动随机命名测试栈，校验 V1–V17 幂等执行，调用与手动 Actions 相同的 API Smoke。脚本检查 8089/8090 空闲、改写测试专用卷名，退出只清理测试栈，不使用生产 Compose 卷。
+
+`bash scripts/erp-next-local-verify.sh --build-only` 本地 Maven ERP Next verify + npm ci / 前端构建；`--full` 另执行旧版 Maven reactor 和隔离 Smoke。需已安装 JDK 17、Maven、Node 22 及依赖访问环境。此轮没有调用 Actions；这些命令由用户在完成第一版后手动执行。
+
+原始档案除类型化 JSONL 外增加 raw.jsonl：保留 MySQL raw cursor 返回的每列字节（base64，NULL 独立表示），与 DDL、类型化投影各自核对哈希和记录数，避免零日期等类型转换导致无声丢失。仍须保留 MySQL 标准备份以覆盖过程、触发器、事件、授权等非表对象。

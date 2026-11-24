@@ -383,6 +383,8 @@ class Migration:
                     raise ValueError("Project and contract customer mismatch")
             leader=technical=None
             if d.get("leaderSourceId") is not None or d.get("technicalSourceId") is not None:
+                if d.get("leaderSourceId") is None or d.get("technicalSourceId") is None:
+                    raise ValueError("Both project leaders must be reviewed together")
                 leader=self.ref("zj_employee",d["leaderSourceId"],"erp_employee")
                 technical=self.ref("zj_employee",d["technicalSourceId"],"erp_employee")
                 if leader==technical:
