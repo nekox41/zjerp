@@ -411,6 +411,7 @@ public class ServiceWorkflowController {
                 if(!hash.equals(b.get("bodyPlanSha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"正文绑定与预检不一致，请重新检查");
                 binder.fill(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),mapping);
                 manifest.put("profileVersionNo",snapshot.path("versionNo").asInt());manifest.put("bodyPlanSha256",hash);
+                manifest.put("basisReferences",snapshot.path("content").path("basisReferences").isArray()?snapshot.path("content").path("basisReferences"):mapper.createArrayNode());
                 manifest.put("bodyTargets",inspection.changes().stream().map(c->Map.of("target",c.target(),"fields",c.fields())).toList());
                 manifest.put("unmappedFields",inspection.unmappedFields());
             }

@@ -7,6 +7,7 @@ import InvoiceModule from './InvoiceModule.vue'
 import DashboardModule from './DashboardModule.vue'
 import ServiceWorkflow from './ServiceWorkflow.vue'
 import InspectionTemplateLibrary from './InspectionTemplateLibrary.vue'
+import FireStandardLibrary from './FireStandardLibrary.vue'
 import PartnerMaintenance from './PartnerMaintenance.vue'
 import MigrationConsole from './MigrationConsole.vue'
 
@@ -264,6 +265,7 @@ onMounted(refresh)
       <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="sidebar('business')"><span>▦</span>业务全生命周期</button>
       <button v-if="can('partner:read') || can('contract:read') || (can('project:read')&&(can('maintenance:read')||can('project:write')))" :class="{active:tab==='partner-maintenance'}" @click="sidebar('partner-maintenance')"><span>♧</span>合作方与维保</button>
       <button v-if="can('service:read')" :class="{active:tab==='service-workflow'}" @click="sidebar('service-workflow')"><span>◈</span>技术服务交付</button>
+      <button v-if="can('report:read')||can('report:standard:write')" :class="{active:tab==='fire-standards'}" @click="sidebar('fire-standards')"><span>▤</span>消防规范资料库</button>
       <button v-if="can('report:template:write')" :class="{active:tab==='inspection-templates'}" @click="sidebar('inspection-templates')"><span>▤</span>检测报告模板</button>
       <div class="side-caption">财务管理</div>
       <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>
@@ -275,7 +277,7 @@ onMounted(refresh)
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='migration'?'数据迁移':tab==='partner-maintenance'?'合作方与维保':tab==='service-workflow'?'技术服务交付':tab==='inspection-templates'?'检测报告模板':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='migration'?'数据迁移':tab==='partner-maintenance'?'合作方与维保':tab==='service-workflow'?'技术服务交付':tab==='inspection-templates'?'检测报告模板':tab==='fire-standards'?'消防规范资料库':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
       <div class="content">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
@@ -310,6 +312,7 @@ onMounted(refresh)
         </template>
         <MigrationConsole v-else-if="tab==='migration'&&can('identity:write')" />
         <PartnerMaintenance v-else-if="tab==='partner-maintenance'" :key="navigationKey" :permissions="user.permissions" :destination="destination" @navigate="navigate" />
+        <FireStandardLibrary v-else-if="tab==='fire-standards'&&(can('report:read')||can('report:standard:write'))" :permissions="user.permissions"/>
         <InspectionTemplateLibrary v-else-if="tab==='inspection-templates'&&can('report:template:write')" :permissions="user.permissions"/>
         <ServiceWorkflow v-else-if="tab==='service-workflow'" :key="navigationKey" :permissions="user.permissions" :user-id="user.id" :destination="destination" @navigate="navigate" />
         <DashboardModule v-else-if="tab==='dashboard'" />

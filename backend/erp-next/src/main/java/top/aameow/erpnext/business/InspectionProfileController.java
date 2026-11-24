@@ -23,8 +23,8 @@ public class InspectionProfileController {
         this.jdbc=jdbc;this.mapper=mapper;this.systems=systems;
     }
     private static final Map<String,Set<String>> FIELDS=Map.of(
-        "general",Set.of("projectName","address","projectCategory","constructionUnit","constructionQualification","designUnit","designQualification","contractor","contractorQualification","supervisionUnit","supervisionQualification","totalArea","commissioningUnit","contact","phone","commissionedOn","inspectionDates","reportNo","reportDate","inspectionCategory","overview","introduction","scope","basis"),
-        "buildings",Set.of("name","structure","use","fireResistance","aboveGroundFloors","belowGroundFloors","height","length","footprint","aboveGroundArea","belowGroundArea"),
+        "general",Set.of("projectName","address","projectCategory","constructionUnit","constructionQualification","designUnit","designQualification","contractor","contractorQualification","supervisionUnit","supervisionQualification","totalArea","commissioningUnit","contact","phone","commissionedOn","inspectionDates","reportNo","reportDate","inspectionCategory","overview","introduction","scope","basis","designDate","designReviewDate","completionDate","acceptanceDate","renovationDate","inspectionDate","applicabilityNotes"),
+        "buildings",Set.of("name","structure","use","fireResistance","aboveGroundFloors","belowGroundFloors","height","length","footprint","aboveGroundArea","belowGroundArea","constructionYear","designReviewDate","acceptanceDate","renovationDate"),
         "facilities",Set.of("system","name","location","servedAreas","description"),
         "records",Set.of("system","item","standard","location","result","judgment"),
         "instruments",Set.of("name","model","serialNo","calibrationExpiry"),
@@ -76,15 +76,47 @@ public class InspectionProfileController {
     }
     @GetMapping("/versions/{version}") @PreAuthorize("hasAuthority('report:read') and hasAuthority('service:read')")
     public Map<String,Object> version(@PathVariable long id,@PathVariable int version){scope(id,false);return read(id,version);}
-    public record SaveRequest(Integer expectedVersionNo,JsonNode content){}
+    public record BasisChoice(Long id,String scope,String reason){}
+    public record SaveRequest(Integer expectedVersionNo,JsonNode content,List<BasisChoice> basisChoices){}
+    private com.fasterxml.jackson.databind.node.ObjectNode withBasis(SaveRequest request){
+        if(request.content()==null||!request.content().isObject())throw bad("检测资料无效");
+        var result=(com.fasterxml.jackson.databind.node.ObjectNode)request.content().deepCopy();
+        // The client can only supply IDs and applicability explanations, never bibliographic snapshots.
+        result.remove("basisReferences");
+        validate(result);
+        if(request.basisChoices()==null)return result;
+        if(request.basisChoices().size()>100)throw bad("检测依据不得超过100项");
+        var references=mapper.createArrayNode();Set<String> keys=new HashSet<>();List<String> lines=new ArrayList<>();
+        for(BasisChoice choice:request.basisChoices()){
+            if(choice==null||choice.id()==null||choice.id()<=0||choice.scope()==null||choice.scope().isBlank()||choice.scope().length()>500||choice.reason()==null||choice.reason().isBlank()||choice.reason().length()>2000)throw bad("每项依据需填写适用范围和选用说明");
+            var rows=jdbc.queryForList("SELECT s.id,s.standard_no,s.edition,s.title,s.category,s.publication_year,s.effective_on,s.withdrawn_on,s.validity,s.source_url,s.access_url,s.notes,s.revision_no,s.verified_by,s.verified_at,s.file_id,f.sha256 file_sha256 FROM erp_fire_standard s LEFT JOIN erp_file_object f ON f.id=s.file_id WHERE s.id=? AND s.active=1 AND s.verified=1",choice.id());
+            if(rows.size()!=1)throw bad("所选规范未核验或已停用，请重新选择："+choice.id());
+            var row=rows.get(0);
+            String key=row.get("standard_no").toString().replaceAll("\\s+","")+"|"+row.get("edition");
+            if(!keys.add(key))throw bad("同一标准版本不得重复引用");
+            var ref=mapper.createObjectNode();
+            // Convert JDBC dates/times to text so snapshots are deterministic and readable in Word/JSON.
+            row.forEach((k,v)->{if(v==null)ref.putNull(k);else if(v instanceof Number n)ref.put(k,n.longValue());else ref.put(k,v.toString());});
+            ref.put("scope",choice.scope().trim());ref.put("reason",choice.reason().trim());references.add(ref);
+            String edition=Objects.toString(row.get("edition"),"");
+            lines.add((lines.size()+1)+".《"+row.get("title")+"》（"+row.get("standard_no")+(edition.isBlank()?"":"（"+edition+"）")+"）；");
+        }
+        if(!lines.isEmpty()){
+            var general=result.withObject("/general");
+            general.put("basis",String.join("\n",lines));
+        }
+        result.set("basisReferences",references);
+        if(result.toString().length()>2_000_000)throw bad("检测资料与引用快照超过大小限制");
+        return result;
+    }
     @PutMapping @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read') and hasAuthority('service:read')") @Transactional
     public Map<String,Object> save(@PathVariable long id,@RequestBody SaveRequest request,Authentication a){
-        scope(id,true);validate(request.content());
+        scope(id,true);var data=withBasis(request);
         int latest=jdbc.queryForObject("SELECT COALESCE(MAX(version_no),0) FROM erp_inspection_profile_version WHERE work_package_id=?",Integer.class,id);
         if(request.expectedVersionNo()==null||request.expectedVersionNo()!=latest)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"资料版本已更新，请刷新后重试");
         long actor=((CurrentUser)a.getPrincipal()).id();
-        jdbc.update("INSERT INTO erp_inspection_profile_version(work_package_id,version_no,content_json,created_by) VALUES(?,?,?,?)",id,latest+1,request.content().toString(),actor);
+        jdbc.update("INSERT INTO erp_inspection_profile_version(work_package_id,version_no,content_json,created_by) VALUES(?,?,?,?)",id,latest+1,data.toString(),actor);
         jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('version',?))",
             actor,"inspection.profile.saved","erp_service_work_package",Long.toString(id),UUID.randomUUID().toString(),latest+1);
         return read(id,latest+1);
