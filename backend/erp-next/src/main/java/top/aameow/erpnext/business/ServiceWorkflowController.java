@@ -418,7 +418,7 @@ public class ServiceWorkflowController {
                 if(embeddedBytes>160L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"内嵌照片超过160MB，请减少照片或调整打印质量");
                 String name=photo.get("original_name").toString();
                 photos.add(new ReportDocxPhotoInserter.Photo(photo.get("system_code").toString(),copy.bytes(),name,photo.get("taken_on").toString(),Objects.toString(photo.get("caption"),"")));
-                Map<String,Object> evidence=new LinkedHashMap<>();evidence.put("photoId",photo.get("id"));evidence.put("fileId",photo.get("file_id"));evidence.put("sourceSha256",photo.get("sha256"));evidence.put("embeddedSha256",sha(copy.bytes()));evidence.put("sourceBytes",size);evidence.put("embeddedBytes",copy.bytes().length);evidence.put("sourcePixels",List.of(copy.sourceWidth(),copy.sourceHeight()));evidence.put("embeddedPixels",List.of(copy.width(),copy.height()));evidence.put("effectiveDpi",copy.effectiveDpi());evidence.put("orientation",copy.orientation());photoEvidence.add(evidence);
+                Map<String,Object> evidence=new LinkedHashMap<>();evidence.put("photoId",photo.get("id"));evidence.put("system",photo.get("system_code"));evidence.put("takenOn",photo.get("taken_on").toString());evidence.put("caption",Objects.toString(photo.get("caption"),""));evidence.put("originalName",name);evidence.put("fileId",photo.get("file_id"));evidence.put("sourceSha256",photo.get("sha256"));evidence.put("embeddedSha256",sha(copy.bytes()));evidence.put("sourceBytes",size);evidence.put("embeddedBytes",copy.bytes().length);evidence.put("sourcePixels",List.of(copy.sourceWidth(),copy.sourceHeight()));evidence.put("embeddedPixels",List.of(copy.width(),copy.height()));evidence.put("effectiveDpi",copy.effectiveDpi());evidence.put("orientation",copy.orientation());photoEvidence.add(evidence);
             }
         }
         byte[] templateBytes=plan.bytes();
@@ -443,8 +443,18 @@ public class ServiceWorkflowController {
                 manifest.put("bodyTargets",inspection.changes().stream().map(c->Map.of("target",c.target(),"fields",c.fields())).toList());
                 manifest.put("unmappedFields",inspection.unmappedFields());
             }
-            if(!photos.isEmpty()||modular)inserter.insert(doc,photos,"replace".equals(photoMode),plan.systems());
-            doc.write(out);output=out.toByteArray();
+            if(modular){
+                doc.write(out);
+                byte[] paginated=InspectionTemplateComposer.paginatePhotos(out.toByteArray(),photos,plan.systems());
+                try(var paged=new XWPFDocument(new ByteArrayInputStream(paginated));var finalOut=new java.io.ByteArrayOutputStream()){
+                    inserter.insert(paged,photos,true,plan.systems());paged.write(finalOut);output=finalOut.toByteArray();
+                }
+                manifest.put("layout","modular-photo-pages-v1");
+                manifest.put("tocNote","如基础模板含目录域，须在 Word 更新整个目录并核对实际分页");
+            }else{
+                if(!photos.isEmpty())inserter.insert(doc,photos,"replace".equals(photoMode),plan.systems());
+                doc.write(out);output=out.toByteArray();
+            }
         } catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 模板无效或损坏",e);
         }

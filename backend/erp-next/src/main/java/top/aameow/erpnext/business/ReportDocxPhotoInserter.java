@@ -185,7 +185,7 @@ public class ReportDocxPhotoInserter {
         clearCell(cell);
         cell.setVerticalAlignment(XWPFTableCell.XWPFVertAlign.CENTER);
         XWPFParagraph image=cell.getParagraphs().get(0);
-        image.setAlignment(ParagraphAlignment.CENTER);
+        image.setAlignment(ParagraphAlignment.CENTER);image.setSpacingBefore(0);image.setSpacingAfter(0);
         try {
             int imageWidth,imageHeight;
             try(var stream=javax.imageio.ImageIO.createImageInputStream(new ByteArrayInputStream(photo.bytes()))){
@@ -209,7 +209,8 @@ public class ReportDocxPhotoInserter {
         if(!label.isBlank()) {
             XWPFParagraph caption=cell.addParagraph();
             caption.setAlignment(ParagraphAlignment.CENTER);
-            caption.createRun().setText(label);
+            caption.setSpacingBefore(0);caption.setSpacingAfter(0);var run=caption.createRun();run.setFontSize(9);
+            String[] lines=label.split("\\R",-1);for(int i=0;i<lines.length;i++){if(i>0)run.addBreak();run.setText(lines[i]);}
         }
     }
 

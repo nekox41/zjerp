@@ -28,7 +28,8 @@ class InspectionTemplateComposerTest {
         byte[] output=InspectionTemplateComposer.compose(base,List.of(second,first));
         try(var doc=new XWPFDocument(new ByteArrayInputStream(output))){
             var p=doc.getParagraphs().stream().map(XWPFParagraph::getText).toList();
-            assertTrue(p.indexOf(second.system())<p.indexOf(first.system()));
+            assertTrue(p.contains(InspectionTemplateComposer.heading(1,second.system())));
+            assertTrue(p.indexOf(InspectionTemplateComposer.heading(1,second.system()))<p.indexOf(InspectionTemplateComposer.heading(2,first.system())));
             assertFalse(p.contains(InspectionTemplateComposer.MARKER));
             assertEquals(4,doc.getTables().size());
             assertEquals("检测标准B",doc.getTables().get(0).getRow(1).getCell(0).getText());
