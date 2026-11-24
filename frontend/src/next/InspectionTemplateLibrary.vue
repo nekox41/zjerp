@@ -4,7 +4,13 @@ import {api,downloadFile} from './api'
 const props=defineProps({permissions:{type:Array,default:()=>[]}})
 const can=p=>props.permissions.includes(p)
 const rows=ref([]),busy=ref(false),error=ref(''),notice=ref(''),query=ref(''),file=ref(null)
-const form=ref({kind:'system',system:'',name:'',notes:'',cleanConfirmed:false})
+const form=ref({kind:'system',system:'',name:'',notes:'',cleanConfirmed:false,standardIds:[]})
+const standardQuery=ref(''),standardRows=ref([]),standardLabels=ref({})
+async function searchStandards(){
+ try{const result=await api('/fire-standards?q='+encodeURIComponent(standardQuery.value)+'&limit=100');standardRows.value=result.rows.filter(s=>s.active&&s.verified);for(const s of standardRows.value)standardLabels.value[s.id]=s.standard_no+' '+s.edition+' · '+s.title}catch(e){error.value=e.message}
+}
+function addStandard(s){if(!form.value.standardIds.includes(s.id))form.value.standardIds.push(s.id)}
+function removeStandard(id){form.value.standardIds=form.value.standardIds.filter(x=>x!==id)}
 const systems=computed(()=>[...new Set(['火灾自动报警系统','消防给水系统','消火栓系统','自动喷水灭火系统','防烟排烟系统','消防应急照明和疏散指示系统','防火分隔设施','电气火灾监控系统','消防电源监控系统','火灾警报和消防应急广播系统','消防专用电话系统','消防电梯','消防供配电设施','建筑灭火器',...rows.value.map(x=>x.system_name).filter(Boolean)])])
 const filtered=computed(()=>rows.value.filter(x=>(x.template_name+' '+x.system_name+' '+x.original_name).includes(query.value.trim())))
 async function load(){try{rows.value=await api('/inspection-templates?includeInactive=true')}catch(e){error.value=e.message}}
@@ -25,9 +31,9 @@ async function toggle(row){
  busy.value=true;error.value=''
  try{await api('/inspection-templates/'+row.id+'/active',{method:'PUT',body:JSON.stringify({active:!row.active})});await load()}catch(e){error.value=e.message}finally{busy.value=false}
 }
-function newVersion(row){form.value={kind:row.template_kind,system:row.system_name,name:row.template_name,notes:row.notes||'',cleanConfirmed:false};file.value=null}
+function newVersion(row){form.value={kind:row.template_kind,system:row.system_name,name:row.template_name,notes:row.notes||'',cleanConfirmed:false,standardIds:(row.recommendedStandards||[]).filter(s=>s.active&&s.verified).map(s=>s.id)};for(const s of row.recommendedStandards||[])standardLabels.value[s.id]=s.standard_no+' '+s.edition+' · '+s.title;file.value=null}
 async function download(row){try{await downloadFile(row.file_id,row.original_name)}catch(e){error.value=e.message}}
-onMounted(load)
+onMounted(async()=>{await load();if(can('report:read'))await searchStandards()})
 </script>
 <template>
 <section class="tpl-page">
@@ -42,12 +48,13 @@ onMounted(load)
    <label>模板名称<input v-model="form.name" required maxlength="150" placeholder="例如：2026 版标准检测表"></label>
    <label>Word 文件<input type="file" accept=".docx" @change="choose" :disabled="busy"></label>
    <label class="wide">版本备注<textarea v-model="form.notes" maxlength="1000" rows="2"></textarea></label>
+   <div v-if="can('report:read')" class="wide"><h4>模板参考规范（非强制选用）</h4><p>记录该模板的编制依据；项目仍须独立确认适用版本。仅可关联已核验版本。</p><div v-for="id in form.standardIds" :key="id" class="tpl-actions">{{standardLabels[id]||id}} <button type="button" @click="removeStandard(id)">移除</button></div><div class="tpl-actions"><input v-model="standardQuery" placeholder="规范名称或编号" @keydown.enter.prevent="searchStandards"><button type="button" @click="searchStandards">搜索规范</button></div><details><summary>已核验候选 {{standardRows.length}}</summary><div v-for="s in standardRows" :key="s.id" class="tpl-actions"><small>{{s.standard_no}} {{s.edition}} · {{s.title}}</small><button type="button" :disabled="form.standardIds.includes(s.id)" @click="addStandard(s)">关联</button></div></details></div>
    <label class="wide check"><input type="checkbox" v-model="form.cleanConfirmed">已人工确认清除旧项目信息、检测部位、结果、判定、照片和签署等不应复用的内容。</label>
    <button class="primary" :disabled="busy||!file||!form.cleanConfirmed">保存新版本</button>
   </form><p v-else>当前角色没有上传文件权限，仅能维护已存在模板的启用状态。</p>
  </div>
  <div class="tpl-panel"><h3>模板版本</h3><input v-model="query" placeholder="搜索系统、模板、文件名称"><p v-if="!filtered.length">暂无模板，请先准备空白 Word 原件。</p>
-  <article v-for="t in filtered" :key="t.id"><div><b>{{t.system_name||'公共基础'}} · {{t.template_name}} · v{{t.revision_no}}</b><small>{{t.original_name}} · {{(t.byte_size/1024).toFixed(0)}} KB · {{t.active?'启用':'停用'}}</small><small>{{t.notes||'无版本备注'}} · {{t.sha256.slice(0,16)}}</small></div><div class="tpl-actions"><button v-if="can('file:read')" @click="download(t)">下载模板</button><button @click="newVersion(t)">新增修订</button><button :disabled="busy" @click="toggle(t)">{{t.active?'停用':'启用'}}</button></div></article>
+  <article v-for="t in filtered" :key="t.id"><div><b>{{t.system_name||'公共基础'}} · {{t.template_name}} · v{{t.revision_no}}</b><small>{{t.original_name}} · {{(t.byte_size/1024).toFixed(0)}} KB · {{t.active?'启用':'停用'}}</small><small>{{t.notes||'无版本备注'}} · {{t.sha256.slice(0,16)}}</small><small v-if="t.recommendedStandards?.length">参考规范：{{t.recommendedStandards.map(s=>s.standard_no+' '+s.edition+(s.active?'':'（停用）')).join('、')}}</small></div><div class="tpl-actions"><button v-if="can('file:read')" @click="download(t)">下载模板</button><button @click="newVersion(t)">新增修订</button><button :disabled="busy" @click="toggle(t)">{{t.active?'停用':'启用'}}</button></div></article>
  </div>
 </section>
 </template>

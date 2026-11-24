@@ -28,7 +28,12 @@ public class InspectionTemplateController {
     @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:template:write')")
     public List<Map<String,Object>> list(Authentication a,@RequestParam(defaultValue="false") boolean includeInactive){
         boolean manager=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:template:write"));
-        return jdbc.queryForList("SELECT t.*,f.original_name,f.byte_size FROM erp_inspection_template t JOIN erp_file_object f ON f.id=t.file_id WHERE (?=1 OR t.active=1) ORDER BY t.template_kind,t.system_name,t.template_name,t.revision_no DESC",manager&&includeInactive?1:0);
+        var rows=jdbc.queryForList("SELECT t.*,f.original_name,f.byte_size FROM erp_inspection_template t JOIN erp_file_object f ON f.id=t.file_id WHERE (?=1 OR t.active=1) ORDER BY t.template_kind,t.system_name,t.template_name,t.revision_no DESC",manager&&includeInactive?1:0);
+        var references=jdbc.queryForList("SELECT x.template_id,s.id,s.standard_no,s.edition,s.title,s.active,s.verified FROM erp_inspection_template_standard x JOIN erp_fire_standard s ON s.id=x.standard_id ORDER BY s.standard_no,s.edition,s.revision_no");
+        Map<Long,List<Map<String,Object>>> byTemplate=new HashMap<>();
+        for(var row:references){long id=((Number)row.remove("template_id")).longValue();byTemplate.computeIfAbsent(id,k->new ArrayList<>()).add(row);}
+        for(var row:rows)row.put("recommendedStandards",byTemplate.getOrDefault(((Number)row.get("id")).longValue(),List.of()));
+        return rows;
     }
     @GetMapping("/systems") @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:photo:read') or hasAuthority('report:template:write')")
     public List<String> systems(){
@@ -55,7 +60,17 @@ public class InspectionTemplateController {
         jdbc.queryForObject("SELECT id FROM erp_permission WHERE code='report:template:write' FOR UPDATE",Long.class);
         int next=jdbc.queryForObject("SELECT COALESCE(MAX(revision_no),0)+1 FROM erp_inspection_template WHERE template_kind=? AND system_name=? AND template_name=?",Integer.class,kind,system,name);
         jdbc.update("INSERT INTO erp_inspection_template(template_kind,system_name,template_name,revision_no,file_id,sha256,notes,created_by) VALUES(?,?,?,?,?,?,?,?)",kind,system,name,next,f.get("id"),hash,notes,actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);audit(a,id,"inspection.template.created");
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        if(b.containsKey("standardIds")){
+            if(!(b.get("standardIds") instanceof List<?> selected)||selected.size()>100)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"模板参考规范选择无效");
+            Set<Long> unique=new HashSet<>();
+            for(Object raw:selected){
+                long sid=fileId(raw);if(!unique.add(sid))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"重复规范");
+                one("SELECT id FROM erp_fire_standard WHERE id=? AND verified=1 AND active=1",sid);
+                jdbc.update("INSERT INTO erp_inspection_template_standard(template_id,standard_id) VALUES(?,?)",id,sid);
+            }
+        }
+        audit(a,id,"inspection.template.created");
         return Map.of("id",id,"revisionNo",next,"tables",info.tables(),"rows",info.rows());
     }
     @PutMapping("/{id}/active")

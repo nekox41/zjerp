@@ -23,6 +23,11 @@ const baseOptions=computed(()=>library.value.filter(t=>t.template_kind==='base')
 const sectionOptions=computed(()=>library.value.filter(t=>t.template_kind==='system'))
 const selectedBase=computed(()=>baseOptions.value.find(t=>t.id===baseTemplateId.value))
 const selectedSections=computed(()=>sectionIds.value.map(id=>sectionOptions.value.find(t=>t.id===id)).filter(Boolean))
+const recommendedBasis=computed(()=>{
+ const linked=new Map();for(const t of [selectedBase.value,...selectedSections.value].filter(Boolean))for(const s of t.recommendedStandards||[])linked.set(s.id,s)
+ const actual=new Set((report.value?.content?.inspectionProfile?.content?.basisReferences||[]).map(s=>s.id))
+ return [...linked.values()].map(s=>({...s,chosen:actual.has(s.id)}))
+})
 const modular=computed(()=>templateMode.value==='library')
 const templateReady=computed(()=>modular.value?!!selectedBase.value&&sectionIds.value.length>0:!!templateFile.value)
 const effectiveTemplateId=computed(()=>modular.value?Number(selectedBase.value?.file_id||0):Number(templateFile.value?.id||0))
@@ -505,7 +510,7 @@ onBeforeUnmount(releasePreviews)
            <div class="sw-form"><label class="wide">公共基础模板<select v-model="baseTemplateId" @change="showBodyBinding=false"><option value="">选择基础模板</option><option v-for="t in baseOptions" :key="t.id" :value="t.id">{{t.template_name}} · v{{t.revision_no}}</option></select></label>
            <label class="wide">加入系统章节<select v-model="addSectionId"><option value="">请选择</option><option v-for="t in sectionOptions" :key="t.id" :value="t.id">{{t.system_name}} · {{t.template_name}} · v{{t.revision_no}}</option></select></label><button :disabled="!addSectionId" @click="addSection">加入章节</button><button @click="loadLibrary">刷新模板库</button></div>
            <div class="sw-list"><article v-for="(t,i) in selectedSections" :key="t.id"><div><b>{{i+1}}. {{t.system_name}}</b><small>{{t.template_name}} · v{{t.revision_no}}</small></div><div><button :disabled="i===0" @click="moveSection(i,-1)">上移</button><button :disabled="i===selectedSections.length-1" @click="moveSection(i,1)">下移</button><button @click="removeSection(i)">移除</button></div></article></div>
-           <small>生成时只包含选中的系统及其实际资料，未选择的系统不会生成章节；每份报告固定所选模板版本。</small>
+           <small>生成时只包含选中的系统及其实际资料，未选择的系统不会生成章节；每份报告固定所选模板版本。</small><details v-if="recommendedBasis.length"><summary>模板参考规范与本报告检测依据对照</summary><div v-for="s in recommendedBasis" :key="s.id">{{s.standard_no}} {{s.edition}} · {{s.title}} · {{s.chosen?'已引用':s.active?'未引用，请核对适用性':'资料库已停用，请核对版本'}}</div><p>仅作核对提醒，不自动添加或更换报告依据。如需调整，请在检测资料页保存新版本并重新绑定报告。</p></details>
           </template><template v-else><label v-if="can('file:upload')" class="sw-upload">上传现有报告 DOCX 模板<input type="file" hidden accept=".docx" @change="chooseTemplate"></label><small>{{ templateFile?.original_name||'尚未选择模板' }}</small></template>
           <label class="sw-mode">照片质量<select v-model="photoQuality"><option value="print">标准打印 · 300 DPI 上限（推荐）</option><option value="compact">轻量打印 · 240 DPI 上限</option><option value="detail">细节优先 · 360 DPI 上限</option></select></label><small>仅压缩 DOCX 内嵌副本，不修改原图、不放大低分辨率照片；审核可按需打开原图。</small>
           <div class="sw-batch-checks"><label v-for="b in batches.filter(x=>x.status==='reviewed'||((modular||photoMode==='replace')&&x.status==='locked'&&Number(x.report_id)===Number(report.id)))" :key="b.id"><input type="checkbox" :value="b.id" v-model="selectedBatches">{{ b.title }} · {{ b.photo_count }} 张 · {{ batchLabel(b.status) }}</label></div>
