@@ -71,7 +71,7 @@ trap cleanup EXIT
 dc up -d erp-next-mysql
 dc run --rm erp-next-schema
 dc run --rm erp-next-schema
-dc exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql mysql -u erp_next -D erp_next -N -e 'SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL' | grep -qx 21
+dc exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql mysql -u erp_next -D erp_next -N -e 'SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL' | grep -qx 22
 dc up -d --build
 bash scripts/erp-next-bootstrap-smoke.sh
 echo "Isolated local schema and API smoke passed; test-only containers and volumes will be removed."
