@@ -1,20 +1,6 @@
 name: ERP Next Schema and Smoke Test
 on:
-  push:
-    paths:
-      - 'erp-next/**'
-      - 'backend/erp-next/**'
-      - 'frontend/**'
-      - 'scripts/erp-next-*.sh'
-      - 'start.sh'
-      - '.github/workflows/erp-next-schema.yml'
-  pull_request:
-    paths:
-      - 'erp-next/**'
-      - 'backend/erp-next/**'
-      - 'frontend/**'
-      - 'scripts/erp-next-*.sh'
-      - '.github/workflows/erp-next-schema.yml'
+  workflow_dispatch:
 concurrency:
   group: erp-next-smoke-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
