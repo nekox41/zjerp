@@ -148,6 +148,11 @@ async function openMaintenance(id){
     })
   }catch(e){error.value=e.message}
 }
+function selectAnnualState(){
+  const id=maintenanceForm.value.currentContractId
+  const s=maintenance.value?.contractHistory?.find(c=>String(c.id)===String(id))||{}
+  Object.assign(maintenanceForm.value,{honeybeeContractUploaded:!!s.honeybee_contract_uploaded,honeybeeProjectCreated:!!s.honeybee_project_created,projectMaterialsCompleted:!!s.project_materials_completed,publicCardStatus:s.public_card_status||'not_started',notes:s.notes||''})
+}
 async function saveMaintenance(){
   try{maintenance.value=await api('/business/projects/'+maintenanceForm.value.projectId+'/maintenance',{method:'PUT',body:JSON.stringify(maintenanceForm.value)});notice.value='维保项目状态已保存'}
   catch(e){error.value=e.message}
@@ -233,7 +238,7 @@ onMounted(async ()=>{
     <div class="pm-panel"><h3>选择维护保养项目</h3><div class="pm-list"><button v-for="p in projects" :key="p.id" @click="openMaintenance(p.id)" :class="{selected:String(maintenanceForm.projectId)===String(p.id)}"><b>{{p.name}}</b><small>{{p.project_no}} · {{p.customer_name}}</small></button></div></div>
     <div class="pm-panel" v-if="maintenance">
       <h3>维保项目状态</h3><button class="secondary-button" @click="emit('navigate','business','projects',Number(maintenanceForm.projectId))">返回项目档案</button><form class="pm-form" @submit.prevent="saveMaintenance"><fieldset :disabled="!can('maintenance:write')" class="wide" style="display:contents">
-        <label>当前有效维护合同<select v-model="maintenanceForm.currentContractId"><option value="">未指定</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}}</option></select></label>
+        <label>当前有效维护合同<select v-model="maintenanceForm.currentContractId" @change="selectAnnualState"><option value="">未指定</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}}</option></select></label>
         <label>公示卡状态<select v-model="maintenanceForm.publicCardStatus"><option value="not_started">未开始</option><option value="preparing">制作中</option><option value="sent">已寄出</option><option value="delivered">已送达</option></select></label>
         <label class="check"><input v-model="maintenanceForm.honeybeeContractUploaded" type="checkbox"> 合同已上传小蜜蜂</label>
         <label class="check"><input v-model="maintenanceForm.honeybeeProjectCreated" type="checkbox"> 小蜜蜂项目已建立</label>
@@ -252,11 +257,11 @@ onMounted(async ()=>{
         <label class="wide">备注<input v-model="renewalForm.notes"></label>
         <button class="primary" :disabled="busy||!can('contract:write')">创建续签合同</button>
       </form>
-      <p v-else class="pm-note">此项目没有维保合同。请先在合同管理创建首份合同，再关联合同和项目。</p>
+      <p v-else-if="!maintenance.contractHistory?.length" class="pm-note">此项目没有维保合同。请先在合同管理创建首份合同，再关联合同和项目。</p>
       <div class="pm-detail"><h4>历年维保合同与对应资料</h4>
         <div v-for="c in maintenance.contractHistory||[]" :key="c.id" class="pm-contract">
           <b>{{c.contract_no}} · {{c.title}}</b>
-          <small>{{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}} · {{c.status}}</small>
+          <small>{{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}} · {{c.status}}</small><small v-if="c.state_updated_at">小蜜蜂合同：{{c.honeybee_contract_uploaded?'已上传':'未上传'}} · 项目：{{c.honeybee_project_created?'已建立':'未建立'}} · 资料：{{c.project_materials_completed?'已完成':'未完成'}} · 公示卡：{{({not_started:'未开始',preparing:'制作中',sent:'已寄出',delivered:'已送达'})[c.public_card_status]}}</small><small v-else>暂无该年度状态记录</small>
           <button type="button" class="secondary-button" @click="documentContractId=documentContractId===c.id?null:c.id">{{documentContractId===c.id?'收起年度资料':'维保卡 / 附带资料'}}</button>
           <button v-if="can('contract:read')" type="button" class="secondary-button" @click="openRenewalHistory(c.id)">查看该合同附件</button>
         </div>

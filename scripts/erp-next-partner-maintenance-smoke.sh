@@ -194,3 +194,9 @@ curl -fsS -X PUT "http://127.0.0.1:8090/api/maintenance/materials/$MATERIAL_ID" 
 curl -fsS "$DOC_SCOPE" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; x=json.load(sys.stdin); assert len(x["materials"])==1 and x["materials"][0]["title"]=="CI 附带资料"'
 curl -fsS "http://127.0.0.1:8090/api/files/$M_FILE/download" -H "Authorization: Bearer $TOKEN" -o /tmp/erp-material-download.pdf
 cmp /tmp/erp-wbcard-preview.pdf /tmp/erp-material-download.pdf
+
+# C06: switching active contracts restores the selected annual state, not the previous year's fields.
+STATE_URL="http://127.0.0.1:8090/api/business/projects/$UNCOVERED_ID/maintenance"
+curl -fsS -X PUT "$STATE_URL" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"publicCardStatus":"sent","projectMaterialsCompleted":true}' >/dev/null
+curl -fsS -X PUT "$STATE_URL" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"currentContractId\":$CONTRACT_ID}" | python -c 'import json,sys; s=json.load(sys.stdin); assert s["public_card_status"]=="preparing"; assert s["honeybee_contract_uploaded"]; assert s["project_materials_completed"]'
+curl -fsS -X PUT "$STATE_URL" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"currentContractId\":$RENEWAL_ID}" | python -c 'import json,sys; s=json.load(sys.stdin); assert s["public_card_status"]=="sent"; assert not s["honeybee_contract_uploaded"]; assert s["project_materials_completed"]; assert len(s["contractHistory"])>=2'

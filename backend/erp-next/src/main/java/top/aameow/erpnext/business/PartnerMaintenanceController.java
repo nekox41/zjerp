@@ -95,7 +95,10 @@ public class PartnerMaintenanceController {
             SELECT (SELECT COUNT(*) FROM erp_maintenance_project WHERE project_id=? AND current_contract_id=?)
                  + (SELECT COUNT(*) FROM erp_maintenance_visit WHERE project_id=? AND contract_id=?)
                  + (SELECT COUNT(*) FROM erp_invoice WHERE project_id=? AND contract_id=?)
-            """,Integer.class,projectId,id,projectId,id,projectId,id);
+                 + (SELECT COUNT(*) FROM erp_maintenance_card WHERE project_id=? AND contract_id=?)
+                 + (SELECT COUNT(*) FROM erp_maintenance_material_archive WHERE project_id=? AND contract_id=?)
+                 + (SELECT COUNT(*) FROM erp_maintenance_contract_state WHERE project_id=? AND contract_id=?)
+            """,Integer.class,projectId,id,projectId,id,projectId,id,projectId,id,projectId,id,projectId,id);
         if(references!=null&&references>0)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"已有业务记录引用该合同项目关系，不能解除");
         if(jdbc.update("DELETE FROM erp_contract_project WHERE contract_id=? AND project_id=?",id,projectId)==0)
@@ -174,13 +177,23 @@ public class PartnerMaintenanceController {
         Map<String,Object> state=jdbc.queryForList("SELECT m.*,c.contract_no current_contract_no,c.starts_on current_starts_on,c.ends_on current_ends_on FROM erp_maintenance_project m LEFT JOIN erp_contract c ON c.id=m.current_contract_id WHERE m.project_id=?",id).stream().findFirst().orElse(Map.of("project_id",id));
         state=new LinkedHashMap<>(state);
         state.put("visits",jdbc.queryForList("SELECT v.*,c.contract_no,(SELECT GROUP_CONCAT(e.full_name ORDER BY e.full_name SEPARATOR '、') FROM erp_maintenance_visit_staff vs JOIN erp_employee e ON e.id=vs.employee_id WHERE vs.visit_id=v.id) staff_names FROM erp_maintenance_visit v LEFT JOIN erp_contract c ON c.id=v.contract_id WHERE v.project_id=? ORDER BY v.visit_date DESC",id));
-        state.put("contractHistory",jdbc.queryForList("SELECT c.id,c.contract_no,c.title,c.starts_on,c.ends_on,c.status FROM erp_contract_project cp JOIN erp_contract c ON c.id=cp.contract_id WHERE cp.project_id=? AND c.service_type='maintenance' ORDER BY c.signed_on DESC,c.id DESC",id));
+        state.put("contractHistory",jdbc.queryForList("""
+            SELECT c.id,c.contract_no,c.title,c.starts_on,c.ends_on,c.status,
+                   s.honeybee_contract_uploaded,s.honeybee_project_created,s.project_materials_completed,s.public_card_status,s.notes,
+                   s.updated_at state_updated_at
+            FROM erp_contract_project cp JOIN erp_contract c ON c.id=cp.contract_id
+            LEFT JOIN erp_maintenance_contract_state s ON s.contract_id=cp.contract_id AND s.project_id=cp.project_id
+            WHERE cp.project_id=? AND c.service_type='maintenance' ORDER BY c.signed_on DESC,c.id DESC
+            """,id));
         return state;
     }
     @PutMapping("/projects/{id}/maintenance") @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
     public Map<String,Object> updateMaintenance(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
-        one("SELECT id FROM erp_project WHERE id=?",id);
-        Long current=opt(b,"currentContractId");
+        one("SELECT id FROM erp_project WHERE id=? FOR UPDATE",id);
+        Map<String,Object> projectState=jdbc.queryForList("SELECT * FROM erp_maintenance_project WHERE project_id=?",id)
+            .stream().findFirst().orElse(Map.of());
+        Long oldCurrent=opt(projectState,"current_contract_id");
+        Long current=b.containsKey("currentContractId")?opt(b,"currentContractId"):oldCurrent;
         if(current!=null){
             Map<String,Object> currentContract=one("SELECT c.id,c.status,c.starts_on,c.ends_on FROM erp_contract c JOIN erp_contract_project cp ON cp.contract_id=c.id WHERE c.id=? AND cp.project_id=? AND c.service_type='maintenance'",current,id);
             if(!"active".equals(currentContract.get("status")))
@@ -189,8 +202,11 @@ public class PartnerMaintenanceController {
                 jdbc.update("UPDATE erp_project SET planned_start=?,planned_end=? WHERE id=?",
                     currentContract.get("starts_on"),currentContract.get("ends_on"),id);
         }
-        Map<String,Object> previous=jdbc.queryForList("SELECT * FROM erp_maintenance_project WHERE project_id=?",id)
-            .stream().findFirst().orElse(Map.of());
+        // The state of an unselected annual contract must never be copied from the previous year.
+        Map<String,Object> previous=current==null
+            ?(oldCurrent==null?projectState:Map.of())
+            :jdbc.queryForList("SELECT * FROM erp_maintenance_contract_state WHERE project_id=? AND contract_id=?",id,current)
+                 .stream().findFirst().orElse(Map.of());
         String card=b.get("publicCardStatus")==null?Objects.toString(previous.get("public_card_status"),"not_started"):b.get("publicCardStatus").toString();
         boolean uploaded=b.containsKey("honeybeeContractUploaded")
             ?Boolean.parseBoolean(Objects.toString(b.get("honeybeeContractUploaded"),"false"))
@@ -202,9 +218,15 @@ public class PartnerMaintenanceController {
             ?Boolean.parseBoolean(Objects.toString(b.get("projectMaterialsCompleted"),"false"))
             :Boolean.TRUE.equals(previous.get("project_materials_completed"))||Integer.valueOf(1).equals(previous.get("project_materials_completed"));
         if(!Set.of("not_started","preparing","sent","delivered").contains(card))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效公示卡状态");
+        Object notes=b.containsKey("notes")?b.get("notes"):previous.get("notes");
+        if(current!=null)jdbc.update("""
+            INSERT INTO erp_maintenance_contract_state(contract_id,project_id,honeybee_contract_uploaded,honeybee_project_created,project_materials_completed,public_card_status,notes,updated_by)
+            VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE honeybee_contract_uploaded=VALUES(honeybee_contract_uploaded),
+            honeybee_project_created=VALUES(honeybee_project_created),project_materials_completed=VALUES(project_materials_completed),
+            public_card_status=VALUES(public_card_status),notes=VALUES(notes),updated_by=VALUES(updated_by)
+            """,current,id,uploaded,created,materials,card,notes,actor(a));
         jdbc.update("INSERT INTO erp_maintenance_project(project_id,honeybee_contract_uploaded,honeybee_project_created,project_materials_completed,public_card_status,current_contract_id,notes,updated_by) VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE honeybee_contract_uploaded=VALUES(honeybee_contract_uploaded),honeybee_project_created=VALUES(honeybee_project_created),project_materials_completed=VALUES(project_materials_completed),public_card_status=VALUES(public_card_status),current_contract_id=VALUES(current_contract_id),notes=VALUES(notes),updated_by=VALUES(updated_by)",
-            id,uploaded,created,materials,card,b.containsKey("currentContractId")?current:previous.get("current_contract_id"),
-            b.containsKey("notes")?b.get("notes"):previous.get("notes"),actor(a));
+            id,uploaded,created,materials,card,current,notes,actor(a));
         audit(actor(a),"maintenance.project.updated","erp_maintenance_project",id,card);
         return maintenance(id);
     }
