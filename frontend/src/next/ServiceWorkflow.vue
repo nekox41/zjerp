@@ -2,6 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { api, downloadFile } from './api'
 import InspectionProfile from './InspectionProfile.vue'
+import InspectionDocxWorkbench from './InspectionDocxWorkbench.vue'
 
 const props = defineProps({ permissions: { type: Array, default: () => [] }, userId: { type: Number, default: 0 }, destination: {type:Object,default:null} })
 const emit=defineEmits(['navigate'])
@@ -17,7 +18,7 @@ const projects = ref([]), packages = ref([]), employees = ref([]), issues = ref(
 const visits = ref([]), batches = ref([]), reports = ref([]), deliveries = ref([])
 const project = ref(null), workPackage = ref(null), batch = ref(null), report = ref(null)
 const systems = ref([]), templateFile = ref(null), selectedBatches = ref([])
-const inspectionVersions=ref([]),inspectionVersion=ref('')
+const inspectionVersions=ref([]),inspectionVersion=ref(''),showBodyBinding=ref(false)
 const loading = ref(false), busy = ref(false), error = ref(''), notice = ref('')
 const tab = ref('visits')
 const visitForm = ref({visitDate:new Date().toISOString().slice(0,10),visitType:'inspection',title:'现场检测',summary:'',resultSummary:'',staff:[]})
@@ -86,7 +87,7 @@ async function selectProject(id) {
 }
 async function selectPackage(id) {
   workPackage.value=packages.value.find(x=>x.id===id)||null
-  closeBatch(); report.value=null; selectedBatches.value=[];inspectionVersions.value=[];inspectionVersion.value=''
+  closeBatch(); report.value=null; selectedBatches.value=[];templateFile.value=null;showBodyBinding.value=false;inspectionVersions.value=[];inspectionVersion.value=''
   if(!id)return
   try {
     const [v,b,r,i]=await Promise.all([
@@ -224,6 +225,7 @@ async function createReport() {
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function openReport(id) {
+  if(report.value?.id!==id){templateFile.value=null;showBodyBinding.value=false;selectedBatches.value=[]}
   try{report.value=await api('/business/reports/'+id);const x=report.value.content||{};inspectionVersion.value=x.inspectionProfile?.versionNo||'';reportForm.value={reportNo:report.value.report_no,title:report.value.title,reportType:report.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''};deliveries.value=await api('/service-workflow/reports/'+id+'/deliveries').catch(()=>[])}
   catch(e){error.value=e.message}
 }
@@ -241,14 +243,19 @@ async function reportAction(action) {
 }
 async function chooseTemplate(event) {
   const file=event.target.files?.[0];event.target.value='';if(!file)return
-  try{const form=new FormData();form.append('file',file);const uploaded=await api('/files',{method:'POST',body:form});templateFile.value=uploaded;notice.value='报告模板已上传'}
+  try{const form=new FormData();form.append('file',file);const uploaded=await api('/files',{method:'POST',body:form});templateFile.value=uploaded;showBodyBinding.value=false;notice.value='报告模板已上传'}
+  catch(e){error.value=e.message}
+}
+async function refreshGenerated(result){
+  if(report.value?.id!==result.reportId)return
+  try{report.value=await api('/business/reports/'+result.reportId);batches.value=await api('/service-workflow/work-packages/'+workPackage.value.id+'/photo-batches');selectedBatches.value=[];notice.value='DOCX 草稿已归档'}
   catch(e){error.value=e.message}
 }
 async function generateDocx() {
   if(!report.value||!templateFile.value||!selectedBatches.value.length){error.value='请先选择 DOCX 模板和已审核照片批次';return}
   try{
-    const result=await api('/service-workflow/reports/'+report.value.id+'/generate-docx',{method:'POST',body:JSON.stringify({templateFileId:templateFile.value.id,batchIds:selectedBatches.value,photoMode:photoMode.value})})
-    await downloadFile(result.fileId,result.filename);notice.value='DOCX 已生成并归档到报告版本 '+result.versionNo
+    const result=await api('/service-workflow/reports/'+report.value.id+'/generate-docx',{method:'POST',body:JSON.stringify({templateFileId:templateFile.value.id,expectedVersionNo:report.value.current_version_no,batchIds:selectedBatches.value,photoMode:photoMode.value})})
+    await refreshGenerated(result);if(can('file:read'))await downloadFile(result.fileId,result.filename);notice.value='DOCX 已生成并归档到报告版本 '+result.versionNo
   }catch(e){error.value=e.message}
 }
 async function createDelivery() {
@@ -407,8 +414,9 @@ onBeforeUnmount(releasePreviews)
           <div class="sw-batch-checks"><label v-for="b in batches.filter(x=>x.status==='reviewed'||(photoMode==='replace'&&x.status==='locked'))" :key="b.id"><input type="checkbox" :value="b.id" v-model="selectedBatches">{{ b.title }} · {{ b.photo_count }} 张 · {{ batchLabel(b.status) }}</label></div>
           <label class="sw-mode"><input type="radio" value="append" v-model="photoMode"> 保留模板现有照片，在对应系统照片表格中追加（默认，非破坏性）</label>
           <label class="sw-mode"><input type="radio" value="replace" v-model="photoMode"> 替换模板中所有系统照片，仅保留本次已选批次（请确认模板原照片可替换）</label>
-          <p class="sw-disclaimer">检测资料绑定仅保存不可变快照，当前尚未自动填充 Word 正文。DOCX 正文和检测结论以所上传模板为准；ERP 中的摘要、范围、方法和结论字段用于流程记录与审核，不会自动改写模板正文。追加模式下，已用过的批次不可重复追加；继续补充照片时，请以上一版生成的 DOCX 作为模板并选择新的审核批次。</p>
-          <button class="primary" @click="generateDocx">按系统章节插入照片并生成 DOCX</button>
+          <p class="sw-disclaimer">照片模式保留正文原样；正文填充仅使用已绑定的检测资料快照及明确绑定字段，不自动推导结论或签章。追加模式不能重复使用已归档照片批次。正文生成可不选照片，或与已审核照片共同生成。</p>
+          <div class="sw-bottom-actions"><button class="primary" :disabled="busy||!templateFile||!selectedBatches.length" @click="generateDocx">仅插入照片并生成 DOCX</button><button v-if="report.report_type==='inspection'" :disabled="busy||!templateFile||!report.content?.inspectionProfile" @click="showBodyBinding=!showBodyBinding">{{showBodyBinding?'收起正文工作台':'打开正文填充工作台'}}</button></div>
+          <InspectionDocxWorkbench v-if="showBodyBinding&&templateFile&&report.content?.inspectionProfile" :key="report.id+'-'+report.current_version_no+'-'+templateFile.id" :report-id="Number(report.id)" :version-no="Number(report.current_version_no)" :template-id="Number(templateFile.id)" :batch-ids="selectedBatches" :photo-mode="photoMode" :can-download="can('file:read')" @generated="refreshGenerated"/>
         </section>
         <section v-if="report.status==='issued'||report.status==='archived'" class="sw-docx">
           <h4>报告邮寄 / 交付登记</h4>
@@ -417,7 +425,7 @@ onBeforeUnmount(releasePreviews)
           </div><button class="primary" @click="createDelivery">登记交付</button>
           <div class="sw-list"><article v-for="d in deliveries" :key="d.id"><div><b>{{ d.recipient_organization||d.recipient_name }}</b><small>{{ d.courier_name||d.delivery_method }} · {{ d.tracking_no||'无单号' }}</small><small>{{ d.recipient_address }}</small><small v-for="ev in d.events||[]" :key="ev.id">{{ev.from_status||'创建'}} → {{ev.to_status}} · {{ev.actor_name}} · {{ev.created_at}}</small></div><div><span class="sw-pill">{{ ({prepared:'待寄出',dispatched:'已寄出',delivered:'已签收',returned:'退回',cancelled:'已取消'})[d.status] }}</span><button v-if="d.status==='prepared'||d.status==='returned'" @click="updateDelivery(d,'dispatched')">登记寄出</button><button v-if="d.status==='dispatched'" @click="updateDelivery(d,'delivered')">登记签收</button><button v-if="d.status==='dispatched'" @click="updateDelivery(d,'returned')">登记退回</button></div></article></div>
         </section>
-        <section class="sw-history"><h4>版本历史</h4><div v-for="v in report.versions||[]" :key="v.version_no">v{{ v.version_no }} · {{ v.content_sha256?.slice(0,16) }} · {{ v.created_at }}</div><h4>生成文件历史</h4><div v-for="a in report.artifacts||[]" :key="a.id">v{{ a.version_no }} / DOCX #{{ a.artifact_revision_no }} · {{ a.original_name }} · {{ a.sha256?.slice(0,16) }} <button @click="downloadFile(a.file_id,a.original_name)">下载</button></div><h4>操作记录</h4><div v-for="e in report.events||[]" :key="e.id">{{ e.from_status||'新建' }} → {{ e.to_status }} · {{ e.actor_name }} · {{ e.created_at }} · {{ e.reason }}</div></section>
+        <section class="sw-history"><h4>版本历史</h4><div v-for="v in report.versions||[]" :key="v.version_no">v{{ v.version_no }} · {{ v.content_sha256?.slice(0,16) }} · {{ v.created_at }}</div><h4>生成文件历史</h4><div v-for="a in report.artifacts||[]" :key="a.id">v{{ a.version_no }} / DOCX #{{ a.artifact_revision_no }} · {{ a.original_name }} · {{ a.sha256?.slice(0,16) }} <button v-if="can('file:read')" @click="downloadFile(a.file_id,a.original_name)">下载</button><details v-if="a.generation_manifest"><summary>生成来源记录</summary><pre class="artifact-manifest">{{typeof a.generation_manifest==='string'?JSON.stringify(JSON.parse(a.generation_manifest),null,2):JSON.stringify(a.generation_manifest,null,2)}}</pre></details></div><h4>操作记录</h4><div v-for="e in report.events||[]" :key="e.id">{{ e.from_status||'新建' }} → {{ e.to_status }} · {{ e.actor_name }} · {{ e.created_at }} · {{ e.reason }}</div></section>
       </div>
     </div>
   </template>
@@ -427,4 +435,5 @@ onBeforeUnmount(releasePreviews)
 <style scoped>
 .service-workflow{display:grid;gap:16px;color:#24344b}.sw-head{display:flex;justify-content:space-between;align-items:flex-start}.sw-head h2{margin:4px 0;font-size:23px}.sw-head p{margin:0;color:#7b899b;font-size:12px}.sw-kicker{font-size:10px;letter-spacing:.14em;color:#5579bb;font-weight:700}.sw-head button,.sw-tabs button,.sw-list button,.sw-bottom-actions button,.sw-row-actions button,.sw-issue-actions button,.back{border:1px solid #dfe6ef;background:#fff;color:#52647b;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer}.sw-selects{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:15px;background:#fff;border:1px solid #e6ebf2;border-radius:12px}.sw-selects label,.sw-form label{display:grid;gap:6px;color:#64748b;font-size:11px}.sw-selects select,.sw-form input,.sw-form select,.sw-form textarea,.sw-photo-meta select,.sw-photo-meta input{width:100%;min-width:0;border:1px solid #dfe6ef;border-radius:8px;padding:9px;background:#fff;color:#34465e;font:inherit;font-size:12px}.sw-form select[multiple]{min-height:76px}.sw-tabs{display:flex;gap:8px;border-bottom:1px solid #e6ebf2;padding-bottom:10px}.sw-tabs button.active{background:#edf3ff;border-color:#c8d7fa;color:#315bb3}.sw-panel{background:#fff;border:1px solid #e6ebf2;border-radius:13px;padding:18px;display:grid;gap:16px}.sw-panel-title{display:flex;justify-content:space-between;align-items:center;gap:12px}.sw-panel-title h3{font-size:16px;margin:4px 0;color:#293d59}.sw-panel-title span,.sw-panel-title small{font-size:11px;color:#8290a3}.sw-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.sw-form .wide{grid-column:1/-1}.sw-form .primary,.primary{background:#315fca;color:#fff;border:1px solid #315fca;border-radius:8px;padding:10px 14px;font-size:12px;cursor:pointer}.sw-list{display:grid;gap:8px}.sw-list article{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:12px;border:1px solid #edf0f5;border-radius:10px}.sw-list article>div:first-child{display:grid;gap:4px;min-width:0}.sw-list b{font-size:12px}.sw-list small,.sw-list p{font-size:11px;color:#8290a3;margin:0;overflow-wrap:anywhere}.sw-list article>div:last-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sw-pill{white-space:nowrap;background:#f0f4fa;color:#5e6f86;border-radius:20px;padding:5px 9px;font-size:10px}.sw-issue-actions{display:grid;justify-items:end;gap:6px}.sw-resolution{color:#367c58!important}.sw-two{display:grid;grid-template-columns:minmax(260px,.9fr) minmax(0,1.1fr);gap:18px}.sw-empty{padding:35px 15px;text-align:center;border:1px dashed #d6deea;border-radius:10px;color:#8290a3;font-size:12px}.sw-empty.small{padding:18px}.sw-msg{padding:10px 13px;border-radius:8px;font-size:12px}.sw-msg.error{background:#fff0ed;color:#a33}.sw-msg.success{background:#eaf7ef;color:#287449}.sw-upload-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.sw-upload{display:inline-flex;align-items:center;background:#315fca;color:#fff;border-radius:8px;padding:10px 14px;font-size:12px;cursor:pointer}.sw-upload-row small,.sw-bottom-actions small{font-size:11px;color:#8290a3}.sw-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px}.sw-photo-card{border:1px solid #e4eaf2;border-radius:10px;overflow:hidden;background:#fff}.sw-photo-table-wrap{overflow:auto;border:1px solid #e6ebf2;border-radius:10px}.sw-photo-table{width:100%;border-collapse:collapse;background:#fff}.sw-photo-table th,.sw-photo-table td{padding:8px;border-bottom:1px solid #edf0f5;text-align:left;font-size:11px;white-space:nowrap}.sw-photo-table img{width:88px;height:62px;object-fit:contain;background:#f1f4f8}.sw-photo-table select,.sw-photo-table input:not([type=checkbox]){border:1px solid #dfe6ef;border-radius:6px;padding:6px;font:inherit;font-size:11px;max-width:210px}.sw-photo-table button{border:1px solid #dfe6ef;background:#fff;border-radius:6px;padding:6px 8px;font-size:10px;color:#56677d}.sw-photo-card>img,.sw-photo-placeholder{width:100%;height:150px;object-fit:contain;background:#f1f4f8}.sw-photo-placeholder{display:grid;place-items:center;color:#8794a6;font-size:12px}.sw-photo-meta{display:grid;gap:8px;padding:10px}.sw-photo-meta b{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sw-photo-meta label{display:grid;gap:4px;color:#7c899a;font-size:10px}.sw-photo-meta .confirm{display:flex;align-items:center;gap:6px}.sw-photo-meta .confirm input{width:auto}.sw-row-actions{display:flex;justify-content:space-between}.sw-row-actions .danger,.sw-bottom-actions .danger{color:#b54e4e}.sw-bottom-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.sw-docx{display:grid;gap:12px;padding:16px;border:1px solid #e3eaf4;border-radius:10px;background:#f9fbfe}.sw-docx h4,.sw-history h4{font-size:13px;margin:0;color:#405675}.sw-batch-checks{display:flex;gap:12px;flex-wrap:wrap}.sw-batch-checks label{font-size:11px;color:#607189}.sw-mode{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:#607189}.sw-mode input{margin-top:2px}.sw-disclaimer{font-size:11px;line-height:1.7;color:#987044;background:#fff8ed;border:1px solid #f1e1c8;padding:9px 11px;border-radius:8px}.sw-visit-links{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.sw-visit-links select{max-width:210px;border:1px solid #dfe6ef;border-radius:7px;padding:6px;font-size:11px;color:#56677d}.sw-visit-links button:disabled{opacity:.45;cursor:not-allowed}.sw-history{display:grid;gap:8px;padding:14px;border-top:1px solid #edf0f5;font-size:11px;color:#7b899a}.sw-history h4{margin-top:8px}.back{padding:4px 8px;margin-bottom:6px}@media(max-width:800px){.sw-two{grid-template-columns:1fr}.sw-selects{grid-template-columns:1fr}}@media(max-width:560px){.sw-form{grid-template-columns:1fr}.sw-form .wide{grid-column:auto}.sw-list article{align-items:flex-start;flex-direction:column}.sw-issue-actions{display:flex;justify-items:start}}
 .photo-filters{display:flex;flex-wrap:wrap;gap:6px}.photo-filters button{background:#fff;border:1px solid #dfe6ef;border-radius:7px;padding:7px 10px;font-size:12px}.photo-filters button.active{background:#ecf2ff;border-color:#86a3e8;color:#315fca}.sw-photo-card.picked{outline:2px solid #5680cf}.photo-select{display:flex;align-items:center;gap:5px;padding:7px;font-size:12px}.photo-zoom{cursor:zoom-in}.photo-lightbox{position:fixed;inset:0;z-index:100;background:#152033d9;display:grid;place-items:center;padding:20px}.photo-lightbox>div{background:white;padding:14px;border-radius:10px;max-width:95vw;max-height:95vh}.photo-lightbox img{display:block;max-width:90vw;max-height:75vh;object-fit:contain}
+.artifact-manifest{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font-size:11px}
 </style>

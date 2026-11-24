@@ -118,3 +118,49 @@ BOUND=$(curl -fsS -X POST "http://127.0.0.1:8090/api/business/work-packages/$WOR
 BOUND_ID=$(python -c 'import json,sys; r=json.load(sys.stdin); assert r["content"]["inspectionProfile"]["versionNo"]==1; assert r["content"]["inspectionProfile"]["content"]["general"]["address"]=="CI 地址"; print(r["id"])' <<< "$BOUND")
 curl -fsS -X PUT "http://127.0.0.1:8090/api/business/reports/$BOUND_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"expectedVersionNo":1,"title":"CI 保留资料快照","content":{"summary":"修改摘要","conclusion":"待人工审核"}}' | python -c 'import json,sys; r=json.load(sys.stdin); assert r["current_version_no"]==2 and r["content"]["inspectionProfile"]["versionNo"]==1'
 curl -fsS -X PUT "http://127.0.0.1:8090/api/business/reports/$BOUND_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"expectedVersionNo":2,"inspectionProfileVersionNo":2,"content":{"summary":"明确切换资料版本","conclusion":"待人工审核"}}' | python -c 'import json,sys; r=json.load(sys.stdin); assert r["current_version_no"]==3 and r["content"]["inspectionProfile"]["versionNo"]==2 and r["content"]["inspectionProfile"]["content"]["general"]["address"]=="CI 更新地址"'
+
+
+# E07: create a synthetic DOCX with split markers, a table cell and a photo section.
+# Real client reports are deliberately not committed to the repository.
+python - <<'PY'
+from zipfile import ZipFile
+from xml.sax.saxutils import escape
+p=lambda text: '<w:p><w:r><w:t>'+escape(text)+'</w:t></w:r></w:p>'
+cell=lambda text: '<w:tc><w:tcPr><w:tcW w:w="2500" w:type="dxa"/></w:tcPr>'+p(text)+'</w:tc>'
+table=lambda rows:'<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2500"/><w:gridCol w:w="2500"/></w:tblGrid>'+''.join('<w:tr>'+''.join(cell(c) for c in row)+'</w:tr>' for row in rows)+'</w:tbl>'
+xml='<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>工程：{{erp.general.</w:t></w:r><w:r><w:t>projectName}}</w:t></w:r></w:p>'+table([['工程地址','旧地址'],['单体名称','{{erp.buildings.1.name}}']])+p('消防给水系统')+p('现场检测照片')+table([['',''],['','']])+p('现场照片说明')+p('审核人：手签保留')+'<w:sectPr/></w:body></w:document>'
+with ZipFile('/tmp/erp-inspection-template.docx','w') as z:
+    z.writestr('[Content_Types].xml','<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
+    z.writestr('_rels/.rels','<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
+    z.writestr('word/document.xml',xml)
+PY
+TEMPLATE_UPLOAD=$(curl -fsS -X POST http://127.0.0.1:8090/api/files -H "Authorization: Bearer $TOKEN" -F 'file=@/tmp/erp-inspection-template.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+TEMPLATE_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$TEMPLATE_UPLOAD")
+DOCX_API="http://127.0.0.1:8090/api/service-workflow/reports/$BOUND_ID"
+PRECHECK_BODY=$(python -c 'import json,sys; print(json.dumps({"templateFileId":int(sys.argv[1]),"expectedVersionNo":3,"bodyBindings":[{"target":"T1/R1/C2/P1","expectedText":"旧地址","field":"general.address"}]}))' "$TEMPLATE_ID")
+PRECHECK=$(curl -fsS -X POST "$DOCX_API/inspect-docx" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$PRECHECK_BODY")
+python -c 'import json,sys; x=json.load(sys.stdin); i=x["inspection"]; assert not i["errors"],i["errors"]; assert len(i["changes"])==3; assert any(c["after"]=="CI 更新地址" for c in i["changes"]); assert x["profileVersionNo"]==2' <<< "$PRECHECK"
+# Confirm that preflight is read-only and a fabricated plan hash is rejected.
+curl -fsS "http://127.0.0.1:8090/api/business/reports/$BOUND_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert json.load(sys.stdin)["artifacts"]==[]'
+GEN_BODY=$(python -c 'import json,sys; b=json.loads(sys.argv[1]); p=json.loads(sys.argv[2]); b.update(fillBody=True,templateReviewed=True,templateSha256=p["templateSha256"],bodyPlanSha256=p["planSha256"],batchIds=[],photoMode="append"); print(json.dumps(b))' "$PRECHECK_BODY" "$PRECHECK")
+BAD_GEN=$(python -c 'import json,sys; b=json.loads(sys.argv[1]); b["bodyPlanSha256"]="bad"; print(json.dumps(b))' "$GEN_BODY")
+BAD_STATUS=$(curl -sS -o /tmp/erp-bad-plan.json -w '%{http_code}' -X POST "$DOCX_API/generate-docx" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$BAD_GEN")
+test "$BAD_STATUS" = "409"
+# Review the real persisted photo batch using a different qualified employee.
+curl -fsS -X POST "http://127.0.0.1:8090/api/service-workflow/photo-batches/$PHOTO_BATCH_ID/review" -H "Authorization: Bearer $REVIEW_TOKEN" | grep -q '"status":"reviewed"'
+GEN_BODY=$(python -c 'import json,sys; b=json.loads(sys.argv[1]); b["batchIds"]=[int(sys.argv[2])]; print(json.dumps(b))' "$GEN_BODY" "$PHOTO_BATCH_ID")
+GENERATED=$(curl -fsS -X POST "$DOCX_API/generate-docx" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$GEN_BODY")
+GEN_FILE=$(python -c 'import json,sys; x=json.load(sys.stdin); assert x["bodyFilled"] and x["photoCount"]==2; print(x["fileId"])' <<< "$GENERATED")
+curl -fsS "http://127.0.0.1:8090/api/files/$GEN_FILE/download" -H "Authorization: Bearer $TOKEN" -o /tmp/erp-inspection-filled.docx
+python - <<'PY'
+from zipfile import ZipFile
+from xml.etree import ElementTree as ET
+with ZipFile('/tmp/erp-inspection-filled.docx') as z:
+    ns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    root=ET.fromstring(z.read('word/document.xml'))
+    text=''.join(x.text or '' for x in root.findall('.//w:t',ns))
+    assert 'CI 工程' in text and 'CI 更新地址' in text and '地下车库一期' in text
+    assert '审核人：手签保留' in text and '{{erp.' not in text
+    assert len(root.findall('.//w:drawing',ns))==2
+PY
+curl -fsS "http://127.0.0.1:8090/api/business/reports/$BOUND_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; a=json.load(sys.stdin)["artifacts"][0]; m=a["generation_manifest"]; m=json.loads(m) if isinstance(m,str) else m; assert m["profileVersionNo"]==2 and len(m["bodyTargets"])==3 and len(m["batchIds"])==1'
