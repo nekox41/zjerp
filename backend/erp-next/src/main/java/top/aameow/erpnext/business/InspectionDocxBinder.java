@@ -24,7 +24,7 @@ public class InspectionDocxBinder {
     public record Candidate(String target,String text){}
     public record Field(String key,String value){}
     public record Change(String target,String before,String after,List<String> fields){}
-    public record Inspection(List<Field> fields,List<Candidate> candidates,List<Change> changes,List<String> errors,List<String> unmappedFields){}
+    public record Inspection(List<Field> fields,List<Candidate> candidates,List<Change> changes,List<String> errors,List<String> unmappedFields,List<Binding> suggestedBindings){}
     private record Target(String key,XWPFParagraph paragraph,boolean protectedArea){}
     private record Edit(int start,int end,String value){}
     private record Planned(Target target,List<Edit> edits,Change change){}
@@ -60,7 +60,7 @@ public class InspectionDocxBinder {
                 if(!Set.of("rPr","t").contains(run.getLocalName()))return false;
             }
         }
-        return !p.getRuns().isEmpty()&&p.getRuns().stream().allMatch(r->r.getCTR().sizeOfTArray()<=1);
+        return p.getRuns().stream().allMatch(r->r.getCTR().sizeOfTArray()<=1);
     }
     private String text(XWPFParagraph p){
         StringBuilder sb=new StringBuilder();
@@ -89,6 +89,59 @@ public class InspectionDocxBinder {
         if(snapshot==null||!snapshot.isObject())throw bad("请先绑定检测资料版本");
         for(String section:SECTIONS)flatten(section,snapshot.get(section),result);
         result.put("report.reportNo",reportNo);result.put("report.title",title);
+        return result;
+    }
+    private String normalized(String label){return label.replaceAll("\\s+","");}
+    private void suggest(List<Binding> result,Map<String,Candidate> candidates,Map<String,String> values,String target,String field){
+        Candidate c=candidates.get(target);
+        if(c!=null&&values.containsKey(field))result.add(new Binding(target,c.text(),field));
+    }
+    // The two reviewed samples share the same logical labels and eleven physical data cells,
+    // despite having different underlying Word grid widths. Only suggest; never write implicitly.
+    private List<Binding> suggestEngineering(XWPFDocument doc,List<Candidate> candidates,Map<String,String> values){
+        Map<String,Candidate> byTarget=new HashMap<>();
+        for(Candidate c:candidates)byTarget.put(c.target(),c);
+        List<Binding> result=new ArrayList<>();
+        Map<String,String> labels=Map.ofEntries(Map.entry("工程名称","projectName"),Map.entry("工程地址","address"),
+            Map.entry("建设单位","constructionUnit"),Map.entry("设计单位","designUnit"),Map.entry("施工单位","contractor"),Map.entry("监理单位","supervisionUnit"),
+            Map.entry("建筑总面积","totalArea"),Map.entry("检测日期","inspectionDates"),Map.entry("委托单位","commissioningUnit"),
+            Map.entry("委托时间","commissionedOn"),Map.entry("委托/联系人","contact"),Map.entry("联系电话","phone"));
+        Map<String,String> qualification=Map.of("设计单位","designQualification","施工单位","contractorQualification","监理单位","supervisionQualification");
+        String[] buildingFields={"name","structure","use","fireResistance","aboveGroundFloors","belowGroundFloors","height","length","footprint","aboveGroundArea","belowGroundArea"};
+        int tableNo=0;
+        for(XWPFTable table:doc.getTables()){
+            tableNo++;
+            var rows=table.getRows();
+            if(rows.size()<13||rows.get(0).getTableCells().size()!=2||!"工程名称".equals(normalized(rows.get(0).getCell(0).getText()))
+                ||!"工程地址".equals(normalized(rows.get(1).getCell(0).getText())))continue;
+            int buildingHeader=-1;
+            for(int i=0;i<rows.size();i++){
+                var cells=rows.get(i).getTableCells();
+                if(cells.isEmpty())continue;
+                String first=normalized(cells.get(0).getText());
+                if("单体建筑名称".equals(first)){buildingHeader=i;break;}
+                if("单体建筑工程信息".equals(first))continue;
+                for(int j=0;j+1<cells.size();j++){
+                    String label=normalized(cells.get(j).getText()),field=labels.get(label);
+                    if("资质等级".equals(label))field=qualification.get(first);
+                    if(field!=null&&cells.get(j+1).getParagraphs().size()==1)
+                        suggest(result,byTarget,values,"T"+tableNo+"/R"+(i+1)+"/C"+(j+2)+"/P1","general."+field);
+                }
+            }
+            if(buildingHeader<0||buildingHeader+2>=rows.size())continue;
+            var header=rows.get(buildingHeader).getTableCells();
+            var sub=rows.get(buildingHeader+1).getTableCells();
+            if(header.size()!=9||sub.size()!=11||!"结构类型".equals(normalized(header.get(1).getText()))
+                ||!"使用性质".equals(normalized(header.get(2).getText()))||!"耐火等级".equals(normalized(header.get(3).getText()))
+                ||!"地上".equals(normalized(sub.get(4).getText()))||!"地下".equals(normalized(sub.get(5).getText()))
+                ||!"地上".equals(normalized(sub.get(9).getText()))||!"地下".equals(normalized(sub.get(10).getText())))continue;
+            for(int i=buildingHeader+2;i<rows.size();i++){
+                var cells=rows.get(i).getTableCells();if(cells.size()!=11)break;
+                int idx=i-buildingHeader-2;
+                for(int j=0;j<buildingFields.length;j++)if(cells.get(j).getParagraphs().size()==1)
+                    suggest(result,byTarget,values,"T"+tableNo+"/R"+(i+1)+"/C"+(j+1)+"/P1","buildings."+idx+"."+buildingFields[j]);
+            }
+        }
         return result;
     }
     private Plan plan(XWPFDocument doc,JsonNode snapshot,String reportNo,String title,List<Binding> bindings){
@@ -121,12 +174,12 @@ public class InspectionDocxBinder {
                 continue;
             }
             String before=text(p);
-            if(!before.isBlank()&&!token)candidates.add(new Candidate(target.key(),before));
+            if((!before.isBlank()||target.key().contains("/C"))&&!token)candidates.add(new Candidate(target.key(),before));
             List<Edit> edits=new ArrayList<>();
             List<String> keys=new ArrayList<>();
             if(binding!=null){
                 if(token){errors.add(target.key()+"：不能同时使用标记与手动绑定");continue;}
-                if(before.isBlank()||!before.equals(binding.expectedText())){errors.add(target.key()+"：模板原文不匹配");continue;}
+                if(!before.equals(binding.expectedText())||(before.isBlank()&&!target.key().contains("/C"))){errors.add(target.key()+"：模板原文不匹配");continue;}
                 String value=values.get(binding.field());
                 if(value==null){errors.add(target.key()+"：资料字段不存在或为空："+binding.field());continue;}
                 edits.add(new Edit(0,before.length(),value));keys.add(binding.field());
@@ -152,7 +205,8 @@ public class InspectionDocxBinder {
         manual.keySet().forEach(key->errors.add(key+"：未找到对应正文段落"));
         if(planned.isEmpty())errors.add("没有可执行的正文绑定，请在模板中设置 ERP 标记或手动选择正文段落");
         return new Plan(new Inspection(values.entrySet().stream().map(e->new Field(e.getKey(),e.getValue())).toList(),candidates,
-            planned.stream().map(Planned::change).toList(),errors,values.keySet().stream().filter(k->!used.contains(k)).toList()),planned);
+            planned.stream().map(Planned::change).toList(),errors,values.keySet().stream().filter(k->!used.contains(k)).toList(),
+            suggestEngineering(doc,candidates,values)),planned);
     }
     public Inspection inspect(XWPFDocument doc,JsonNode snapshot,String reportNo,String title,List<Binding> bindings){
         return plan(doc,snapshot,reportNo,title,bindings).inspection();
@@ -161,6 +215,11 @@ public class InspectionDocxBinder {
         Plan plan=plan(doc,snapshot,reportNo,title,bindings);
         if(!plan.inspection().errors().isEmpty())throw bad(String.join("；",plan.inspection().errors().stream().limit(8).toList()));
         for(Planned p:plan.edits()){
+            if(p.edits().size()==1&&p.edits().get(0).start()==0&&p.edits().get(0).end()==0){
+                XWPFParagraph paragraph=p.target().paragraph();
+                XWPFRun run=paragraph.getRuns().isEmpty()?paragraph.createRun():paragraph.getRuns().get(0);
+                writeText(run,p.edits().get(0).value());continue;
+            }
             List<XWPFRun> runs=p.target().paragraph().getRuns();
             List<String> chunks=new ArrayList<>();
             for(XWPFRun run:runs)chunks.add(run.getCTR().sizeOfTArray()==0?"":run.getCTR().getTArray(0).getStringValue());
@@ -178,17 +237,19 @@ public class InspectionDocxBinder {
                 }
             }
             for(int j=0;j<runs.size();j++)if(runs.get(j).getCTR().sizeOfTArray()==1){
-                XWPFRun run=runs.get(j);
-                String content=chunks.get(j).replace("\r\n","\n").replace('\r','\n');
-                String[] parts=content.split("(?=[\\n\\t])|(?<=[\\n\\t])",-1);
-                run.setText("",0);
-                for(String part:parts){
-                    if("\n".equals(part))run.addBreak();
-                    else if("\t".equals(part))run.addTab();
-                    else if(!part.isEmpty())run.setText(part);
-                }
+                writeText(runs.get(j),chunks.get(j));
             }
         }
         return plan.inspection();
+    }
+    private void writeText(XWPFRun run,String value){
+        String content=value.replace("\r\n","\n").replace('\r','\n');
+        String[] parts=content.split("(?=[\\n\\t])|(?<=[\\n\\t])",-1);
+        if(run.getCTR().sizeOfTArray()==1)run.setText("",0);
+        for(String part:parts){
+            if("\n".equals(part))run.addBreak();
+            else if("\t".equals(part))run.addTab();
+            else if(!part.isEmpty())run.setText(part);
+        }
     }
 }

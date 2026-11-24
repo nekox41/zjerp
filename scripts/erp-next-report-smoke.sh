@@ -164,3 +164,14 @@ with ZipFile('/tmp/erp-inspection-filled.docx') as z:
     assert len(root.findall('.//w:drawing',ns))==2
 PY
 curl -fsS "http://127.0.0.1:8090/api/business/reports/$BOUND_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; a=json.load(sys.stdin)["artifacts"][0]; m=a["generation_manifest"]; m=json.loads(m) if isinstance(m,str) else m; assert m["profileVersionNo"]==2 and len(m["bodyTargets"])==3 and len(m["batchIds"])==1'
+
+# B06: report generation through independent review, signature registration, and delivery history.
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/submit" -H "Authorization: Bearer $TOKEN" | grep -q '"status":"submitted"'
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/start-review" -H "Authorization: Bearer $REVIEW_TOKEN" | grep -q '"status":"reviewing"'
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/approve" -H "Authorization: Bearer $REVIEW_TOKEN" | grep -q '"status":"approved"'
+curl -fsS -X POST "http://127.0.0.1:8090/api/business/reports/$BOUND_ID/issue" -H "Authorization: Bearer $ISSUE_TOKEN" | grep -q '"status":"issued"'
+DELIVERY_ROW=$(curl -fsS -X POST "$DOCX_API/deliveries" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"deliveryMethod":"courier","recipientName":"CI 收件人","recipientAddress":"CI 地址","trackingNo":"CI-TRACKING"}')
+DELIVERY_ROW_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$DELIVERY_ROW")
+curl -fsS -X POST "http://127.0.0.1:8090/api/service-workflow/deliveries/$DELIVERY_ROW_ID/status" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"dispatched"}' | grep -q '"status":"dispatched"'
+curl -fsS -X POST "http://127.0.0.1:8090/api/service-workflow/deliveries/$DELIVERY_ROW_ID/status" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"delivered"}' | grep -q '"status":"delivered"'
+curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/deliveries" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert any(x["report_no"]=="CI-INSPECTION-PROFILE" and x["status"]=="delivered" and x["tracking_no"]=="CI-TRACKING" for x in json.load(sys.stdin)["rows"])'

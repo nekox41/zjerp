@@ -42,6 +42,15 @@ class InspectionDocxBinderTest {
             assertThrows(ResponseStatusException.class,()->binder.fill(doc,snapshot(),"CI-001","报告",List.of(binding)));
         }
     }
+    @Test void emptyCellAndMultiLineAreSupported()throws Exception{
+        try(var doc=new XWPFDocument()){
+            var cell=doc.createTable(1,1).getRow(0).getCell(0);
+            var data=mapper.readTree("{\"general\":{\"overview\":\"第一行\\n第二行\"}}");
+            var binding=new InspectionDocxBinder.Binding("T1/R1/C1/P1","","general.overview");
+            binder.fill(doc,data,"CI","报告",List.of(binding));
+            assertEquals("第一行\n第二行",cell.getParagraphs().get(0).getText());
+        }
+    }
     @Test void missingAndProtectedTargetsFailWithoutPartialMutation()throws Exception{
         try(var doc=new XWPFDocument()){
             var a=doc.createParagraph();a.createRun().setText("{{erp.general.projectName}}");

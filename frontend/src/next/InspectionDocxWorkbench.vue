@@ -18,6 +18,12 @@ function addBinding(){
  bindings.value=[...bindings.value.filter(b=>b.target!==c.target),{target:c.target,expectedText:c.text,field:field.value}]
  target.value='';invalidate()
 }
+function applySuggestions(){
+ const suggestions=inspection.value?.inspection.suggestedBindings||[]
+ const existing=new Set(bindings.value.map(b=>b.target))
+ bindings.value=[...bindings.value,...suggestions.filter(b=>!existing.has(b.target))]
+ invalidate()
+}
 function removeBinding(t){bindings.value=bindings.value.filter(b=>b.target!==t);invalidate()}
 async function inspect(){
  busy.value=true;error.value='';notice.value='';invalidate()
@@ -44,11 +50,12 @@ onMounted(inspect)
  <p v-if="error" role="alert" class="binding-error">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>
  <template v-if="inspection">
  <div class="binding-summary"><b>报告 v{{inspection.versionNo}} · 资料 v{{inspection.profileVersionNo}}</b><span>可选段落 {{inspection.inspection.candidates.length}} · 待填充 {{inspection.inspection.changes.length}} · 未映射字段 {{inspection.inspection.unmappedFields.length}}</span></div>
+ <div v-if="inspection.inspection.suggestedBindings?.length" class="binding-actions"><span>识别到 {{inspection.inspection.suggestedBindings.length}} 项工程信息与建筑字段候选；使用前请检查原文与数据对应关系。</span><button :disabled="busy" @click="applySuggestions">加入建议绑定（不自动覆盖手动绑定）</button></div>
  <div class="binding-select">
   <label>搜索模板原文或段落位置<input v-model="search" @input="candidatePage=1" placeholder="输入工程名称、地址、单元格位置…"></label>
   <label>选择资料字段<select v-model="field"><option value="">请选择字段</option><option v-for="f in inspection.inspection.fields" :key="f.key" :value="f.key">{{labels[f.key.split('.')[0]]}} / {{f.key}}：{{f.value.slice(0,80)}}</option></select></label>
  </div>
- <div class="binding-candidates"><button v-for="c in page" :key="c.target" type="button" :class="{picked:target===c.target}" @click="chooseCandidate(c)"><small>{{c.target}}</small><span>{{c.text}}</span></button></div>
+ <div class="binding-candidates"><button v-for="c in page" :key="c.target" type="button" :class="{picked:target===c.target}" @click="chooseCandidate(c)"><small>{{c.target}}</small><span>{{c.text||'（空白单元格）'}}</span></button></div>
  <div class="binding-actions"><button :disabled="candidatePage<=1" @click="candidatePage--">上一页</button><span>{{candidatePage}} / {{maxPages}} 页</span><button :disabled="candidatePage>=maxPages" @click="candidatePage++">下一页</button><button class="primary-button" :disabled="busy||!target||!field" @click="addBinding">绑定选中段落</button></div>
  <details open><summary>手动绑定（{{bindings.length}}）</summary><article v-for="b in bindings" :key="b.target" class="binding-row"><b>{{b.target}} → {{b.field}}</b><span>{{b.expectedText}}</span><button :disabled="busy" @click="removeBinding(b.target)">移除</button></article></details>
  <button class="secondary-button" :disabled="busy" @click="inspect">重新预检全部绑定</button>
