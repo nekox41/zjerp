@@ -126,12 +126,12 @@ public class AdminController {
     @PreAuthorize("hasAuthority('identity:write')")
     @Transactional
     public Map<String,Object> createIdentity(@Valid @RequestBody CreateIdentity request, Authentication authentication) {
-        requireAdmin(authentication);
         jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE",Long.class);
+        requireAdmin(authentication);
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,organization_id,status) VALUES(?,?,?,?, 'active')",
             request.username(), passwords.encode(request.password()), request.displayName(), request.organizationId());
         Long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-        for (Long roleId : request.roleIds()) {
+        for (Long roleId : request.roleIds().stream().distinct().toList()) {
             Integer exists=jdbc.queryForObject("SELECT COUNT(*) FROM erp_role WHERE id=?",Integer.class,roleId);
             if(exists==null||exists==0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"角色不存在: "+roleId);
             jdbc.update("INSERT INTO erp_identity_role(identity_id,role_id) VALUES(?,?)",id,roleId);
@@ -146,8 +146,8 @@ public class AdminController {
     @PreAuthorize("hasAuthority('identity:write')")
     @Transactional
     public Map<String,Object> updateIdentity(@PathVariable long id, @RequestBody Map<String,Object> request, Authentication authentication) {
-        requireAdmin(authentication);
         jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE",Long.class);
+        requireAdmin(authentication);
         List<Map<String,Object>> found=jdbc.queryForList("SELECT id,username,display_name,status FROM erp_identity WHERE id=?",id);
         if(found.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"账号不存在");
         Map<String,Object> current=found.get(0);
@@ -210,6 +210,8 @@ public class AdminController {
             jdbc.update("UPDATE erp_identity SET password_hash=? WHERE id=?",passwords.encode(rawPassword),id);
             jdbc.update("UPDATE erp_auth_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE identity_id=? AND revoked_at IS NULL",id);
         }
+        if("active".equals(nextStatus)&&!"active".equals(current.get("status")))
+            jdbc.update("UPDATE erp_identity SET failed_login_count=0,locked_until=NULL WHERE id=?",id);
         if("disabled".equals(nextStatus)||rolesChanged)
             jdbc.update("UPDATE erp_auth_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE identity_id=? AND revoked_at IS NULL",id);
 
