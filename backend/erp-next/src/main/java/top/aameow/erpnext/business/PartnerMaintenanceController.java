@@ -44,7 +44,7 @@ public class PartnerMaintenanceController {
     }
     @PostMapping("/contracts/{id}/partners") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> linkPartner(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
-        one("SELECT id FROM erp_contract WHERE id=?",id);long partner=Long.parseLong(req(b,"partnerId"));one("SELECT id FROM erp_partner WHERE id=? AND status='active'",partner);
+        one("SELECT id FROM erp_contract WHERE id=? FOR UPDATE",id);long partner=Long.parseLong(req(b,"partnerId"));one("SELECT id FROM erp_partner WHERE id=? AND status='active'",partner);
         java.math.BigDecimal share=new java.math.BigDecimal(req(b,"sharePercent"));
         if(share.signum()<0||share.compareTo(java.math.BigDecimal.valueOf(100))>0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"分成比例必须在 0 到 100 之间");
         java.math.BigDecimal existing=jdbc.queryForObject("SELECT COALESCE(SUM(share_percent),0) FROM erp_contract_partner WHERE contract_id=? AND partner_id<>?",java.math.BigDecimal.class,id,partner);
@@ -56,7 +56,7 @@ public class PartnerMaintenanceController {
     }
     @DeleteMapping("/contracts/{id}/partners/{partnerId}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> unlinkPartner(@PathVariable long id,@PathVariable long partnerId,Authentication a){
-        one("SELECT id FROM erp_contract WHERE id=?",id);
+        one("SELECT id FROM erp_contract WHERE id=? FOR UPDATE",id);
         int removed=jdbc.update("DELETE FROM erp_contract_partner WHERE contract_id=? AND partner_id=?",id,partnerId);
         if(removed==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"合同合作关系不存在");
         java.math.BigDecimal remaining=jdbc.queryForObject(
@@ -75,8 +75,8 @@ public class PartnerMaintenanceController {
     }
     @PostMapping("/contracts/{id}/projects") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> linkProject(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
-        Map<String,Object> c=one("SELECT id,customer_id FROM erp_contract WHERE id=?",id);long project=Long.parseLong(req(b,"projectId"));
-        Map<String,Object> p=one("SELECT id,customer_id,contract_id FROM erp_project WHERE id=?",project);
+        Map<String,Object> c=one("SELECT id,customer_id FROM erp_contract WHERE id=? FOR UPDATE",id);long project=Long.parseLong(req(b,"projectId"));
+        Map<String,Object> p=one("SELECT id,customer_id,contract_id FROM erp_project WHERE id=? FOR UPDATE",project);
         if(!Objects.equals(((Number)c.get("customer_id")).longValue(),((Number)p.get("customer_id")).longValue()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同与项目必须属于同一客户");
         String type=b.get("relationType")==null?"service":b.get("relationType").toString();
         if(!Set.of("service","renewal","supplement","other").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效合同项目关系");
@@ -85,6 +85,27 @@ public class PartnerMaintenanceController {
         audit(actor(a),"contract.project.linked","erp_contract",id,"project="+project);
         return one("SELECT * FROM erp_contract_project WHERE contract_id=? AND project_id=?",id,project);
     }
+    @DeleteMapping("/contracts/{id}/projects/{projectId}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
+    public Map<String,Object> unlinkProject(@PathVariable long id,@PathVariable long projectId,Authentication a){
+        Map<String,Object> contract=one("SELECT id,status FROM erp_contract WHERE id=? FOR UPDATE",id);
+        if(!Set.of("draft","pending").contains(contract.get("status")))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"已履行、已完成或已终止的合同需保留项目历史，不能解除关联");
+        one("SELECT id FROM erp_project WHERE id=? FOR UPDATE",projectId);
+        Integer references=jdbc.queryForObject("""
+            SELECT (SELECT COUNT(*) FROM erp_maintenance_project WHERE project_id=? AND current_contract_id=?)
+                 + (SELECT COUNT(*) FROM erp_maintenance_visit WHERE project_id=? AND contract_id=?)
+                 + (SELECT COUNT(*) FROM erp_invoice WHERE project_id=? AND contract_id=?)
+            """,Integer.class,projectId,id,projectId,id,projectId,id);
+        if(references!=null&&references>0)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"已有业务记录引用该合同项目关系，不能解除");
+        if(jdbc.update("DELETE FROM erp_contract_project WHERE contract_id=? AND project_id=?",id,projectId)==0)
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"合同项目关系不存在");
+        Long replacement=jdbc.queryForObject("SELECT MIN(contract_id) FROM erp_contract_project WHERE project_id=?",Long.class,projectId);
+        jdbc.update("UPDATE erp_project SET contract_id=? WHERE id=? AND contract_id=?",replacement,projectId,id);
+        audit(actor(a),"contract.project.unlinked","erp_contract",id,"project="+projectId);
+        return Map.of("removed",true);
+    }
+
     @GetMapping("/projects/{id}/contracts") @PreAuthorize("hasAuthority('contract:read')")
     public List<Map<String,Object>> projectContracts(@PathVariable long id){
         return jdbc.queryForList("SELECT c.*,cp.relation_type FROM erp_contract_project cp JOIN erp_contract c ON c.id=cp.contract_id WHERE cp.project_id=? ORDER BY c.signed_on DESC,c.id DESC",id);
