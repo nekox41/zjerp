@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { api, downloadFile } from './api'
+import CustomerHistory from './CustomerHistory.vue'
 
 const props=defineProps({permissions:{type:Array,default:()=>[]}})
 const can=p=>props.permissions.includes(p)
@@ -282,7 +283,9 @@ onMounted(load)
             <button class="primary-button" :disabled="busy">保存联系人</button>
             <button type="button" class="secondary-button" @click="editingContactId=null">取消</button>
           </form>
-          <form v-if="can('customer:write')" class="create-grid compact" @submit.prevent="submit('contact')"><label>联系人姓名<input v-model="forms.contact.value.name" required></label><label>岗位<input v-model="forms.contact.value.positionName"></label><label>电话<input v-model="forms.contact.value.phone"></label><label>邮箱<input v-model="forms.contact.value.email"></label><label class="inline-check"><input type="checkbox" v-model="forms.contact.value.isPrimary">主要联系人</label><button class="primary-button">添加联系人</button></form></div>
+          <form v-if="can('customer:write')" class="create-grid compact" @submit.prevent="submit('contact')"><label>联系人姓名<input v-model="forms.contact.value.name" required></label><label>岗位<input v-model="forms.contact.value.positionName"></label><label>电话<input v-model="forms.contact.value.phone"></label><label>邮箱<input v-model="forms.contact.value.email"></label><label class="inline-check"><input type="checkbox" v-model="forms.contact.value.isPrimary">主要联系人</label><button class="primary-button">添加联系人</button></form>
+          <CustomerHistory :key="selectedCustomer.id" :customer-id="Number(selectedCustomer.id)" :permissions="props.permissions" :projects="projects" :employees="employees" @open-contract="id=>{section='contracts';openContract(id)}" @open-project="id=>{section='projects';openProject(id)}" />
+        </div>
       </template>
       <template v-else-if="section==='contracts'">
         <h3 v-if="can('contract:write')">新增合同</h3><form v-if="can('contract:write')" class="create-grid" @submit.prevent="submit('contract')"><label>合同编号<input v-model="forms.contract.value.contractNo" required></label><label>合同名称<input v-model="forms.contract.value.title" required></label><label>客户<select v-model="forms.contract.value.customerId" required><option value="">请选择客户</option><option v-for="x in customers" :value="x.id">{{x.name}}</option></select></label><label>合同类型<input v-model="forms.contract.value.contractType"></label><label>服务类型<select v-model="forms.contract.value.serviceType"><option value="maintenance">维护保养</option><option value="fire_inspection">消防检测</option><option value="fire_assessment">消防评定</option><option value="fire_evaluation">消防评估</option><option value="other">其他技术服务</option></select></label><label>金额<input v-model="forms.contract.value.amount" type="number" min="0" step=".01"></label><label>币种<input v-model="forms.contract.value.currency" maxlength="3"></label><label>签订日期<input v-model="forms.contract.value.signedOn" type="date"></label><label>开始日期<input v-model="forms.contract.value.startsOn" type="date"></label><label>结束日期<input v-model="forms.contract.value.endsOn" type="date"></label><label>负责人<select v-model="forms.contract.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><button class="primary-button">创建合同</button></form><div v-if="selectedContract" class="related-card">
