@@ -20,12 +20,33 @@ class InspectionReportLayoutTest {
         byte[] base=InspectionBaseStarter.create(Set.of());
         var section=new InspectionTemplateComposer.Section("测试消防系统",chapter());
         byte[] composed=InspectionTemplateComposer.compose(base,List.of(section));
-        assertTrue(InspectionTemplateComposer.pendingToc(composed));
+        assertTrue(InspectionTemplateComposer.pendingToc(composed));assertTrue(InspectionTemplateComposer.hasToc(composed));
         try(var doc=new XWPFDocument(new ByteArrayInputStream(composed))){
             String xml=doc.getDocument().xmlText();
             assertTrue(xml.contains("TOC"));assertTrue(xml.contains("outlineLvl"));assertFalse(xml.contains(InspectionTemplateComposer.MARKER));
             assertTrue(doc.getParagraphs().stream().anyMatch(p->p.getText().equals("（一）测试消防系统")));
-            assertTrue(doc.getFooterList().stream().anyMatch(f->f._getHdrFtr().xmlText().contains("NUMPAGES")));
+            assertFalse(doc.getFooterList().isEmpty());
+            try(var zip=new java.util.zip.ZipInputStream(new ByteArrayInputStream(composed))){
+                boolean pageFields=false;
+                for(java.util.zip.ZipEntry e;(e=zip.getNextEntry())!=null;){
+                    if(e.getName().matches("word/footer[0-9]+\\.xml")){
+                        String footer=new String(zip.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);
+                        pageFields|=footer.contains(" PAGE ")&&footer.contains(" NUMPAGES ");
+                    }
+                }
+                assertTrue(pageFields);
+            }
+        }
+    }
+    @Test void longPhotoNotesUseOneRowPerPage()throws Exception{
+        String system="测试系统";
+        byte[] composed=InspectionTemplateComposer.compose(InspectionBaseStarter.create(Set.of()),List.of(new InspectionTemplateComposer.Section(system,chapter())));
+        var photos=List.of(new ReportDocxPhotoInserter.Photo(system,png(),"a.png","2026-01-01","较长的说明".repeat(10)),new ReportDocxPhotoInserter.Photo(system,png(),"b.png","2026-01-01",""),new ReportDocxPhotoInserter.Photo(system,png(),"c.png","2026-01-01",""));
+        byte[] paged=InspectionTemplateComposer.paginatePhotos(composed,photos,Set.of(system));
+        try(var doc=new XWPFDocument(new ByteArrayInputStream(paged))){
+            var body=doc.getBodyElements();int count=0;
+            for(int i=0;i+1<body.size();i++)if(body.get(i) instanceof XWPFParagraph p&&"现场检测照片".equals(p.getText())){count++;assertEquals(1,((XWPFTable)body.get(i+1)).getRows().size());}
+            assertEquals(2,count);
         }
     }
     @Test void fivePhotosCreateTwoPagesAndEmptySystemDoesNotCreatePhotoPage()throws Exception{

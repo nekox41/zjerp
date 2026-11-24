@@ -356,6 +356,8 @@ public class ServiceWorkflowController {
         var f=templateForGeneration(Map.of("templateFileId",req(b,"fileId")),a);
         long fileId=((Number)f.get("id")).longValue();
         byte[] bytes=templateBytes(f);
+        if("inspection".equals(report.get("report_type"))&&InspectionTemplateComposer.pendingToc(bytes))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"目录仍为待更新占位文本，请在 Word 更新整个目录并保存");
         try(var doc=new XWPFDocument(new ByteArrayInputStream(bytes))){
             if(doc.getBodyElements().isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Word 正文为空");
         }catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 文件无效",e);}
@@ -365,12 +367,13 @@ public class ServiceWorkflowController {
         int revision=jdbc.queryForObject("SELECT COALESCE(MAX(artifact_revision_no),0)+1 FROM erp_service_report_artifact WHERE report_id=? AND version_no=? AND artifact_type='docx'",Integer.class,id,version);
         Map<String,Object> manifest=new LinkedHashMap<>();manifest.put("source","manual_docx");manifest.put("reportVersionNo",version);manifest.put("sourceSha256",f.get("sha256"));manifest.put("manualReviewed",true);
         if(b.get("sourceArtifactId")!=null){
-            long source=Long.parseLong(b.get("sourceArtifactId").toString());
+            long source;
+            try{source=Long.parseLong(b.get("sourceArtifactId").toString());}catch(NumberFormatException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效来源文件ID");}
             var parent=one("SELECT id,sha256,generation_manifest FROM erp_service_report_artifact WHERE id=? AND report_id=? AND version_no=? AND artifact_type='docx'",source,id,version);
             if(Objects.equals(parent.get("sha256"),f.get("sha256")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"上传文件与来源文件相同，请在 Word 完成修改并保存");
             var original=parent.get("generation_manifest")==null?mapper.createObjectNode():mapper.readTree(parent.get("generation_manifest").toString());
             if(original.path("tocPending").asBoolean(false)){
-                if(InspectionTemplateComposer.pendingToc(bytes))throw new ResponseStatusException(HttpStatus.CONFLICT,"目录仍为待更新占位文本，请在 Word 更新整个目录并保存");
+                if(!InspectionTemplateComposer.hasToc(bytes))throw new ResponseStatusException(HttpStatus.CONFLICT,"最终 Word 缺少原生目录域，请不要删除目录后直接送审");
                 if(!Boolean.TRUE.equals(b.get("tocUpdated")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请确认已更新并检查 Word 目录及实际页码");
                 manifest.put("tocPending",false);manifest.put("tocUpdatedConfirmed",true);
             }
@@ -468,7 +471,7 @@ public class ServiceWorkflowController {
                     inserter.insert(paged,photos,true,plan.systems());paged.write(finalOut);output=finalOut.toByteArray();
                 }
                 manifest.put("layout","modular-photo-pages-v1");
-                manifest.put("tocPending",InspectionTemplateComposer.pendingToc(output));
+                manifest.put("tocPending",InspectionTemplateComposer.pendingToc(paginated));
                 manifest.put("tocNote","如基础模板含目录域，须在 Word 更新整个目录并核对实际分页");
             }else{
                 if(!photos.isEmpty())inserter.insert(doc,photos,"replace".equals(photoMode),plan.systems());

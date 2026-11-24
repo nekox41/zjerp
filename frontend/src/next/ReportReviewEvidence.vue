@@ -35,6 +35,7 @@ async function focus(p){
 }
 async function download(){try{await downloadFile(props.artifact.file_id,props.artifact.original_name)}catch(e){error.value=e.message}}
 watch([system,onlyLow],()=>{page.value=0})
+watch(()=>props.artifact.id,()=>{system.value='';onlyLow.value=false;page.value=0;opened.value=false})
 watch([opened,page,system,onlyLow,()=>props.artifact.id,()=>props.canFile,()=>props.canPhoto],load)
 onBeforeUnmount(()=>{release();closeOriginal()})
 </script>

@@ -60,7 +60,7 @@ final class InspectionBaseStarter {
             heading(d,"四、检测结论",true);
             if(sections.contains("summaries"))repeat(d,"summaries",new String[]{"消防系统","系统判定","备注"},new String[]{"system","judgment","notes"});
             paragraph(d,"{{erp.conclusion.text}}");
-            var footer=d.createFooter(HeaderFooterType.DEFAULT);var fp=footer.getParagraphArray(0);if(fp==null)fp=footer.createParagraph();
+            var footer=d.createFooter(HeaderFooterType.DEFAULT);var fp=footer.getParagraphs().isEmpty()?footer.createParagraph():footer.getParagraphs().get(0);
             fp.setAlignment(ParagraphAlignment.CENTER);fp.createRun().setText("第 ");fp.getCTP().addNewFldSimple().setInstr(" PAGE ");fp.createRun().setText(" 页 / 共 ");fp.getCTP().addNewFldSimple().setInstr(" NUMPAGES ");fp.createRun().setText(" 页");
             d.enforceUpdateFields();d.write(out);return out.toByteArray();
         }

@@ -19,6 +19,14 @@ final class InspectionTemplateComposer {
     static boolean pendingToc(byte[] docx)throws Exception{
         return parse(parts(docx).get("word/document.xml")).getDocumentElement().getTextContent().contains(TOC_PENDING_TEXT);
     }
+    static boolean hasToc(byte[] docx)throws Exception{
+        Document d=parse(parts(docx).get("word/document.xml"));
+        var simple=d.getElementsByTagNameNS(W,"fldSimple");
+        for(int i=0;i<simple.getLength();i++)if(((Element)simple.item(i)).getAttributeNS(W,"instr").stripLeading().startsWith("TOC "))return true;
+        var instructions=d.getElementsByTagNameNS(W,"instrText");var text=new StringBuilder();
+        for(int i=0;i<instructions.getLength();i++)text.append(instructions.item(i).getTextContent());
+        return java.util.regex.Pattern.compile("(?i)\\bTOC\\s").matcher(text).find();
+    }
     private static final String W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     private static final String R="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private static final long MAX_EXPANDED=160L*1024*1024;
