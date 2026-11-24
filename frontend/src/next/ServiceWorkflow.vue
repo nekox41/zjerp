@@ -19,6 +19,19 @@ const visits = ref([]), batches = ref([]), reports = ref([]), deliveries = ref([
 const project = ref(null), workPackage = ref(null), batch = ref(null), report = ref(null)
 const systems = ref([]), templateFile = ref(null), selectedBatches = ref([])
 const inspectionVersions=ref([]),inspectionVersion=ref(''),showBodyBinding=ref(false)
+const selectedArtifact=ref(''),deliveryVersion=ref(''),historyVersion=ref(null)
+const editableReport=computed(()=>!!report.value&&['draft','returned','withdrawn'].includes(report.value.status)&&can('report:write'))
+const draftArtifacts=computed(()=>(report.value?.artifacts||[]).filter(a=>a.version_no===report.value?.current_version_no&&a.artifact_type==='docx'))
+const issuedVersions=computed(()=>(report.value?.versions||[]).filter(v=>v.version_issued_at&&v.submitted_artifact_id))
+function syncReportSelection(){
+ const r=report.value;if(!r)return
+ selectedArtifact.value=r.selectedArtifactId||draftArtifacts.value[0]?.id||''
+ deliveryVersion.value=issuedVersions.value[0]?.version_no||''
+ historyVersion.value=null
+}
+async function viewVersion(no){
+ try{historyVersion.value=await api('/business/reports/'+report.value.id+'/versions/'+no)}catch(e){error.value=e.message}
+}
 const loading = ref(false), busy = ref(false), error = ref(''), notice = ref('')
 const tab = ref('visits')
 const visitForm = ref({visitDate:new Date().toISOString().slice(0,10),visitType:'inspection',title:'现场检测',summary:'',resultSummary:'',staff:[]})
@@ -226,7 +239,7 @@ async function createReport() {
 }
 async function openReport(id) {
   if(report.value?.id!==id){templateFile.value=null;showBodyBinding.value=false;selectedBatches.value=[]}
-  try{report.value=await api('/business/reports/'+id);const x=report.value.content||{};inspectionVersion.value=x.inspectionProfile?.versionNo||'';reportForm.value={reportNo:report.value.report_no,title:report.value.title,reportType:report.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''};deliveries.value=await api('/service-workflow/reports/'+id+'/deliveries').catch(()=>[])}
+  try{report.value=await api('/business/reports/'+id);const x=report.value.content||{};inspectionVersion.value=x.inspectionProfile?.versionNo||'';reportForm.value={reportNo:report.value.report_no,title:report.value.title,reportType:report.value.report_type,summary:x.summary||'',scope:x.scope||'',methods:x.methods||'',findings:x.findings||'',conclusion:x.conclusion||''};syncReportSelection();deliveries.value=can('delivery:read')?await api('/service-workflow/reports/'+id+'/deliveries'):[]}
   catch(e){error.value=e.message}
 }
 async function saveReport() {
@@ -236,10 +249,30 @@ async function saveReport() {
 }
 async function reportAction(action) {
   if(!report.value)return
-  const body=action==='return'||action==='withdraw'?{reason:prompt('请填写原因：')||''}:{}
-  if(['return','withdraw'].includes(action)&&!body.reason)return
+  if(busy.value)return
+  const body={expectedVersionNo:report.value.current_version_no}
+  if(['return','withdraw'].includes(action)){body.reason=prompt('请填写原因：')||'';if(!body.reason)return}
+  if(action==='submit'){
+    if(selectedArtifact.value)body.artifactId=Number(selectedArtifact.value)
+    if(!confirm('确认送审当前已保存版本及所选文件？未保存的正文修改不会提交。'))return
+  }
+  if(action==='issue'&&!confirm('确认签发已审核的版本及对应文件？'))return
+  busy.value=true
   try{const reportId=report.value.id;await api('/business/reports/'+reportId+'/'+action,{method:'POST',body:JSON.stringify(body)});await selectPackage(workPackage.value.id);await openReport(reportId);notice.value='报告状态已更新'}
-  catch(e){error.value=e.message}
+  catch(e){error.value=e.message}finally{busy.value=false}
+}
+async function registerEditedDocx(event){
+ const file=event.target.files?.[0];event.target.value=''
+ if(!file||busy.value||!report.value)return
+ if(!confirm('确认该 Word 文件已经人工核对正文、照片、结论及旧资料，并对应当前报告版本？'))return
+ const id=report.value.id,version=report.value.current_version_no
+ busy.value=true
+ try{
+  const form=new FormData();form.append('file',file)
+  const uploaded=await api('/files',{method:'POST',body:form})
+  const result=await api('/service-workflow/reports/'+id+'/register-docx',{method:'POST',body:JSON.stringify({fileId:uploaded.id,expectedVersionNo:version,manualReviewed:true})})
+  if(report.value?.id===id){await openReport(id);selectedArtifact.value=result.artifactId;notice.value='人工编辑 DOCX 已登记为本版本候选文件'}
+ }catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function chooseTemplate(event) {
   const file=event.target.files?.[0];event.target.value='';if(!file)return
@@ -248,7 +281,7 @@ async function chooseTemplate(event) {
 }
 async function refreshGenerated(result){
   if(report.value?.id!==result.reportId)return
-  try{report.value=await api('/business/reports/'+result.reportId);batches.value=await api('/service-workflow/work-packages/'+workPackage.value.id+'/photo-batches');selectedBatches.value=[];notice.value='DOCX 草稿已归档'}
+  try{report.value=await api('/business/reports/'+result.reportId);syncReportSelection();batches.value=can('report:photo:read')?await api('/service-workflow/work-packages/'+workPackage.value.id+'/photo-batches'):[];selectedBatches.value=[];notice.value='DOCX 草稿已归档'}
   catch(e){error.value=e.message}
 }
 async function generateDocx() {
@@ -260,7 +293,7 @@ async function generateDocx() {
 }
 async function createDelivery() {
   if(!report.value)return
-  try{await api('/service-workflow/reports/'+report.value.id+'/deliveries',{method:'POST',body:JSON.stringify({versionNo:report.value.current_version_no,...deliveryForm.value})});deliveries.value=await api('/service-workflow/reports/'+report.value.id+'/deliveries');notice.value='报告交付登记已创建'}
+  try{await api('/service-workflow/reports/'+report.value.id+'/deliveries',{method:'POST',body:JSON.stringify({versionNo:Number(deliveryVersion.value),...deliveryForm.value})});deliveries.value=await api('/service-workflow/reports/'+report.value.id+'/deliveries');notice.value='报告交付登记已创建'}
   catch(e){error.value=e.message}
 }
 async function updateDelivery(delivery,status) {
@@ -390,9 +423,9 @@ onBeforeUnmount(releasePreviews)
           <label>报告类型<select v-model="reportForm.reportType"><option value="inspection">消防检测</option><option value="service">技术服务</option><option value="maintenance">维护保养</option></select></label>
           <label v-if="reportForm.reportType==='inspection'" class="wide">检测资料版本（可选，绑定后不随档案更新）<select v-model="inspectionVersion"><option value="">暂不绑定</option><option v-for="v in inspectionVersions" :key="v.version_no" :value="v.version_no">资料 v{{v.version_no}} · {{v.created_at}}</option></select></label>
           <label class="wide">摘要<textarea v-model="reportForm.summary" required rows="2"></textarea></label>
-          <label class="wide">检测范围<textarea v-model="reportForm.scope" rows="2"></textarea></label>
-          <label class="wide">检测方法<textarea v-model="reportForm.methods" rows="2"></textarea></label>
-          <label class="wide">检测发现<textarea v-model="reportForm.findings" rows="2"></textarea></label>
+          <label class="wide">检测范围<textarea v-model="reportForm.scope" :disabled="!editableReport||busy" rows="2"></textarea></label>
+          <label class="wide">检测方法<textarea v-model="reportForm.methods" :disabled="!editableReport||busy" rows="2"></textarea></label>
+          <label class="wide">检测发现<textarea v-model="reportForm.findings" :disabled="!editableReport||busy" rows="2"></textarea></label>
           <label class="wide">服务结论<textarea v-model="reportForm.conclusion" required rows="2"></textarea></label>
           <button class="primary" :disabled="busy">创建报告草稿</button>
         </form>
@@ -404,28 +437,32 @@ onBeforeUnmount(releasePreviews)
       <div v-else class="sw-report-view">
         <div class="sw-panel-title"><div><button class="back" @click="report=null;inspectionVersion=''">← 报告列表</button><h3>{{ report.title }}</h3><small>{{ report.report_no }} · 版本 {{ report.current_version_no }} · 修订 {{ report.revision_no }}</small></div><span class="sw-pill">{{ reportLabel(report.status) }}</span></div>
         <div class="sw-form">
-          <label>报告标题<input v-model="reportForm.title"></label><label>报告编号<input :value="report.report_no" disabled></label>
-          <label v-if="report.report_type==='inspection'" class="wide">检测资料版本<select v-model="inspectionVersion" :disabled="!['draft','returned'].includes(report.status)||!can('report:write')"><option value="">暂不绑定</option><option v-for="v in inspectionVersions" :key="v.version_no" :value="v.version_no">资料 v{{v.version_no}} · {{v.created_at}}</option></select><small v-if="report.content?.inspectionProfile">已绑定资料 v{{report.content.inspectionProfile.versionNo}}，保存新报告版本才会变更。</small></label>
-          <label class="wide">摘要<textarea v-model="reportForm.summary" rows="2"></textarea></label><label class="wide">检测范围<textarea v-model="reportForm.scope" rows="2"></textarea></label><label class="wide">检测方法<textarea v-model="reportForm.methods" rows="2"></textarea></label><label class="wide">检测发现<textarea v-model="reportForm.findings" rows="3"></textarea></label><label class="wide">服务结论<textarea v-model="reportForm.conclusion" rows="2"></textarea></label>
+          <label>报告标题<input v-model="reportForm.title" :disabled="!editableReport||busy"></label><label>报告编号<input :value="report.report_no" disabled></label>
+          <label v-if="report.report_type==='inspection'" class="wide">检测资料版本<select v-model="inspectionVersion" :disabled="!editableReport||busy"><option value="">暂不绑定</option><option v-for="v in inspectionVersions" :key="v.version_no" :value="v.version_no">资料 v{{v.version_no}} · {{v.created_at}}</option></select><small v-if="report.content?.inspectionProfile">已绑定资料 v{{report.content.inspectionProfile.versionNo}}，保存新报告版本才会变更。</small></label>
+          <label class="wide">摘要<textarea v-model="reportForm.summary" :disabled="!editableReport||busy" rows="2"></textarea></label><label class="wide">检测范围<textarea v-model="reportForm.scope" rows="2"></textarea></label><label class="wide">检测方法<textarea v-model="reportForm.methods" rows="2"></textarea></label><label class="wide">检测发现<textarea v-model="reportForm.findings" rows="3"></textarea></label><label class="wide">服务结论<textarea v-model="reportForm.conclusion" :disabled="!editableReport||busy" rows="2"></textarea></label>
         </div>
-        <div class="sw-bottom-actions"><button v-if="['draft','returned'].includes(report.status)&&can('report:write')" class="primary" @click="saveReport">保存新版本</button><button v-if="report.status==='draft'&&can('report:write')" @click="reportAction('submit')">提交审核</button><button v-if="report.status==='submitted'&&can('report:review')" @click="reportAction('start-review')">开始审核</button><button v-if="report.status==='reviewing'&&can('report:review')" @click="reportAction('approve')">审核通过</button><button v-if="report.status==='reviewing'&&can('report:review')" class="danger" @click="reportAction('return')">退回修改</button><button v-if="report.status==='approved'&&can('report:issue')" @click="reportAction('issue')">签发报告</button><button v-if="report.status==='issued'&&can('report:issue')" @click="reportAction('archive')">归档报告</button><button v-if="['issued','archived'].includes(report.status)&&can('report:write')" @click="reportAction('revise')">创建修订版</button></div>
-        <section v-if="['draft','returned'].includes(report.status)&&can('report:write')" class="sw-docx">
+        <div v-if="report.status==='draft'&&can('report:write')" class="sw-form"><label class="wide">本版本送审文件<select v-model="selectedArtifact" :disabled="busy"><option value="">未选择 DOCX</option><option v-for="a in draftArtifacts" :key="a.id" :value="a.id">文件 #{{a.artifact_revision_no}} · {{a.original_name}}</option></select></label><label v-if="can('file:upload')" class="sw-upload">上传人工编辑 DOCX<input type="file" hidden accept=".docx" :disabled="busy" @change="registerEditedDocx"></label><small>送审后固定所选文件，旧版生成文件不会自动成为新版本正式报告。</small></div>
+        <p v-else-if="report.selectedArtifactId">本版本固定送审文件 #{{report.selectedArtifactId}}</p>
+        <p v-if="report.return_reason">退回意见：{{report.return_reason}}</p>
+        <div class="sw-bottom-actions"><button v-if="editableReport" :disabled="busy" class="primary" @click="saveReport">保存新版本</button><button v-if="report.status==='draft'&&can('report:write')"  :disabled="busy||(report.report_type==='inspection'&&!selectedArtifact)" @click="reportAction('submit')">提交审核</button><button v-if="report.status==='submitted'&&can('report:review')&&Number(report.versionCreatedBy)!==props.userId&&Number(report.submittedBy)!==props.userId" :disabled="busy" @click="reportAction('start-review')">开始审核</button><button v-if="report.status==='reviewing'&&can('report:review')&&Number(report.reviewer_id)===props.userId" :disabled="busy" @click="reportAction('approve')">审核通过</button><button v-if="report.status==='reviewing'&&can('report:review')&&Number(report.reviewer_id)===props.userId" :disabled="busy" class="danger" @click="reportAction('return')">退回修改</button><button v-if="['submitted','reviewing','approved'].includes(report.status)&&can('report:write')&&(Number(report.versionCreatedBy)===props.userId||Number(report.submittedBy)===props.userId)" :disabled="busy" @click="reportAction('withdraw')">撤回重新编制</button><button v-if="report.status==='approved'&&can('report:issue')&&Number(report.reviewer_id)!==props.userId&&Number(report.versionCreatedBy)!==props.userId&&Number(report.submittedBy)!==props.userId" :disabled="busy" @click="reportAction('issue')">签发报告</button><button v-if="report.status==='issued'&&can('report:issue')" @click="reportAction('archive')">归档报告</button><button v-if="['issued','archived'].includes(report.status)&&can('report:write')" @click="reportAction('revise')">创建修订版</button></div>
+        <section v-if="report.status==='draft'&&can('report:write')&&can('file:upload')" class="sw-docx">
           <h4>照片插入与 DOCX 生成</h4><label class="sw-upload">上传现有报告 DOCX 模板<input type="file" hidden accept=".docx" @change="chooseTemplate"></label><small>{{ templateFile?.original_name||'尚未选择模板' }}</small>
-          <div class="sw-batch-checks"><label v-for="b in batches.filter(x=>x.status==='reviewed'||(photoMode==='replace'&&x.status==='locked'))" :key="b.id"><input type="checkbox" :value="b.id" v-model="selectedBatches">{{ b.title }} · {{ b.photo_count }} 张 · {{ batchLabel(b.status) }}</label></div>
+          <div class="sw-batch-checks"><label v-for="b in batches.filter(x=>x.status==='reviewed'||(photoMode==='replace'&&x.status==='locked'&&Number(x.report_id)===Number(report.id)))" :key="b.id"><input type="checkbox" :value="b.id" v-model="selectedBatches">{{ b.title }} · {{ b.photo_count }} 张 · {{ batchLabel(b.status) }}</label></div>
           <label class="sw-mode"><input type="radio" value="append" v-model="photoMode"> 保留模板现有照片，在对应系统照片表格中追加（默认，非破坏性）</label>
           <label class="sw-mode"><input type="radio" value="replace" v-model="photoMode"> 替换模板中所有系统照片，仅保留本次已选批次（请确认模板原照片可替换）</label>
           <p class="sw-disclaimer">照片模式保留正文原样；正文填充仅使用已绑定的检测资料快照及明确绑定字段，不自动推导结论或签章。追加模式不能重复使用已归档照片批次。正文生成可不选照片，或与已审核照片共同生成。</p>
           <div class="sw-bottom-actions"><button class="primary" :disabled="busy||!templateFile||!selectedBatches.length" @click="generateDocx">仅插入照片并生成 DOCX</button><button v-if="report.report_type==='inspection'" :disabled="busy||!templateFile||!report.content?.inspectionProfile" @click="showBodyBinding=!showBodyBinding">{{showBodyBinding?'收起正文工作台':'打开正文填充工作台'}}</button></div>
           <InspectionDocxWorkbench v-if="showBodyBinding&&templateFile&&report.content?.inspectionProfile" :key="report.id+'-'+report.current_version_no+'-'+templateFile.id" :report-id="Number(report.id)" :version-no="Number(report.current_version_no)" :template-id="Number(templateFile.id)" :batch-ids="selectedBatches" :photo-mode="photoMode" :can-download="can('file:read')" @generated="refreshGenerated"/>
         </section>
-        <section v-if="report.status==='issued'||report.status==='archived'" class="sw-docx">
+        <section v-if="can('delivery:read')" class="sw-docx">
           <h4>报告邮寄 / 交付登记</h4>
-          <div class="sw-form">
+          <p v-if="!issuedVersions.length" class="sw-disclaimer">暂无明确签发文件的版本，历史交付仍可查阅。</p>
+          <div v-if="can('delivery:write')&&issuedVersions.length" class="sw-form"><label class="wide">签发版本<select v-model="deliveryVersion"><option v-for="v in issuedVersions" :key="v.version_no" :value="v.version_no">v{{v.version_no}} · {{v.title_snapshot||report.report_no}} · 文件 #{{v.submitted_artifact_id}}</option></select></label>
             <label>交付方式<select v-model="deliveryForm.deliveryMethod"><option value="courier">快递</option><option value="hand_delivery">现场交付</option><option value="electronic">电子交付</option></select></label><label>收件人<input v-model="deliveryForm.recipientName" required></label><label>收件单位<input v-model="deliveryForm.recipientOrganization"></label><label>联系电话<input v-model="deliveryForm.recipientPhone"></label><label class="wide">收件地址<input v-model="deliveryForm.recipientAddress" required></label><label>快递公司<input v-model="deliveryForm.courierName"></label><label>快递单号<input v-model="deliveryForm.trackingNo"></label><label class="wide">备注<textarea v-model="deliveryForm.notes" rows="2"></textarea></label>
-          </div><button class="primary" @click="createDelivery">登记交付</button>
-          <div class="sw-list"><article v-for="d in deliveries" :key="d.id"><div><b>{{ d.recipient_organization||d.recipient_name }}</b><small>{{ d.courier_name||d.delivery_method }} · {{ d.tracking_no||'无单号' }}</small><small>{{ d.recipient_address }}</small><small v-for="ev in d.events||[]" :key="ev.id">{{ev.from_status||'创建'}} → {{ev.to_status}} · {{ev.actor_name}} · {{ev.created_at}}</small></div><div><span class="sw-pill">{{ ({prepared:'待寄出',dispatched:'已寄出',delivered:'已签收',returned:'退回',cancelled:'已取消'})[d.status] }}</span><button v-if="d.status==='prepared'||d.status==='returned'" @click="updateDelivery(d,'dispatched')">登记寄出</button><button v-if="d.status==='dispatched'" @click="updateDelivery(d,'delivered')">登记签收</button><button v-if="d.status==='dispatched'" @click="updateDelivery(d,'returned')">登记退回</button></div></article></div>
+          </div><button v-if="can('delivery:write')&&issuedVersions.length" class="primary" :disabled="busy||!deliveryVersion" @click="createDelivery">登记交付</button>
+          <div class="sw-list"><article v-for="d in deliveries" :key="d.id"><div><b>{{ d.recipient_organization||d.recipient_name }}</b><small>{{ d.courier_name||d.delivery_method }} · {{ d.tracking_no||'无单号' }}</small><small>{{ d.recipient_address }}</small><small>报告 v{{d.version_no}} · {{d.artifact_id?'签发文件 #'+d.artifact_id:'历史文件未固定'}}</small><button v-if="can('file:read')&&d.file_id" @click="downloadFile(d.file_id,d.original_name)">下载交付原件</button><small v-for="ev in d.events||[]" :key="ev.id">{{ev.from_status||'创建'}} → {{ev.to_status}} · {{ev.actor_name}} · {{ev.created_at}}</small></div><div><span class="sw-pill">{{ ({prepared:'待寄出',dispatched:'已寄出',delivered:'已签收',returned:'退回',cancelled:'已取消'})[d.status] }}</span><button v-if="can('delivery:write')&&['prepared','returned'].includes(d.status)" @click="updateDelivery(d,'dispatched')">登记寄出</button><button v-if="can('delivery:write')&&d.status==='dispatched'" @click="updateDelivery(d,'delivered')">登记签收</button><button v-if="can('delivery:write')&&d.status==='dispatched'" @click="updateDelivery(d,'returned')">登记退回</button><button v-if="can('delivery:write')&&['prepared','returned'].includes(d.status)" @click="updateDelivery(d,'cancelled')">取消交付</button></div></article></div>
         </section>
-        <section class="sw-history"><h4>版本历史</h4><div v-for="v in report.versions||[]" :key="v.version_no">v{{ v.version_no }} · {{ v.content_sha256?.slice(0,16) }} · {{ v.created_at }}</div><h4>生成文件历史</h4><div v-for="a in report.artifacts||[]" :key="a.id">v{{ a.version_no }} / DOCX #{{ a.artifact_revision_no }} · {{ a.original_name }} · {{ a.sha256?.slice(0,16) }} <button v-if="can('file:read')" @click="downloadFile(a.file_id,a.original_name)">下载</button><details v-if="a.generation_manifest"><summary>生成来源记录</summary><pre class="artifact-manifest">{{typeof a.generation_manifest==='string'?JSON.stringify(JSON.parse(a.generation_manifest),null,2):JSON.stringify(a.generation_manifest,null,2)}}</pre></details></div><h4>操作记录</h4><div v-for="e in report.events||[]" :key="e.id">{{ e.from_status||'新建' }} → {{ e.to_status }} · {{ e.actor_name }} · {{ e.created_at }} · {{ e.reason }}</div></section>
+        <section class="sw-history"><h4>版本历史</h4><div v-for="v in report.versions||[]" :key="v.version_no">v{{ v.version_no }} · {{v.title_snapshot||'历史标题未记录'}} · {{ v.created_at }} <button @click="viewVersion(v.version_no)">查看快照</button></div><div v-if="historyVersion" class="sw-docx"><h4>历史版本 v{{historyVersion.version_no}}</h4><p>{{historyVersion.title_snapshot||'历史标题未记录'}}</p><pre class="artifact-manifest">{{JSON.stringify(historyVersion.content,null,2)}}</pre><div v-for="f in historyVersion.attachments||[]" :key="f.file_id">{{f.original_name}} <button v-if="can('file:read')" @click="downloadFile(f.file_id,f.original_name)">下载原件</button></div><button @click="historyVersion=null">关闭快照</button></div><h4>生成文件历史</h4><div v-for="a in report.artifacts||[]" :key="a.id">v{{ a.version_no }} / DOCX #{{ a.artifact_revision_no }} · {{ a.original_name }} · {{ a.sha256?.slice(0,16) }} <button v-if="can('file:read')" @click="downloadFile(a.file_id,a.original_name)">下载</button><details v-if="a.generation_manifest"><summary>生成来源记录</summary><pre class="artifact-manifest">{{typeof a.generation_manifest==='string'?JSON.stringify(JSON.parse(a.generation_manifest),null,2):JSON.stringify(a.generation_manifest,null,2)}}</pre></details></div><h4>操作记录</h4><div v-for="e in report.events||[]" :key="e.id">{{ e.from_status||'新建' }} → {{ e.to_status }} · {{ e.actor_name }} · {{ e.created_at }} · {{ e.reason }}</div></section>
       </div>
     </div>
   </template>
