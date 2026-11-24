@@ -47,11 +47,12 @@ public class FireStandardController {
         jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('standardId',?))",actor(a),action,"erp_fire_standard",Long.toString(id),UUID.randomUUID().toString(),id);
     }
     @GetMapping @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:standard:write')")
-    public Map<String,Object> list(Authentication a,@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String category,@RequestParam(defaultValue="") String validity,@RequestParam(defaultValue="false") boolean includeInactive,@RequestParam(defaultValue="0") int offset,@RequestParam(defaultValue="50") int limit){
+    public Map<String,Object> list(Authentication a,@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String category,@RequestParam(defaultValue="") String validity,@RequestParam(defaultValue="") String referenceDate,@RequestParam(defaultValue="false") boolean includeInactive,@RequestParam(defaultValue="0") int offset,@RequestParam(defaultValue="50") int limit){
         if(q.length()>200||category.length()>100||offset<0||limit<1||limit>100||(!validity.isEmpty()&&!Set.of("unknown","current","partial","historical","withdrawn").contains(validity)))throw bad("无效查询");
         boolean manager=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:standard:write"));
+        LocalDate reference=date(referenceDate);
         String like="%"+q.trim()+"%",compact="%"+q.replaceAll("\\s+","")+"%";
-        var rows=jdbc.queryForList("SELECT s.*,f.original_name,f.sha256 file_sha256 FROM erp_fire_standard s LEFT JOIN erp_file_object f ON f.id=s.file_id WHERE (?=1 OR s.active=1) AND (?='' OR s.category=?) AND (?='' OR s.validity=?) AND (s.title LIKE ? OR REPLACE(s.standard_no,' ','') LIKE ? OR s.aliases LIKE ? OR s.edition LIKE ?) ORDER BY s.category,s.standard_no,s.edition,s.revision_no DESC LIMIT ? OFFSET ?",manager&&includeInactive?1:0,category,category,validity,validity,like,compact,like,like,limit+1,offset);
+        var rows=jdbc.queryForList("SELECT s.*,f.original_name,f.sha256 file_sha256 FROM erp_fire_standard s LEFT JOIN erp_file_object f ON f.id=s.file_id WHERE (?=1 OR s.active=1) AND (?='' OR s.category=?) AND (?='' OR s.validity=?) AND (s.title LIKE ? OR REPLACE(s.standard_no,' ','') LIKE ? OR s.aliases LIKE ? OR s.edition LIKE ?) ORDER BY CASE WHEN ? IS NULL THEN 0 WHEN s.effective_on IS NULL THEN 1 WHEN s.effective_on<=? AND (s.withdrawn_on IS NULL OR s.withdrawn_on>?) THEN 0 ELSE 2 END,s.category,s.standard_no,s.edition,s.revision_no DESC LIMIT ? OFFSET ?",manager&&includeInactive?1:0,category,category,validity,validity,like,compact,like,like,reference,reference,reference,limit+1,offset);
         return Map.of("rows",rows.size()>limit?rows.subList(0,limit):rows,"hasMore",rows.size()>limit);
     }
     @GetMapping("/categories") @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:standard:write')")
@@ -60,7 +61,8 @@ public class FireStandardController {
     public Map<String,Object> create(@RequestBody Map<String,Object>b,Authentication a){
         String no=val(b,"standardNo",80,true).replaceAll("\\s+"," ").toUpperCase(Locale.ROOT),edition=val(b,"edition",80,false);
         // A standard number without whitespace and with whitespace denotes the same catalog family.
-        no=no.replaceAll("\\s+","");
+        String compactNo=no.replaceAll("\\s+","");
+        no=compactNo.replaceFirst("^(GB/T|GB|XF|GA|JGJ/T|JGJ|DB)(?=\\d)","$1 ");
         String title=val(b,"title",240,true),category=val(b,"category",100,true),validity=val(b,"validity",24,true);
         if(!Set.of("unknown","current","partial","historical","withdrawn").contains(validity))throw bad("规范状态无效");
         String source=source(val(b,"sourceUrl",1000,true),false),access=val(b,"accessUrl",1000,false);
@@ -81,7 +83,7 @@ public class FireStandardController {
         }
         if(verified&&access.isBlank()&&file==null)throw bad("核验需提供规范原文访问入口或获准保存的PDF");
         jdbc.queryForObject("SELECT id FROM erp_permission WHERE code='report:standard:write' FOR UPDATE",Long.class);
-        int next=jdbc.queryForObject("SELECT COALESCE(MAX(revision_no),0)+1 FROM erp_fire_standard WHERE REPLACE(standard_no,' ','')=? AND edition=?",Integer.class,no,edition);
+        int next=jdbc.queryForObject("SELECT COALESCE(MAX(revision_no),0)+1 FROM erp_fire_standard WHERE REPLACE(standard_no,' ','')=? AND edition=?",Integer.class,compactNo,edition);
         jdbc.update("INSERT INTO erp_fire_standard(standard_no,edition,title,category,publication_year,effective_on,withdrawn_on,validity,aliases,source_url,access_url,notes,verified,revision_no,file_id,verified_by,verified_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,IF(?=1,CURRENT_TIMESTAMP(3),NULL))",no,edition,title,category,year,effective,withdrawn,validity,aliases,source,access.isBlank()?null:access,notes,verified,next,file,verified?actor(a):null,verified?1:0);
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);audit(a,id,"fire.standard.created");
         return one(id);
