@@ -1,0 +1,108 @@
+# Persistent local acceptance/trial only. Never use production data volumes.
+services:
+  erp-next-mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ERP_NEXT_DB_ROOT_PASSWORD:?Set ERP_NEXT_DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: erp_next
+      MYSQL_USER: erp_next
+      MYSQL_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+    volumes:
+      - trial_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -u root --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    networks: [erp-next-internal]
+    restart: unless-stopped
+
+  erp-next-schema:
+    image: flyway/flyway:10.20.1
+    depends_on:
+      erp-next-mysql:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useSSL=false&allowPublicKeyRetrieval=true
+      FLYWAY_USER: erp_next
+      FLYWAY_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      FLYWAY_CONNECT_RETRIES: "30"
+      FLYWAY_VALIDATE_MIGRATION_NAMING: "true"
+      FLYWAY_CLEAN_DISABLED: "true"
+      FLYWAY_BASELINE_ON_MIGRATE: "false"
+    volumes:
+      - ./db/migration:/flyway/sql:ro
+    command: ["migrate"]
+    networks: [erp-next-internal]
+    restart: "no"
+
+  erp-next-api:
+    user: "${ERP_TRIAL_UID:?Set ERP_TRIAL_UID}:${ERP_TRIAL_GID:?Set ERP_TRIAL_GID}"
+    build:
+      context: ../backend/erp-next
+      dockerfile: Dockerfile
+    environment:
+      ERP_NEXT_PORT: "8090"
+      ERP_NEXT_DB_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      ERP_NEXT_DB_USER: erp_next
+      ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
+      ERP_FILES_ROOT: /var/lib/erp-next/files
+      ERP_LEGACY_SCAN_ENABLED: "true"
+      ERP_LEGACY_DB_URL: jdbc:mysql://legacy-mysql:3306/server_migration?useSSL=false&allowPublicKeyRetrieval=true
+      ERP_LEGACY_DB_USER: legacy_readonly
+      ERP_LEGACY_DB_PASSWORD: ${ERP_LEGACY_DB_PASSWORD:?Set ERP_LEGACY_DB_PASSWORD}
+      ERP_LEGACY_DB_SCHEMA: server_migration
+    ports:
+      - "127.0.0.1:${ERP_NEXT_API_PORT:-8090}:8090"
+    depends_on:
+      erp-next-schema:
+        condition: service_completed_successfully
+    volumes:
+      - ${ERP_TRIAL_FILES:?Set ERP_TRIAL_FILES}:/var/lib/erp-next/files
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    networks: [erp-next-internal, erp-next-published]
+    restart: unless-stopped
+
+  erp-next-web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.erp-next
+    ports:
+      - "127.0.0.1:${ERP_NEXT_WEB_PORT:-8089}:80"
+    depends_on:
+      erp-next-api:
+        condition: service_healthy
+    networks: [erp-next-internal, erp-next-published]
+    restart: unless-stopped
+
+  legacy-mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ERP_LEGACY_ROOT_PASSWORD:?Set ERP_LEGACY_ROOT_PASSWORD}
+      MYSQL_DATABASE: server_migration
+    volumes:
+      - trial_legacy:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -u root --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 15s
+    networks: [erp-next-internal]
+    restart: unless-stopped
+
+volumes:
+  trial_mysql: {}
+  trial_legacy: {}
+
+networks:
+  erp-next-internal:
+    internal: true
+  erp-next-published: {}

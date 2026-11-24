@@ -35,7 +35,18 @@ mvn -B -f backend/erp-next/pom.xml verify
 cd frontend && npm ci && npm run build:prod
 ```
 
-## Codespaces 一键启动新版 ERP（推荐测试）
+## WSL2 本地一键测试与验收部署
+
+Ubuntu 22.04 / Docker Compose v2，仓库建议克隆到 WSL Linux 文件系统（如 ~/zjerp）。不要求宿主机安装 Maven、JDK、Node 或 Python MySQL 依赖。需有 python3、curl、flock（Ubuntu 软件包 python3、curl、util-linux）。
+
+```bash
+bash test.sh        # 完整构建与隔离 Smoke，日志在 test-results/
+bash deploy.sh      # 持久化本地验收环境，默认仅回环端口
+```
+
+部署后访问 http://localhost:8089/next.html，账号 trial-admin，初始密码文件 ~/.local/share/zjerp-trial/admin-password。该目录保留数据库的隔离标识、凭据、旧附件副本及迁移档案。测试与部署不共享容器或数据卷。详见 [WSL2 验收与迁移](erp-next/WSL_ACCEPTANCE.md)。
+
+## Codespaces 一键启动新版 ERP（普通空库）
 
 在 GitHub Codespaces 打开仓库后，直接运行：
 
