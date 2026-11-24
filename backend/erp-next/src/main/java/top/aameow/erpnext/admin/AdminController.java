@@ -114,7 +114,7 @@ public class AdminController {
     public List<Map<String,Object>> identities() {
         return jdbc.queryForList("""
             SELECT i.id,i.username,i.display_name,i.status,i.organization_id,
-                   GROUP_CONCAT(r.code ORDER BY r.code SEPARATOR ',') AS roles
+                   COALESCE(GROUP_CONCAT(r.code ORDER BY r.code SEPARATOR ','), '') AS roles
             FROM erp_identity i LEFT JOIN erp_identity_role ir ON ir.identity_id=i.id
             LEFT JOIN erp_role r ON r.id=ir.role_id
             GROUP BY i.id ORDER BY i.id DESC LIMIT 200
@@ -220,7 +220,7 @@ public class AdminController {
             current.get("username"),nextStatus,rolesChanged,password!=null&&!password.toString().isBlank());
         return jdbc.queryForList("""
             SELECT i.id,i.username,i.display_name,i.status,
-                   GROUP_CONCAT(r.code ORDER BY r.code SEPARATOR ',') AS roles
+                   COALESCE(GROUP_CONCAT(r.code ORDER BY r.code SEPARATOR ','), '') AS roles
             FROM erp_identity i LEFT JOIN erp_identity_role ir ON ir.identity_id=i.id
             LEFT JOIN erp_role r ON r.id=ir.role_id
             WHERE i.id=? GROUP BY i.id
