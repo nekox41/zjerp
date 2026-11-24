@@ -72,3 +72,16 @@ curl -fsS -X POST "$SW/photo-batches/$PHOTO_BATCH_ID/submit" -H "Authorization: 
 LOCKED_BATCH=$(curl -sS -o /tmp/erp-locked-batch.json -w '%{http_code}' -X PUT "$CLASSIFY" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"photoIds\":$PAIR,\"systemCode\":\"消火栓系统\"}")
 test "$LOCKED_BATCH" = "409"
 curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/visits" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 检测现场'
+
+
+# E06: multiple buildings, shared facilities located outside inspection area, manual judgments and version history.
+PROFILE="$SW/work-packages/$WORK_ID/inspection-profile"
+curl -fsS "$PROFILE" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert json.load(sys.stdin)["versionNo"]==0'
+PROFILE_DATA='{"expectedVersionNo":0,"content":{"general":{"projectName":"CI 工程","address":"CI 地址"},"buildings":[{"name":"1号楼","aboveGroundFloors":"18"},{"name":"地下车库一期","belowGroundFloors":"2"}],"facilities":[{"system":"消防给水系统","name":"消防水泵房","location":"2号楼负一层","servedAreas":"1号楼、地下车库一期"}],"records":[{"system":"消防给水系统","item":"标识","result":"未设置","judgment":"不合格"}],"summaries":[{"system":"消防给水系统","judgment":"待审核"}],"conclusion":{"text":""}}}'
+curl -fsS -X PUT "$PROFILE" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$PROFILE_DATA" | python -c 'import json,sys; r=json.load(sys.stdin); assert r["versionNo"]==1 and len(r["content"]["buildings"])==2 and r["content"]["conclusion"]["text"]==""'
+STALE_PROFILE=$(curl -sS -o /tmp/erp-profile-stale.json -w '%{http_code}' -X PUT "$PROFILE" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$PROFILE_DATA")
+test "$STALE_PROFILE" = "409"
+NEXT_PROFILE=$(python -c 'import json,sys; r=json.loads(sys.argv[1]); r["expectedVersionNo"]=1; r["content"]["general"]["address"]="CI 更新地址"; print(json.dumps(r))' "$PROFILE_DATA")
+curl -fsS -X PUT "$PROFILE" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$NEXT_PROFILE" | python -c 'import json,sys; assert json.load(sys.stdin)["versionNo"]==2'
+curl -fsS "$PROFILE/versions/1" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; r=json.load(sys.stdin)["content"]; assert r["general"]["address"]=="CI 地址" and r["facilities"][0]["location"]=="2号楼负一层" and r["records"][0]["judgment"]=="不合格"'
+curl -fsS "$PROFILE/versions" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert [x["version_no"] for x in json.load(sys.stdin)]==[2,1]'

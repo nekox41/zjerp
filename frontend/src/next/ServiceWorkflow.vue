@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { api, downloadFile } from './api'
+import InspectionProfile from './InspectionProfile.vue'
 
 const props = defineProps({ permissions: { type: Array, default: () => [] }, userId: { type: Number, default: 0 }, destination: {type:Object,default:null} })
 const emit=defineEmits(['navigate'])
@@ -9,6 +10,7 @@ const visibleTabs = computed(()=>[
   {id:'visits',name:'现场服务',permission:'service:visit:read'},
   {id:'issues',name:'问题清单',permission:'project:read'},
   {id:'photos',name:'照片批次',permission:'report:photo:read'},
+  {id:'inspection',name:'检测资料档案',permission:'report:read'},
   {id:'reports',name:'报告与交付',permission:'report:read'}
 ].filter(x=>can(x.permission)))
 const projects = ref([]), packages = ref([]), employees = ref([]), issues = ref([])
@@ -23,6 +25,7 @@ const batchForm = ref({title:'现场照片',visitDate:new Date().toISOString().s
 const reportForm = ref({reportNo:'',title:'',reportType:'inspection',summary:'',scope:'',methods:'',findings:'',conclusion:''})
 const deliveryForm = ref({deliveryMethod:'courier',recipientName:'',recipientPhone:'',recipientOrganization:'',recipientAddress:'',courierName:'',trackingNo:'',notes:''})
 const previewUrls = ref({})
+const photoView=ref('cards'),photoMode=ref('append')
 const photoDrafts = ref({})
 const photoFilter=ref('all'),photoSelection=ref([]),bulkSystem=ref(''),bulkConfirm=ref(false),focusedPhoto=ref(null)
 const photoEditable=computed(()=>batch.value?.status==='collecting'&&can('report:photo:write'))
@@ -368,6 +371,7 @@ onBeforeUnmount(releasePreviews)
       </div>
     </div>
 
+    <InspectionProfile v-if="tab==='inspection'" :key="workPackage.id" :work-package-id="Number(workPackage.id)" :project-name="project?.name||''" :permissions="props.permissions" />
     <div v-if="tab==='reports'" class="sw-panel">
       <div class="sw-panel-title"><h3>检测报告与交付</h3><span>{{ reports.length }} 份</span></div>
       <div v-if="!report" class="sw-two">
