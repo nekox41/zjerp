@@ -1,0 +1,183 @@
+package top.aameow.erpnext.business;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.poi.xwpf.usermodel.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
+import org.w3c.dom.Node;
+import java.util.*;
+import java.util.regex.Pattern;
+
+/**
+ * Explicit DOCX body bindings. Paths refer to actual paragraphs/cells, not grid columns.
+ * Only plain text runs are eligible; existing pictures, fields, signatures and other
+ * complex objects are not edited. The template is always opened as a new copy.
+ */
+@Component
+public class InspectionDocxBinder {
+    private static final Pattern TOKEN=Pattern.compile("\\{\\{erp\\.([A-Za-z][A-Za-z0-9]*(?:\\.(?:[A-Za-z][A-Za-z0-9]*|[0-9]+))+)\\}\\}");
+    private static final Set<String> SECTIONS=Set.of("general","buildings","facilities","records","instruments","summaries","conclusion");
+    private static final Set<String> PROTECTED=Set.of("签字","签章","盖章","印章","批准人","审核人","检测人","报告人","项目负责人","技术负责人","骑缝章","营业执照","资格证");
+    private static final int MAX_TARGETS=20000;
+    public record Binding(String target,String expectedText,String field){}
+    public record Candidate(String target,String text){}
+    public record Field(String key,String value){}
+    public record Change(String target,String before,String after,List<String> fields){}
+    public record Inspection(List<Field> fields,List<Candidate> candidates,List<Change> changes,List<String> errors,List<String> unmappedFields){}
+    private record Target(String key,XWPFParagraph paragraph){}
+    private record Edit(int start,int end,String value){}
+    private record Planned(Target target,List<Edit> edits,Change change){}
+    private record Plan(Inspection inspection,List<Planned> edits){}
+
+    private ResponseStatusException bad(String message){return new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,message);}
+    private void walk(List<IBodyElement> elements,String prefix,List<Target> out){
+        int p=0,t=0;
+        for(IBodyElement element:elements){
+            if(element instanceof XWPFParagraph paragraph){
+                out.add(new Target(prefix+"P"+(++p),paragraph));
+                if(out.size()>MAX_TARGETS)throw bad("模板正文段落过多，暂不支持自动填充");
+            }else if(element instanceof XWPFTable table){
+                String key=prefix+"T"+(++t)+"/";
+                int row=0;
+                for(XWPFTableRow tr:table.getRows()){
+                    row++;int cell=0;
+                    for(XWPFTableCell tc:tr.getTableCells())walk(tc.getBodyElements(),key+"R"+row+"/C"+(++cell)+"/",out);
+                }
+            }
+        }
+    }
+    private boolean plain(XWPFParagraph p){
+        Node n=p.getCTP().getDomNode();
+        for(Node child=n.getFirstChild();child!=null;child=child.getNextSibling()){
+            if(child.getNodeType()!=Node.ELEMENT_NODE)continue;
+            String local=child.getLocalName();
+            if("pPr".equals(local))continue;
+            if(!"r".equals(local))return false;
+            for(Node run=child.getFirstChild();run!=null;run=run.getNextSibling()){
+                if(run.getNodeType()!=Node.ELEMENT_NODE)continue;
+                if(!Set.of("rPr","t").contains(run.getLocalName()))return false;
+            }
+        }
+        return !p.getRuns().isEmpty()&&p.getRuns().stream().allMatch(r->r.getCTR().sizeOfTArray()<=1);
+    }
+    private String text(XWPFParagraph p){
+        StringBuilder sb=new StringBuilder();
+        for(XWPFRun run:p.getRuns())if(run.getCTR().sizeOfTArray()==1)sb.append(run.getCTR().getTArray(0).getStringValue());
+        return sb.toString();
+    }
+    private boolean protectedText(String text){
+        String compact=text.replaceAll("\\s+","");
+        return PROTECTED.stream().anyMatch(compact::contains);
+    }
+    private void flatten(String prefix,JsonNode node,Map<String,String> result){
+        if(node==null)return;
+        if(node.isTextual()){
+            String value=node.asText();
+            if(!value.isBlank())result.put(prefix,value);
+        }else if(node.isArray()){
+            for(int i=0;i<node.size();i++)flatten(prefix+"."+i,node.get(i),result);
+        }else if(node.isObject()){
+            node.fields().forEachRemaining(e->{
+                if(e.getKey().matches("[A-Za-z][A-Za-z0-9]*"))flatten(prefix+"."+e.getKey(),e.getValue(),result);
+            });
+        }
+    }
+    private Map<String,String> fields(JsonNode snapshot,String reportNo,String title){
+        Map<String,String> result=new TreeMap<>();
+        if(snapshot==null||!snapshot.isObject())throw bad("请先绑定检测资料版本");
+        for(String section:SECTIONS)flatten(section,snapshot.get(section),result);
+        result.put("report.reportNo",reportNo);result.put("report.title",title);
+        return result;
+    }
+    private Plan plan(XWPFDocument doc,JsonNode snapshot,String reportNo,String title,List<Binding> bindings){
+        Map<String,String> values=fields(snapshot,reportNo,title);
+        List<Target> targets=new ArrayList<>();
+        walk(doc.getBodyElements(),"",targets);
+        List<String> errors=new ArrayList<>();
+        // Header/footer fields require a separate reviewed mapping; never silently leave tokens behind.
+        doc.getHeaderList().forEach(h->{if(h.getText().contains("{{erp."))errors.add("页眉含 ERP 标记，当前只支持正文绑定");});
+        doc.getFooterList().forEach(f->{if(f.getText().contains("{{erp."))errors.add("页脚含 ERP 标记，当前只支持正文绑定");});
+        Map<String,Binding> manual=new LinkedHashMap<>();
+        if(bindings!=null){
+            if(bindings.size()>MAX_TARGETS)throw bad("手动绑定过多");
+            for(Binding b:bindings){
+                if(b==null||b.target()==null||b.field()==null||b.expectedText()==null||manual.putIfAbsent(b.target(),b)!=null)
+                    errors.add("存在无效或重复的手动绑定");
+            }
+        }
+        List<Candidate> candidates=new ArrayList<>();
+        List<Planned> planned=new ArrayList<>();
+        Set<String> used=new HashSet<>();
+        for(Target target:targets){
+            XWPFParagraph p=target.paragraph();
+            String visible=p.getText();
+            Binding binding=manual.remove(target.key());
+            boolean token=visible.contains("{{erp.");
+            boolean eligible=plain(p)&&!protectedText(visible)&&visible.length()<=12000;
+            if(!eligible){
+                if(token||binding!=null)errors.add(target.key()+"：含复杂对象、签署相关文字或不支持的内容");
+                continue;
+            }
+            String before=text(p);
+            if(!before.isBlank()&&!token)candidates.add(new Candidate(target.key(),before));
+            List<Edit> edits=new ArrayList<>();
+            List<String> keys=new ArrayList<>();
+            if(binding!=null){
+                if(token){errors.add(target.key()+"：不能同时使用标记与手动绑定");continue;}
+                if(before.isBlank()||!before.equals(binding.expectedText())){errors.add(target.key()+"：模板原文不匹配");continue;}
+                String value=values.get(binding.field());
+                if(value==null){errors.add(target.key()+"：资料字段不存在或为空："+binding.field());continue;}
+                edits.add(new Edit(0,before.length(),value));keys.add(binding.field());
+            }else if(token){
+                var matcher=TOKEN.matcher(before);
+                while(matcher.find()){
+                    String key=matcher.group(1),value=values.get(key);
+                    if(value==null){errors.add(target.key()+"：资料字段不存在或为空："+key);continue;}
+                    edits.add(new Edit(matcher.start(),matcher.end(),value));keys.add(key);
+                }
+                if(TOKEN.matcher(before).replaceAll("").contains("{{erp."))errors.add(target.key()+"：ERP 标记格式错误或不完整");
+            }
+            if(edits.isEmpty())continue;
+            StringBuilder after=new StringBuilder(before);
+            for(int i=edits.size()-1;i>=0;i--){Edit e=edits.get(i);after.replace(e.start(),e.end(),e.value());}
+            // Multiline data is deliberately rejected instead of writing control characters as XML text.
+            if(edits.stream().anyMatch(e->e.value().codePoints().anyMatch(Character::isISOControl))){
+                errors.add(target.key()+"：字段含换行或控制字符，请先在资料档案整理为单段文字");continue;
+            }
+            used.addAll(keys);
+            planned.add(new Planned(target,edits,new Change(target.key(),before,after.toString(),keys)));
+        }
+        manual.keySet().forEach(key->errors.add(key+"：未找到对应正文段落"));
+        if(planned.isEmpty())errors.add("没有可执行的正文绑定，请在模板中设置 ERP 标记或手动选择正文段落");
+        return new Plan(new Inspection(values.entrySet().stream().map(e->new Field(e.getKey(),e.getValue())).toList(),candidates,
+            planned.stream().map(Planned::change).toList(),errors,values.keySet().stream().filter(k->!used.contains(k)).toList()),planned);
+    }
+    public Inspection inspect(XWPFDocument doc,JsonNode snapshot,String reportNo,String title,List<Binding> bindings){
+        return plan(doc,snapshot,reportNo,title,bindings).inspection();
+    }
+    public Inspection fill(XWPFDocument doc,JsonNode snapshot,String reportNo,String title,List<Binding> bindings){
+        Plan plan=plan(doc,snapshot,reportNo,title,bindings);
+        if(!plan.inspection().errors().isEmpty())throw bad(String.join("；",plan.inspection().errors().stream().limit(8).toList()));
+        for(Planned p:plan.edits()){
+            List<XWPFRun> runs=p.target().paragraph().getRuns();
+            List<String> chunks=new ArrayList<>();
+            for(XWPFRun run:runs)chunks.add(run.getCTR().sizeOfTArray()==0?"":run.getCTR().getTArray(0).getStringValue());
+            // Apply ranges in reverse order, so the offsets of earlier ranges remain valid.
+            for(int i=p.edits().size()-1;i>=0;i--){
+                Edit edit=p.edits().get(i);int offset=0;boolean inserted=false;
+                for(int j=0;j<chunks.size();j++){
+                    String chunk=chunks.get(j);int next=offset+chunk.length();
+                    if(edit.start()<next&&edit.end()>offset){
+                        int from=Math.max(0,edit.start()-offset),to=Math.min(chunk.length(),edit.end()-offset);
+                        chunks.set(j,chunk.substring(0,from)+(inserted?"":edit.value())+chunk.substring(to));
+                        inserted=true;
+                    }
+                    offset=next;
+                }
+            }
+            for(int j=0;j<runs.size();j++)if(runs.get(j).getCTR().sizeOfTArray()==1)runs.get(j).setText(chunks.get(j),0);
+        }
+        return plan.inspection();
+    }
+}
