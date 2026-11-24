@@ -35,7 +35,7 @@ final class InspectionDocxRepeatRows {
     private static String rowText(XWPFTableRow row){
         return row.getTableCells().stream().map(XWPFTableCell::getText).reduce("",(a,b)->a+"\n"+b);
     }
-    private static Selector selector(XWPFTableRow row){
+    private static Selector selector(XWPFTableRow row,XWPFTable table){
         String text=rowText(row);
         var m=REPEAT.matcher(text);
         Selector selector=null;
@@ -48,7 +48,7 @@ final class InspectionDocxRepeatRows {
         if(hasComplex(row.getCtRow().getDomNode())||text.matches("(?s).*(签字|签章|盖章|印章|审核人|批准人|报告人|检测人|项目负责人|技术负责人).*"))
             throw bad("重复行含合并、签署或复杂对象，必须使用独立的纯文本模板行");
         // Disallow vertical merges in the entire table: cloning a row may otherwise break a neighbouring merge chain.
-        for(var other:row.getTable().getRows())if(hasVerticalMerge(other.getCtRow().getDomNode()))
+        for(var other:table.getRows())if(hasVerticalMerge(other.getCtRow().getDomNode()))
             throw bad("重复行所在表格含纵向合并；请使用独立明细表或人工绑定");
         if(selector.system()!=null&&!Set.of("records","facilities","summaries").contains(selector.section()))
             throw bad("仅系统相关资料列表支持系统筛选");
@@ -111,7 +111,7 @@ final class InspectionDocxRepeatRows {
             for(int ti=0;ti<tables.size();ti++){
                 var rows=tables.get(ti).getRows();
                 for(int ri=0;ri<rows.size();ri++){
-                    var select=selector(rows.get(ri));
+                    var select=selector(rows.get(ri),tables.get(ti));
                     if(select==null)continue;
                     var list=indices(data,select);total+=list.size();
                     if(total>3000)throw bad("重复生成行数超过 3000");
