@@ -312,6 +312,7 @@ async function reportAction(action) {
     if(selectedArtifact.value)body.artifactId=Number(selectedArtifact.value)
     if(!confirm('确认送审当前已保存版本及所选文件？未保存的正文修改不会提交。'))return
   }
+  if(action==='submit'&&manifestFor(reviewArtifact.value).tocPending){error.value='请下载 Word、更新整个目录并保存，再关联本文件上传最终版。';return}
   if(['submit','approve'].includes(action)&&manifestFor(reviewArtifact.value).layout==='modular-photo-pages-v1'){
     if(!confirm('确认已在 Word 核对当前文件目录、页码、分页及照片清晰度？如需修改，应重新登记文件。'))return
     body.layoutReviewed=true
@@ -326,11 +327,16 @@ async function registerEditedDocx(event){
  if(!file||busy.value||!report.value)return
  if(!confirm('确认该 Word 文件已经人工核对正文、照片、结论及旧资料，并对应当前报告版本？'))return
  const id=report.value.id,version=report.value.current_version_no
+ const source=reviewArtifact.value,manifest=manifestFor(source)
+ const linked=source&&confirm('此文件是否基于当前选中的 DOCX 修改？确认将保留来源文件关联；取消则登记为独立人工文件。')
+ const tocUpdated=!!(linked&&manifest.tocPending&&confirm('已在 Word 中更新整个目录、检查页码并保存？'))
+ if(linked&&manifest.tocPending&&!tocUpdated)return
+ const sourceEvidenceConfirmed=!!(linked&&manifest.photos?.length&&confirm('最终 Word 中仍使用来源文件的同一组照片？确认后保留来源照片清单；取消则不继承。'))
  busy.value=true
  try{
   const form=new FormData();form.append('file',file)
   const uploaded=await api('/files',{method:'POST',body:form})
-  const result=await api('/service-workflow/reports/'+id+'/register-docx',{method:'POST',body:JSON.stringify({fileId:uploaded.id,expectedVersionNo:version,manualReviewed:true})})
+  const result=await api('/service-workflow/reports/'+id+'/register-docx',{method:'POST',body:JSON.stringify({fileId:uploaded.id,expectedVersionNo:version,manualReviewed:true,...(linked?{sourceArtifactId:source.id,tocUpdated,sourceEvidenceConfirmed}:{})})})
   if(report.value?.id===id){await openReport(id);selectedArtifact.value=result.artifactId;notice.value='人工编辑 DOCX 已登记为本版本候选文件'}
  }catch(e){error.value=e.message}finally{busy.value=false}
 }

@@ -15,6 +15,10 @@ import org.springframework.web.server.ResponseStatusException;
 final class InspectionTemplateComposer {
     static final String MARKER="{{erp.systemSections}}";
     static final String TOC="{{erp.toc}}";
+    static final String TOC_PENDING_TEXT="请在 Word 中更新整个目录后核对页码。";
+    static boolean pendingToc(byte[] docx)throws Exception{
+        return parse(parts(docx).get("word/document.xml")).getDocumentElement().getTextContent().contains(TOC_PENDING_TEXT);
+    }
     private static final String W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     private static final String R="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private static final long MAX_EXPANDED=160L*1024*1024;
@@ -138,7 +142,7 @@ final class InspectionTemplateComposer {
     }
     private static Element tocField(Document d){
         Element p=w(d,"p"),field=w(d,"fldSimple");attr(field,"instr"," TOC \\o \"1-2\" \\h \\u ");attr(field,"dirty","true");
-        Element run=w(d,"r"),text=w(d,"t");text.setTextContent("请在 Word 中更新整个目录后核对页码。");run.appendChild(text);field.appendChild(run);p.appendChild(field);return p;
+        Element run=w(d,"r"),text=w(d,"t");text.setTextContent(TOC_PENDING_TEXT);run.appendChild(text);field.appendChild(run);p.appendChild(field);return p;
     }
     private static byte[] xml(Document d)throws Exception{
         var out=new ByteArrayOutputStream();TransformerFactory.newInstance().newTransformer().transform(new DOMSource(d),new StreamResult(out));return out.toByteArray();

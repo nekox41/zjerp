@@ -191,6 +191,11 @@ public class ServiceReportController {
         }else if(artifacts.size()==1)selected=((Number)artifacts.get(0).get("id")).longValue();
         else if(artifacts.size()>1)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"有多个生成文件，请明确选择本次送审的 DOCX");
         if("inspection".equals(r.get("report_type"))&&selected==null)throw new ResponseStatusException(HttpStatus.CONFLICT,"消防检测报告必须先生成或登记本版本的 DOCX 文件");
+        if(selected!=null){
+            var artifact=one("SELECT generation_manifest FROM erp_service_report_artifact WHERE id=?",selected);
+            if(artifact.get("generation_manifest")!=null&&mapper.valueToTree(parse(artifact.get("generation_manifest").toString())).path("tocPending").asBoolean(false))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"请在 Word 更新整个目录、保存并将最终文件关联原生成文件重新登记后送审");
+        }
         boolean layout=requiresLayoutReview(selected);
         if(layout&&(b==null||!Boolean.TRUE.equals(b.get("layoutReviewed"))))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请在 Word 中检查目录、实际页码、分页及照片清晰度，并确认当前送审文件");
         jdbc.update("UPDATE erp_service_report_version SET submitted_artifact_id=?,submitted_by=? WHERE report_id=? AND version_no=?",selected,actor(a),id,r.get("current_version_no"));
@@ -214,7 +219,7 @@ public class ServiceReportController {
         if(artifact==null)return false;
         var row=one("SELECT generation_manifest FROM erp_service_report_artifact WHERE id=?",artifact);
         if(row.get("generation_manifest")==null)return false;
-        return "modular-photo-pages-v1".equals(parse(row.get("generation_manifest").toString()).path("layout").asText());
+        return "modular-photo-pages-v1".equals(mapper.valueToTree(parse(row.get("generation_manifest").toString())).path("layout").asText());
     }
     @PostMapping("/reports/{id}/approve") @PreAuthorize("hasAuthority('report:review')") @Transactional
     public Map<String,Object> approve(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
