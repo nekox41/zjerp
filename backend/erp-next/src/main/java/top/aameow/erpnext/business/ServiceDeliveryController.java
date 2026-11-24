@@ -33,12 +33,31 @@ public class ServiceDeliveryController {
     @GetMapping("/employees/{id}/qualifications") @PreAuthorize("hasAuthority('employee:read')")
     public List<Map<String,Object>> qualifications(@PathVariable long id) {
         one("SELECT id FROM erp_employee WHERE id=?",id);
-        return jdbc.queryForList("SELECT *,CASE WHEN expires_on<CURRENT_DATE THEN 'expired' WHEN expires_on<=DATE_ADD(CURRENT_DATE,INTERVAL 60 DAY) THEN 'expiring' ELSE 'valid' END effective_status FROM erp_employee_qualification WHERE employee_id=? ORDER BY expires_on",id);
+        return jdbc.queryForList("SELECT *,CASE WHEN status='revoked' THEN 'revoked' WHEN status='expired' OR expires_on<CURRENT_DATE THEN 'expired' WHEN expires_on<=DATE_ADD(CURRENT_DATE,INTERVAL 60 DAY) THEN 'expiring' ELSE 'valid' END effective_status FROM erp_employee_qualification WHERE employee_id=? ORDER BY expires_on",id);
+    }
+    private java.time.LocalDate qualificationDate(Object value){
+        if(value==null||value.toString().isBlank())return null;
+        try{return java.time.LocalDate.parse(value.toString());}catch(java.time.format.DateTimeParseException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资质日期格式错误");}
+    }
+    private void validateQualification(Map<String,Object>b){
+        if(req(b,"qualificationName").length()>200)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资质名称过长");
+        var from=qualificationDate(b.get("issuedOn"));var to=qualificationDate(b.get("expiresOn"));
+        if(from!=null&&to!=null&&to.isBefore(from))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"有效期不能早于发证日期");
+        if(!Set.of("valid","expired","revoked").contains(val(b,"status","valid")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资质状态无效");
+    }
+    @PutMapping("/employees/{id}/qualifications/{qid}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
+    public Map<String,Object> updateQualification(@PathVariable long id,@PathVariable long qid,@RequestBody Map<String,Object>b,Authentication a){
+        one("SELECT id FROM erp_employee_qualification WHERE id=? AND employee_id=? FOR UPDATE",qid,id);
+        validateQualification(b);
+        jdbc.update("UPDATE erp_employee_qualification SET qualification_name=?,certificate_no=?,issuing_authority=?,issued_on=?,expires_on=?,notes=?,status=? WHERE id=? AND employee_id=?",
+            req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),qualificationDate(b.get("issuedOn")),qualificationDate(b.get("expiresOn")),b.get("notes"),val(b,"status","valid"),qid,id);
+        audit(a,"employee.qualification.updated","erp_employee_qualification",qid,"资质资料及状态更正");
+        return one("SELECT * FROM erp_employee_qualification WHERE id=?",qid);
     }
     @PostMapping("/employees/{id}/qualifications") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> addQualification(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_employee WHERE id=?",id);
-        jdbc.update("INSERT INTO erp_employee_qualification(employee_id,qualification_name,certificate_no,issuing_authority,issued_on,expires_on,notes) VALUES(?,?,?,?,?,?,?)",id,req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),b.get("issuedOn"),b.get("expiresOn"),b.get("notes"));
+        one("SELECT id FROM erp_employee WHERE id=?",id);validateQualification(b);
+        jdbc.update("INSERT INTO erp_employee_qualification(employee_id,qualification_name,certificate_no,issuing_authority,issued_on,expires_on,notes,status) VALUES(?,?,?,?,?,?,?,?)",id,req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),qualificationDate(b.get("issuedOn")),qualificationDate(b.get("expiresOn")),b.get("notes"),val(b,"status","valid"));
         long qid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"employee.qualification.created","erp_employee_qualification",qid,req(b,"qualificationName"));
         return one("SELECT * FROM erp_employee_qualification WHERE id=?",qid);
     }
@@ -65,9 +84,9 @@ public class ServiceDeliveryController {
     }
     @PutMapping("/amendments/{id}/approve") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> approveAmendment(@PathVariable long id,Authentication a) {
-        Map<String,Object> x=one("SELECT * FROM erp_contract_amendment WHERE id=?",id);
+        Map<String,Object> x=one("SELECT * FROM erp_contract_amendment WHERE id=? FOR UPDATE",id);
         if(!"draft".equals(x.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿变更可以审批");
-        Map<String,Object> current=one("SELECT amount,status FROM erp_contract WHERE id=?",x.get("contract_id"));
+        Map<String,Object> current=one("SELECT amount,status FROM erp_contract WHERE id=? FOR UPDATE",x.get("contract_id"));
         if(!Set.of("active","completed").contains(current.get("status").toString()) || ((BigDecimal)current.get("amount")).compareTo((BigDecimal)x.get("previous_amount"))!=0) throw new ResponseStatusException(HttpStatus.CONFLICT,"合同已变化，请重新登记变更");
         jdbc.update("UPDATE erp_contract_amendment SET status='approved' WHERE id=?",id);
         jdbc.update("UPDATE erp_contract SET amount=? WHERE id=?",x.get("revised_amount"),x.get("contract_id"));

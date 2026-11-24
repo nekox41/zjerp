@@ -34,6 +34,16 @@ async function viewVersion(no){
 }
 const loading = ref(false), busy = ref(false), error = ref(''), notice = ref('')
 const tab = ref('visits')
+const packageOpen=ref(false),packageForm=ref({packageNo:'',title:'',description:'',assigneeEmployeeId:'',plannedStart:'',plannedEnd:''})
+function newPackage(){
+ packageForm.value={packageNo:(project.value?.project_no||'')+'-FW-'+String(packages.value.length+1).padStart(2,'0'),title:'现场技术服务',description:'',assigneeEmployeeId:'',plannedStart:'',plannedEnd:''}
+ packageOpen.value=true
+}
+async function createPackage(){
+ if(!project.value||busy.value)return
+ const id=project.value.id;busy.value=true
+ try{const f=packageForm.value;const row=await api('/business/projects/'+id+'/work-packages',{method:'POST',body:JSON.stringify({...f,assigneeEmployeeId:f.assigneeEmployeeId||null,plannedStart:f.plannedStart||null,plannedEnd:f.plannedEnd||null})});await selectProject(id);await selectPackage(row.id);packageOpen.value=false;notice.value='服务工作已建立'}catch(e){error.value=e.message}finally{busy.value=false}
+}
 const visitForm = ref({visitDate:new Date().toISOString().slice(0,10),visitType:'inspection',title:'现场检测',summary:'',resultSummary:'',staff:[]})
 const issueForm = ref({title:'',description:'',severity:'medium',ownerEmployeeId:'',dueOn:''})
 const batchForm = ref({title:'现场照片',visitDate:new Date().toISOString().slice(0,10),visitId:''})
@@ -92,7 +102,7 @@ async function load() {
 }
 async function selectProject(id) {
   error.value=''; project.value=projects.value.find(x=>x.id===id)||null
-  workPackage.value=null; closeBatch(); report.value=null
+  packageOpen.value=false;workPackage.value=null; closeBatch(); report.value=null
   packages.value=[];visits.value=[];batches.value=[];reports.value=[];issues.value=[];deliveries.value=[];selectedBatches.value=[];templateFile.value=null
   if(!project.value)return
   try { packages.value=await api('/service-workflow/projects/'+id+'/work-packages') }
@@ -322,7 +332,9 @@ onBeforeUnmount(releasePreviews)
     <label>项目<select :value="project?.id||''" :disabled="busy" @change="selectProject(Number($event.target.value)||null)"><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.project_no }} · {{ p.name }}</option></select></label>
     <label>服务工作包<select :value="workPackage?.id||''" @change="selectPackage(Number($event.target.value)||null)" :disabled="busy||!project"><option value="">选择服务工作包</option><option v-for="w in packages" :key="w.id" :value="w.id">{{ w.package_no }} · {{ w.title }}</option></select></label>
   </div>
-  <div v-if="!workPackage" class="sw-empty">选择项目和服务工作包后，管理现场服务、问题、照片与报告。</div>
+  <div v-if="project&&can('service:write')" class="sw-bottom-actions"><button :disabled="busy" @click="newPackage">新建服务工作</button></div>
+  <form v-if="project&&packageOpen&&can('service:write')" class="sw-panel sw-form" @submit.prevent="createPackage"><label>编号<input v-model="packageForm.packageNo" required maxlength="80"></label><label>工作名称<input v-model="packageForm.title" required maxlength="240"></label><label>执行人员<select v-model="packageForm.assigneeEmployeeId"><option value="">暂不分配</option><option v-for="e in employees.filter(x=>x.status==='active')" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label><label>计划开始<input type="date" v-model="packageForm.plannedStart"></label><label>计划结束<input type="date" v-model="packageForm.plannedEnd"></label><label class="wide">备注<textarea v-model="packageForm.description" rows="2"></textarea></label><button class="primary" :disabled="busy">创建并打开</button><button type="button" :disabled="busy" @click="packageOpen=false">取消</button></form>
+  <div v-if="!workPackage" class="sw-empty">选择项目和服务工作后，管理现场服务、问题、照片与报告。尚无服务工作时，可在上方创建。</div>
   <template v-else>
     <nav class="sw-tabs">
       <button v-for="t in visibleTabs" :key="t.id" :class="{active:tab===t.id}" :disabled="busy" @click="tab=t.id">{{ t.name }}</button>

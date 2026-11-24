@@ -39,8 +39,14 @@ public class AuthService {
         return count != null && count > 0;
     }
 
+    public static void validateNewPassword(String password){
+        if(password==null||password.length()<12||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72||password.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"密码至少12字符且不得超过72个UTF-8字节");
+    }
     @Transactional
     public void bootstrapAdmin(String username, String displayName, String password) {
+        username=username.trim();displayName=displayName.trim();validateNewPassword(password);
+        if(username.isBlank()||displayName.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"账号和姓名不能为空");
         Long roleId = jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE", Long.class);
         if (isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT, "管理员已初始化");
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'active')",
@@ -54,7 +60,7 @@ public class AuthService {
     public void register(String username, String displayName, String password) {
         if (!isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT,"请先初始化管理员");
         username=username.trim();
-        displayName=displayName.trim();
+        displayName=displayName.trim();validateNewPassword(password);
         if(username.isBlank()||displayName.isBlank()||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"账号和姓名不能为空，密码不得超过72字节");
         try {
@@ -70,10 +76,13 @@ public class AuthService {
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public LoginResult login(String username, String password) {
+        if(password==null||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号或密码错误");
+        username=username.trim();
         List<Map<String,Object>> rows = jdbc.queryForList("""
             SELECT id, username, password_hash, display_name, organization_id, status,
                    failed_login_count, locked_until
-            FROM erp_identity WHERE username=?
+            FROM erp_identity WHERE username=? FOR UPDATE
             """, username);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         Map<String,Object> row = rows.get(0);
@@ -83,12 +92,14 @@ public class AuthService {
         Timestamp lockedUntil = (Timestamp) row.get("locked_until");
         if (lockedUntil != null && lockedUntil.toInstant().isAfter(Instant.now()))
             throw new ResponseStatusException(HttpStatus.LOCKED, "登录失败次数过多，请稍后再试");
-        if (!"active".equals(row.get("status")) || !passwords.matches(password, (String) row.get("password_hash"))) {
+        if(lockedUntil!=null&&!lockedUntil.toInstant().isAfter(Instant.now()))
+            jdbc.update("UPDATE erp_identity SET failed_login_count=0,locked_until=NULL WHERE id=?",id);
+        if (!passwords.matches(password, (String) row.get("password_hash"))) {
             jdbc.update("""
-                UPDATE erp_identity SET failed_login_count=failed_login_count+1,
-                  locked_until=CASE WHEN failed_login_count >= ? THEN DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MINUTE) ELSE locked_until END
+                UPDATE erp_identity SET locked_until=CASE WHEN failed_login_count >= ? THEN DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MINUTE) ELSE NULL END,
+                  failed_login_count=LEAST(failed_login_count+1,?)
                 WHERE id=?
-                """, Math.max(0, maxFailedLogins - 1), lockMinutes, id);
+                """, Math.max(0, maxFailedLogins - 1), lockMinutes, Math.max(1,maxFailedLogins), id);
             audit(null, "auth.login.failed", "erp_identity", Long.toString(id), "登录失败");
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }

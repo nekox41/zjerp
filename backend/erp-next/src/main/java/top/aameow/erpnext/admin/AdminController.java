@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.Authentication;
 import top.aameow.erpnext.auth.CurrentUser;
+import top.aameow.erpnext.auth.AuthService;
 
 import java.util.List;
 import java.util.Map;
@@ -128,6 +129,7 @@ public class AdminController {
     public Map<String,Object> createIdentity(@Valid @RequestBody CreateIdentity request, Authentication authentication) {
         jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE",Long.class);
         requireAdmin(authentication);
+        AuthService.validateNewPassword(request.password());
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,organization_id,status) VALUES(?,?,?,?, 'active')",
             request.username(), passwords.encode(request.password()), request.displayName(), request.organizationId());
         Long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
@@ -205,9 +207,8 @@ public class AdminController {
         Object password=request.get("password");
         if(password!=null && !password.toString().isBlank()) {
             String rawPassword=password.toString();
-            if(rawPassword.length()<12||rawPassword.length()>128)
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"新密码长度必须为 12 到 128 个字符");
-            jdbc.update("UPDATE erp_identity SET password_hash=? WHERE id=?",passwords.encode(rawPassword),id);
+            AuthService.validateNewPassword(rawPassword);
+            jdbc.update("UPDATE erp_identity SET password_hash=?,failed_login_count=0,locked_until=NULL WHERE id=?",passwords.encode(rawPassword),id);
             jdbc.update("UPDATE erp_auth_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE identity_id=? AND revoked_at IS NULL",id);
         }
         if("active".equals(nextStatus)&&!"active".equals(current.get("status")))

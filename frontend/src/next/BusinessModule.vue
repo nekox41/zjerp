@@ -16,6 +16,12 @@ const employees = ref([])
 const identities = ref([])
 const projectLogs = ref([])
 const qualifications = ref([])
+const qualificationEdit=ref(null)
+function editQualification(q){qualificationEdit.value={id:q.id,qualificationName:q.qualification_name,certificateNo:q.certificate_no||'',issuingAuthority:q.issuing_authority||'',issuedOn:q.issued_on||'',expiresOn:q.expires_on||'',notes:q.notes||'',status:q.status}}
+async function saveQualification(){
+ if(!selectedEmployee.value||!qualificationEdit.value)return
+ try{const q=qualificationEdit.value;await api('/business/employees/'+selectedEmployee.value.id+'/qualifications/'+q.id,{method:'PUT',body:JSON.stringify(q)});qualificationEdit.value=null;await openEmployee(selectedEmployee.value.id);await load()}catch(e){error.value=e.message}
+}
 const selectedEmployee = ref(null)
 const customers = ref([])
 const contracts = ref([])
@@ -144,6 +150,7 @@ const projectEditOpen=ref(false)
 const projectEditForm=ref({name:'',description:'',managerEmployeeId:'',plannedStart:'',plannedEnd:'',status:'planned'})
 async function openEmployee(id) {
   try {
+    qualificationEdit.value=null
     selectedEmployee.value=employees.value.find(x=>x.id===id)
     if(!selectedEmployee.value) throw new Error('员工记录不存在，请刷新列表')
     employeeEditForm.value={
@@ -262,7 +269,7 @@ onMounted(async ()=>{
             <label>员工状态<select v-model="employeeEditForm.status"><option value="active">在职</option><option value="inactive">离职/停用</option></select></label>
             <button class="primary-button" :disabled="busy">保存员工档案</button>
           </form>
-          <h4>资质证书</h4><p v-for="x in qualifications" :key="x.id" class="log-line">{{x.qualification_name}} · {{x.certificate_no||'无编号'}} · {{x.expires_on||'长期有效'}} · {{x.effective_status}}</p><form v-if="can('employee:write')" class="create-grid compact" @submit.prevent="submit('qualification')"><label>资质名称<input v-model="forms.qualification.value.qualificationName" required></label><label>证书编号<input v-model="forms.qualification.value.certificateNo"></label><label>发证机构<input v-model="forms.qualification.value.issuingAuthority"></label><label>发证日期<input v-model="forms.qualification.value.issuedOn" type="date"></label><label>有效期至<input v-model="forms.qualification.value.expiresOn" type="date"></label><button class="primary-button">添加资质</button></form></div>
+          <h4>资质证书</h4><p v-for="x in qualifications" :key="x.id" class="log-line">{{x.qualification_name}} · {{x.certificate_no||'无编号'}} · {{x.expires_on||'长期有效'}} · {{x.effective_status}} <button v-if="can('employee:write')" class="secondary-button" @click="editQualification(x)">更正资质</button></p><form v-if="qualificationEdit&&can('employee:write')" class="create-grid compact" @submit.prevent="saveQualification"><label>资质名称<input v-model="qualificationEdit.qualificationName" required></label><label>证书编号<input v-model="qualificationEdit.certificateNo"></label><label>发证机构<input v-model="qualificationEdit.issuingAuthority"></label><label>发证日期<input type="date" v-model="qualificationEdit.issuedOn"></label><label>有效期至<input type="date" v-model="qualificationEdit.expiresOn"></label><label>资质状态<select v-model="qualificationEdit.status"><option value="valid">有效</option><option value="expired">失效</option><option value="revoked">撤销</option></select></label><label>备注<input v-model="qualificationEdit.notes"></label><button class="primary-button">保存更正</button><button type="button" @click="qualificationEdit=null">取消</button></form><form v-if="can('employee:write')" class="create-grid compact" @submit.prevent="submit('qualification')"><label>资质名称<input v-model="forms.qualification.value.qualificationName" required></label><label>证书编号<input v-model="forms.qualification.value.certificateNo"></label><label>发证机构<input v-model="forms.qualification.value.issuingAuthority"></label><label>发证日期<input v-model="forms.qualification.value.issuedOn" type="date"></label><label>有效期至<input v-model="forms.qualification.value.expiresOn" type="date"></label><button class="primary-button">添加资质</button></form></div>
       <template v-else-if="section==='customers'">
         <h3 v-if="can('customer:write')">新增客户</h3><form v-if="can('customer:write')" class="create-grid" @submit.prevent="submit('customer')"><label>客户编号<input v-model="forms.customer.value.customerCode" required></label><label>客户名称<input v-model="forms.customer.value.name" required></label><label>统一社会信用代码<input v-model="forms.customer.value.creditCode"></label><label>客户类型<select v-model="forms.customer.value.customerType"><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="individual">个人</option></select></label><label>行业<input v-model="forms.customer.value.industry"></label><label>负责人<select v-model="forms.customer.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><label>联系电话<input v-model="forms.customer.value.phone"></label><label>电子邮箱<input v-model="forms.customer.value.email"></label><label>地址<input v-model="forms.customer.value.address"></label><label>备注<input v-model="forms.customer.value.notes"></label><button class="primary-button">创建客户</button></form>
         <div v-if="selectedCustomer" class="related-card">
