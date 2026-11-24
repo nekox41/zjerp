@@ -32,9 +32,12 @@ public class ReportDocxPhotoInserter {
     public void insert(XWPFDocument document, List<Photo> photos) { insert(document,photos,true); }
 
     public void insert(XWPFDocument document, List<Photo> photos, boolean replaceExisting) {
+        insert(document,photos,replaceExisting,supportedSystems());
+    }
+    public void insert(XWPFDocument document,List<Photo> photos,boolean replaceExisting,Set<String> systems){
         Map<String,List<Photo>> bySystem = new LinkedHashMap<>();
         for (Photo photo : photos) {
-            String system = normalize(photo.system());
+            String system = normalize(photo.system(),systems);
             if (system == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"存在无效的消防系统分类");
             bySystem.computeIfAbsent(system,k->new ArrayList<>()).add(photo);
         }
@@ -47,7 +50,7 @@ public class ReportDocxPhotoInserter {
             IBodyElement element=body.get(i);
             if (element instanceof XWPFParagraph paragraph) {
                 String text=paragraph.getText()==null?"":paragraph.getText().trim();
-                String system=normalize(text);
+                String system=normalize(text,systems);
                 if (system!=null) {
                     activeSystem=system;
                     sectionOrder.putIfAbsent(system,i);
@@ -118,7 +121,7 @@ public class ReportDocxPhotoInserter {
             IBodyElement element=body.get(i);
             if(element instanceof XWPFParagraph p) {
                 String text=p.getText()==null?"":p.getText().trim();
-                String system=normalize(text);
+                String system=normalize(text,systems);
                 if(system!=null) activeSystem=system;
                 else if("现场检测照片".equals(text) && activeSystem!=null && i+1<body.size()
                     && body.get(i+1) instanceof XWPFTable table) {
@@ -214,14 +217,15 @@ public class ReportDocxPhotoInserter {
         cell.addParagraph();
     }
 
-    private static String normalize(String text) {
+    private static String normalize(String text,Set<String> systems) {
         if(text==null) return null;
+        if(systems.contains(text.trim()))return text.trim();
         String value=PREFIX.matcher(text.trim()).replaceFirst("").trim();
         if("消防应急照明及疏散指示系统".equals(value)
             || "应急照明和疏散指示系统".equals(value)
             || "应急照明及疏散指示系统".equals(value))
             value="消防应急照明和疏散指示系统";
-        if("消防应急照明和疏散指示系统".equals(value) || "消防应急照明及疏散指示系统".equals(value)) return value;
-        return SYSTEMS.contains(value)?value:null;
+        if("消防应急照明和疏散指示系统".equals(value))return systems.contains(value)?value:null;
+        return systems.contains(value)?value:null;
     }
 }

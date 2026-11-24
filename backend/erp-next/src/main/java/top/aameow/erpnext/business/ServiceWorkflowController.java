@@ -98,7 +98,12 @@ public class ServiceWorkflowController {
     }
 
     @GetMapping("/photo-systems") @PreAuthorize("hasAuthority('report:photo:read')")
-    public List<String> photoSystems(){return new ArrayList<>(inserter.supportedSystems());}
+    public List<String> photoSystems(){return new ArrayList<>(allPhotoSystems());}
+    private Set<String> allPhotoSystems(){
+        Set<String> systems=new LinkedHashSet<>(inserter.supportedSystems());
+        systems.addAll(jdbc.query("SELECT DISTINCT system_name FROM erp_inspection_template WHERE template_kind='system' ORDER BY system_name",(rs,i)->rs.getString(1)));
+        return systems;
+    }
 
     @GetMapping("/work-packages/{id}/photo-batches") @PreAuthorize("hasAuthority('report:photo:read')")
     public List<Map<String,Object>> photoBatches(@PathVariable long id){
@@ -150,7 +155,7 @@ public class ServiceWorkflowController {
         if(b.photoIds()==null||b.photoIds().isEmpty()||b.photoIds().size()>500||b.photoIds().stream().anyMatch(x->x==null||x<=0)||new HashSet<>(b.photoIds()).size()!=b.photoIds().size())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择 1 至 500 张不重复的照片");
         String system=b.systemCode()==null||b.systemCode().isBlank()?null:b.systemCode().trim();
-        if(system!=null&&!inserter.supportedSystems().contains(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效消防系统分类");
+        if(system!=null&&!allPhotoSystems().contains(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效消防系统分类");
         boolean confirmed=Boolean.TRUE.equals(b.confirmed());
         if(confirmed&&system==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"未分类照片不能确认");
         var ids=b.photoIds().stream().sorted().toList();
@@ -173,7 +178,7 @@ public class ServiceWorkflowController {
         Object requestedSystem=b.containsKey("systemCode")?b.get("systemCode"):p.get("system_code");
         String system=requestedSystem==null?null:requestedSystem.toString();
         if(system!=null&&system.isBlank())system=null;
-        if(system!=null&&!inserter.supportedSystems().contains(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效消防系统分类");
+        if(system!=null&&!allPhotoSystems().contains(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效消防系统分类");
         String confirmation=b.get("confirmed")==null?null:(Boolean.parseBoolean(b.get("confirmed").toString())?"confirmed":"pending");
         Object takenOn=b.containsKey("takenOn")?b.get("takenOn"):p.get("taken_on");
         if(takenOn!=null&&takenOn.toString().isBlank())takenOn=null;
@@ -234,9 +239,15 @@ public class ServiceWorkflowController {
         return report;
     }
     private Map<String,Object> templateForGeneration(Map<String,Object>b,Authentication a){
-        long templateId=Long.parseLong(req(b,"templateFileId"));
+        Long libraryId=opt(b,"baseTemplateId");
+        long templateId;
+        if(libraryId!=null){
+            if(a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:read")))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权使用模板库");
+            var lib=one("SELECT file_id FROM erp_inspection_template WHERE id=? AND template_kind='base' AND active=1",libraryId);
+            templateId=((Number)lib.get("file_id")).longValue();
+        }else templateId=Long.parseLong(req(b,"templateFileId"));
         var template=one("SELECT * FROM erp_file_object WHERE id=?",templateId);
-        if(!(template.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a)){
+        if(libraryId==null&&(!(template.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a))){
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先上传自己有权使用的 DOCX 模板");
         }
         if(!DOCX.equals(template.get("media_type"))||!template.get("original_name").toString().toLowerCase(Locale.ROOT).endsWith(".docx"))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"模板必须是 DOCX 文件");
@@ -246,6 +257,31 @@ public class ServiceWorkflowController {
         byte[] bytes=Files.readAllBytes(storage.resolve(template.get("storage_key").toString()));
         if(!sha(bytes).equals(template.get("sha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"模板文件校验失败");
         return bytes;
+    }
+    private record TemplatePlan(byte[] bytes,String sha256,List<Map<String,Object>> revisions,Set<String> systems){}
+    private TemplatePlan prepareTemplate(Map<String,Object>b,Map<String,Object> template)throws Exception{
+        byte[] bytes=templateBytes(template);Long baseId=opt(b,"baseTemplateId");
+        List<Long> ids=b.get("sectionTemplateIds")==null?List.of():mapper.convertValue(b.get("sectionTemplateIds"),new TypeReference<List<Long>>(){});
+        if(ids==null||ids.size()>40||ids.stream().anyMatch(x->x==null||x<=0)||new HashSet<>(ids).size()!=ids.size())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"章节模板选择无效");
+        if(baseId==null){
+            if(!ids.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"系统章节需搭配基础模板库使用");
+            return new TemplatePlan(bytes,template.get("sha256").toString(),List.of(),allPhotoSystems());
+        }
+        if(ids.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"至少选择一个系统章节模板");
+        var base=one("SELECT id,template_name,revision_no,sha256,file_id FROM erp_inspection_template WHERE id=? AND template_kind='base' AND active=1",baseId);
+        if(!Objects.equals(base.get("sha256"),template.get("sha256"))||((Number)base.get("file_id")).longValue()!=((Number)template.get("id")).longValue())throw new ResponseStatusException(HttpStatus.CONFLICT,"基础模板已变更");
+        List<Map<String,Object>> revisions=new ArrayList<>();revisions.add(base);
+        List<InspectionTemplateComposer.Section> sections=new ArrayList<>();Set<String> systems=new LinkedHashSet<>();long total=bytes.length;
+        for(Long id:ids){
+            var s=one("SELECT t.id,t.system_name,t.template_name,t.revision_no,t.sha256,t.file_id,f.storage_key,f.media_type FROM erp_inspection_template t JOIN erp_file_object f ON f.id=t.file_id WHERE t.id=? AND t.template_kind='system' AND t.active=1",id);
+            String system=s.get("system_name").toString();
+            if(!systems.add(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"同一系统只能选择一个模板："+system);
+            byte[] part=templateBytes(s);total+=part.length;if(total>40L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"基础模板和章节模板合计超过40MB");
+            sections.add(new InspectionTemplateComposer.Section(system,part));
+            s.remove("storage_key");s.remove("media_type");revisions.add(s);
+        }
+        String hash=sha(json(revisions).getBytes(StandardCharsets.UTF_8));
+        return new TemplatePlan(InspectionTemplateComposer.compose(bytes,sections),hash,List.copyOf(revisions),systems);
     }
     private com.fasterxml.jackson.databind.JsonNode inspectionSnapshot(long id,Map<String,Object> report)throws Exception{
         if(!"inspection".equals(report.get("report_type")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"只有消防检测报告支持正文资料绑定");
@@ -264,8 +300,8 @@ public class ServiceWorkflowController {
         if((required&&expected==null)||(expected!=null&&expected.longValue()!=((Number)report.get("current_version_no")).longValue()))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"报告版本已变化，请重新检查");
     }
-    private String planHash(Map<String,Object> report,Map<String,Object> template,InspectionDocxBinder.Inspection inspection){
-        return sha(json(List.of(report.get("id"),report.get("current_version_no"),template.get("sha256"),inspection.changes())).getBytes(StandardCharsets.UTF_8));
+    private String planHash(Map<String,Object> report,String templateHash,InspectionDocxBinder.Inspection inspection){
+        return sha(json(List.of(report.get("id"),report.get("current_version_no"),templateHash,inspection.changes())).getBytes(StandardCharsets.UTF_8));
     }
     @PostMapping("/reports/{id}/inspect-docx")
     @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')")
@@ -275,10 +311,11 @@ public class ServiceWorkflowController {
         checkExpectedVersion(b,report,true);
         var template=templateForGeneration(b,a);
         var snapshot=inspectionSnapshot(id,report);
-        byte[] prepared=InspectionDocxRepeatRows.prepare(templateBytes(template),snapshot.path("content"));
+        var plan=prepareTemplate(b,template);
+        byte[] prepared=InspectionDocxRepeatRows.prepare(plan.bytes(),snapshot.path("content"));
         try(var doc=new XWPFDocument(new ByteArrayInputStream(prepared))){
             var result=binder.inspect(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),bindings(b));
-            return Map.of("inspection",result,"planSha256",planHash(report,template,result),"templateSha256",template.get("sha256"),"versionNo",report.get("current_version_no"),"profileVersionNo",snapshot.path("versionNo").asInt());
+            return Map.of("inspection",result,"planSha256",planHash(report,plan.sha256(),result),"templateSha256",plan.sha256(),"versionNo",report.get("current_version_no"),"profileVersionNo",snapshot.path("versionNo").asInt(),"templateRevisions",plan.revisions());
         }catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 模板无效或损坏",e);}
     }
 
@@ -314,7 +351,9 @@ public class ServiceWorkflowController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权读取报告资料");
         var template=templateForGeneration(b,a);
         long templateId=((Number)template.get("id")).longValue();
-        if(fillBody&&(!Boolean.TRUE.equals(b.get("templateReviewed"))||!Objects.equals(template.get("sha256"),b.get("templateSha256"))))
+        var plan=prepareTemplate(b,template);boolean modular=!plan.revisions().isEmpty();
+        if(modular&&!fillBody)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"组合模板须先完成正文预检");
+        if(fillBody&&(!Boolean.TRUE.equals(b.get("templateReviewed"))||!Objects.equals(plan.sha256(),b.get("templateSha256"))))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请先检查模板及旧项目资料、证照和签署区域，再确认生成");
         List<Long> batchIds=b.get("batchIds")==null?List.of():mapper.convertValue(b.get("batchIds"),new TypeReference<List<Long>>(){});
         if(batchIds==null||(!fillBody&&batchIds.isEmpty()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"至少选择一个已审核照片批次或正文填充");
@@ -322,7 +361,8 @@ public class ServiceWorkflowController {
         if(new HashSet<>(batchIds).size()!=batchIds.size())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片批次不能重复选择");
         String photoMode=b.get("photoMode")==null?"append":b.get("photoMode").toString();
         if(!Set.of("append","replace").contains(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效照片插入模式");
-        if(batchIds.isEmpty()&&"replace".equals(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"替换照片模式至少需要一个已审核照片批次");
+        if(modular)photoMode="replace";
+        if(!modular&&batchIds.isEmpty()&&"replace".equals(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"替换照片模式至少需要一个已审核照片批次");
         if(!batchIds.isEmpty()&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:photo:read")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权读取照片批次");
         int version=((Number)report.get("current_version_no")).intValue();
@@ -346,12 +386,12 @@ public class ServiceWorkflowController {
                 photos.add(new ReportDocxPhotoInserter.Photo(photo.get("system_code").toString(),data,photo.get("original_name").toString(),photo.get("taken_on").toString(),Objects.toString(photo.get("caption"),"")));
             }
         }
-        byte[] templateBytes=templateBytes(template);
+        byte[] templateBytes=plan.bytes();
         var bodySnapshot=fillBody?inspectionSnapshot(id,report):null;
         if(fillBody)templateBytes=InspectionDocxRepeatRows.prepare(templateBytes,bodySnapshot.path("content"));
         byte[] output;
         Map<String,Object> manifest=new LinkedHashMap<>();
-        manifest.put("templateFileId",templateId);manifest.put("templateSha256",template.get("sha256"));
+        manifest.put("templateFileId",templateId);manifest.put("templateSha256",plan.sha256());manifest.put("templateRevisions",plan.revisions());
         manifest.put("reportVersionNo",version);manifest.put("batchIds",batchIds);manifest.put("photoMode",photoMode);
         manifest.put("fillBody",fillBody);
         try(XWPFDocument doc=new XWPFDocument(new ByteArrayInputStream(templateBytes));java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
@@ -360,14 +400,14 @@ public class ServiceWorkflowController {
                 var mapping=bindings(b);
                 var inspection=binder.inspect(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),mapping);
                 if(!inspection.errors().isEmpty())throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,String.join("；",inspection.errors().stream().limit(8).toList()));
-                String hash=planHash(report,template,inspection);
+                String hash=planHash(report,plan.sha256(),inspection);
                 if(!hash.equals(b.get("bodyPlanSha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"正文绑定与预检不一致，请重新检查");
                 binder.fill(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),mapping);
                 manifest.put("profileVersionNo",snapshot.path("versionNo").asInt());manifest.put("bodyPlanSha256",hash);
                 manifest.put("bodyTargets",inspection.changes().stream().map(c->Map.of("target",c.target(),"fields",c.fields())).toList());
                 manifest.put("unmappedFields",inspection.unmappedFields());
             }
-            if(!photos.isEmpty())inserter.insert(doc,photos,"replace".equals(photoMode));
+            if(!photos.isEmpty()||modular)inserter.insert(doc,photos,"replace".equals(photoMode),plan.systems());
             doc.write(out);output=out.toByteArray();
         } catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 模板无效或损坏",e);
