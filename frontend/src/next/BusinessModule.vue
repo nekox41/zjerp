@@ -180,7 +180,9 @@ async function saveContract(){
   if(!selectedContract.value)return
   busy.value=true
   try{
-    await api('/business/contracts/'+selectedContract.value.id,{method:'PUT',body:JSON.stringify(contractEditForm.value)})
+    const body={...contractEditForm.value}
+    for(const key of ['signedOn','startsOn','endsOn','ownerEmployeeId'])if(body[key]==='')body[key]=null
+    await api('/business/contracts/'+selectedContract.value.id,{method:'PUT',body:JSON.stringify(body)})
     await load();await openContract(selectedContract.value.id)
     contractEditOpen.value=false;notice.value='合同资料已更新'
   }catch(e){error.value=e.message}finally{busy.value=false}
@@ -229,6 +231,7 @@ onMounted(load)
         <button v-for="r in rows" :key="r.id" class="business-record" @click="section==='customers'?openCustomer(r.id):section==='projects'?openProject(r.id):section==='contracts'?openContract(r.id):section==='employees'?openEmployee(r.id):null">
           <b>{{r.name||r.full_name||r.title}}</b><small>{{r.customer_code||r.employee_code||r.contract_no||r.project_no||r.status||r.position_name}}</small>
           <span>{{r.customer_name||r.organization_name||r.owner_name||''}}</span>
+          <small v-if="section==='contracts'&&r.days_until_expiry!=null&&r.days_until_expiry<=30" :style="{color:r.days_until_expiry<0?'#b42318':'#916118'}">{{r.days_until_expiry<0?'已到期 '+Math.abs(r.days_until_expiry)+' 天':r.days_until_expiry===0?'今日到期':'距到期 '+r.days_until_expiry+' 天'}}</small>
         </button>
         <p v-if="!rows.length" class="empty">暂无记录，使用下方表单创建第一条数据。</p>
       </div>
