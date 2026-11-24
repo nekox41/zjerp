@@ -13,6 +13,36 @@ const submitting = ref(false)
 const initialized = ref(true)
 const user = ref(null)
 const roles = ref([])
+const permissionCatalog=ref([])
+const roleEditor=ref(false)
+const roleForm=ref({id:null,name:'',permissionIds:[]})
+const permissionGroups=computed(()=>{
+  const groups={}
+  for(const p of permissionCatalog.value.filter(x=>x.code!=='identity:write')){
+    const key=p.code.split(':')[0]
+    ;(groups[key]??=[]).push(p)
+  }
+  return groups
+})
+const roleLabels={workspace:'工作台',identity:'账号',audit:'审计',employee:'员工',customer:'甲方',contract:'合同',partner:'中间人',project:'项目',maintenance:'维护保养',service:'技术服务',report:'报告',delivery:'交付',finance:'财务',expense:'费用',invoice:'发票',organization:'组织',file:'文件'}
+async function editRole(role=null){
+  error.value='';notice.value=''
+  try{
+    permissionCatalog.value=await api('/admin/permissions')
+    roleForm.value=role?{id:role.id,name:role.name,permissionIds:await api('/admin/roles/'+role.id+'/permissions')}:{id:null,name:'',permissionIds:[]}
+    roleEditor.value=true
+  }catch(e){error.value=e.message}
+}
+async function saveRole(){
+  submitting.value=true;error.value='';notice.value=''
+  try{
+    const {id,name,permissionIds}=roleForm.value
+    await api(id?'/admin/roles/'+id:'/admin/roles',{method:id?'PUT':'POST',body:JSON.stringify({name,permissionIds})})
+    roleEditor.value=false
+    roles.value=await api('/admin/roles')
+    notice.value='角色已保存。已关联账户的权限将在重新登录后更新。'
+  }catch(e){error.value=e.message}finally{submitting.value=false}
+}
 const identities = ref([])
 const audit = ref([])
 const error = ref('')
@@ -98,7 +128,7 @@ async function login() {
 async function logout() {
   try { await api('/auth/logout', { method: 'POST' }) } catch { /* local session is still cleared */ }
   sessionStorage.removeItem('erp-next-token')
-  user.value = null; identities.value = []; audit.value = []; tab.value = 'overview'
+  user.value = null; identities.value = []; roles.value=[]; permissionCatalog.value=[]; roleEditor.value=false; identityEdit.value=null; audit.value = []; tab.value = 'overview'
 }
 async function createIdentity() {
   error.value = ''; notice.value = ''; submitting.value = true
@@ -131,7 +161,9 @@ async function saveIdentity() {
       roleIds: identityEditForm.value.roleIds
     }
     if (identityEditForm.value.password) body.password = identityEditForm.value.password
+    const editingSelf=identityEdit.value.id===user.value.id
     await api('/admin/identities/' + identityEdit.value.id, { method: 'PUT', body: JSON.stringify(body) })
+    if(editingSelf){await logout();identityEdit.value=null;notice.value='账号已更新，请重新登录。';return}
     notice.value = '账号资料、角色和状态已更新。'
     identityEdit.value = null
     identityEditForm.value = { displayName: '', status: 'active', roleIds: [], password: '' }
@@ -233,9 +265,23 @@ onMounted(refresh)
         </template>
         <template v-else-if="tab==='identities'">
           <div class="section-heading"><div><h2>账号管理</h2><p>系统账号独立于员工档案；在这里维护登录状态、角色权限和密码。</p></div></div>
-          <section class="panel create-panel"><h3>新建账号</h3><form class="create-grid" @submit.prevent="createIdentity"><label>登录账号<input v-model="createForm.username" required maxlength="100"></label><label>显示名称<input v-model="createForm.displayName" required maxlength="200"></label><label>初始密码<input v-model="createForm.password" type="password" required minlength="12" maxlength="128"></label><label>分配角色<select v-model="createForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><button class="primary-button" :disabled="submitting">创建账号</button></form></section>
-          <section v-if="identityEdit" class="panel create-panel"><h3>编辑账号 · {{ identityEdit.username }}</h3><form class="create-grid" @submit.prevent="saveIdentity"><label>显示名称<input v-model="identityEditForm.displayName" required maxlength="200"></label><label>账号状态<select v-model="identityEditForm.status"><option value="active">启用</option><option value="disabled">停用</option></select></label><label>角色权限<select v-model="identityEditForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><label>重置密码（留空则不修改）<input v-model="identityEditForm.password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label><div class="report-actions"><button class="primary-button" :disabled="submitting">保存账号</button><button type="button" class="secondary-button" @click="identityEdit=null">取消</button></div></form><p class="muted">停用账号会立即阻止后续请求；重置密码会撤销该账号已有会话。系统至少保留一个启用的系统管理员。</p></section>
-          <section class="panel"><h3>已有账号 <span>{{ identities.length }}</span></h3><div class="table-wrap"><table><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="item in identities" :key="item.id"><td>{{ item.username }}</td><td>{{ item.display_name }}</td><td>{{ item.roles || '未分配' }}</td><td><span class="status-pill"><i></i>{{ item.status==='active'?'启用':'停用' }}</span></td><td><button class="secondary-button" @click="openIdentityEditor(item)">编辑</button></td></tr></tbody></table><p v-if="!identities.length" class="empty">暂无账号数据</p></div></section>
+          <section v-if="can('identity:write')" class="panel">
+            <div class="section-heading"><div><h3>角色与权限</h3><p>预设角色不可修改，可按实际工作需要创建自定义角色。</p></div><button type="button" class="secondary-button" @click="editRole()">新建角色</button></div>
+            <div class="table-wrap"><table><thead><tr><th>角色</th><th>类型</th><th>操作</th></tr></thead><tbody><tr v-for="r in roles" :key="r.id"><td>{{r.name}}</td><td>{{r.code.startsWith('custom_')?'自定义':'系统预设'}}</td><td><button v-if="r.code.startsWith('custom_')" type="button" class="secondary-button" @click="editRole(r)">编辑权限</button></td></tr></tbody></table></div>
+            <form v-if="roleEditor" class="form-stack" @submit.prevent="saveRole">
+              <label>角色名称<input v-model="roleForm.name" required maxlength="150"></label>
+              <div v-for="(items,key) in permissionGroups" :key="key" class="related-card">
+                <h4>{{roleLabels[key]||key}}</h4>
+                <div style="display:flex;flex-wrap:wrap;gap:12px">
+                  <label v-for="p in items" :key="p.id" style="display:flex;align-items:center;gap:5px;flex-direction:row"><input type="checkbox" v-model="roleForm.permissionIds" :value="p.id" style="width:auto">{{p.name}}</label>
+                </div>
+              </div>
+              <div class="report-actions"><button class="primary-button" :disabled="submitting">保存角色</button><button type="button" class="secondary-button" @click="roleEditor=false">取消</button></div>
+            </form>
+          </section>
+          <section v-if="can('identity:write')" class="panel create-panel"><h3>新建账号</h3><form class="create-grid" @submit.prevent="createIdentity"><label>登录账号<input v-model="createForm.username" required maxlength="100"></label><label>显示名称<input v-model="createForm.displayName" required maxlength="200"></label><label>初始密码<input v-model="createForm.password" type="password" required minlength="12" maxlength="128"></label><label>分配角色<select v-model="createForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><button class="primary-button" :disabled="submitting">创建账号</button></form></section>
+          <section v-if="identityEdit&&can('identity:write')" class="panel create-panel"><h3>编辑账号 · {{ identityEdit.username }}</h3><form class="create-grid" @submit.prevent="saveIdentity"><label>显示名称<input v-model="identityEditForm.displayName" required maxlength="200"></label><label>账号状态<select v-model="identityEditForm.status"><option value="active">启用</option><option value="disabled">停用</option></select></label><label>角色权限<select v-model="identityEditForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><label>重置密码（留空则不修改）<input v-model="identityEditForm.password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label><div class="report-actions"><button class="primary-button" :disabled="submitting">保存账号</button><button type="button" class="secondary-button" @click="identityEdit=null">取消</button></div></form><p class="muted">停用账号会立即阻止后续请求；重置密码会撤销该账号已有会话。系统至少保留一个启用的系统管理员。</p></section>
+          <section class="panel"><h3>已有账号 <span>{{ identities.length }}</span></h3><div class="table-wrap"><table><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="item in identities" :key="item.id"><td>{{ item.username }}</td><td>{{ item.display_name }}</td><td>{{ (item.roles||'').split(',').filter(Boolean).map(code=>roles.find(r=>r.code===code)?.name||code).join('、')||'未分配' }}</td><td><span class="status-pill"><i></i>{{ item.status==='active'?'启用':'停用' }}</span></td><td><button v-if="can('identity:write')" class="secondary-button" @click="openIdentityEditor(item)">编辑</button></td></tr></tbody></table><p v-if="!identities.length" class="empty">暂无账号数据</p></div></section>
         </template>
         <template v-else-if="tab==='audit'">
           <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
