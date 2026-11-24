@@ -78,6 +78,8 @@ public class AuthService {
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         Map<String,Object> row = rows.get(0);
         long id = ((Number) row.get("id")).longValue();
+        if (!"active".equals(row.get("status")))
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         Timestamp lockedUntil = (Timestamp) row.get("locked_until");
         if (lockedUntil != null && lockedUntil.toInstant().isAfter(Instant.now()))
             throw new ResponseStatusException(HttpStatus.LOCKED, "登录失败次数过多，请稍后再试");
