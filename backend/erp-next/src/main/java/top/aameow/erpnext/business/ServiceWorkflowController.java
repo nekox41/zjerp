@@ -27,9 +27,10 @@ public class ServiceWorkflowController {
     private final ObjectMapper mapper;
     private final PrivateFileStorage storage;
     private final ReportDocxPhotoInserter inserter;
+    private final InspectionDocxBinder binder;
 
-    public ServiceWorkflowController(JdbcTemplate jdbc,ObjectMapper mapper,PrivateFileStorage storage,ReportDocxPhotoInserter inserter) {
-        this.jdbc=jdbc;this.mapper=mapper;this.storage=storage;this.inserter=inserter;
+    public ServiceWorkflowController(JdbcTemplate jdbc,ObjectMapper mapper,PrivateFileStorage storage,ReportDocxPhotoInserter inserter,InspectionDocxBinder binder) {
+        this.jdbc=jdbc;this.mapper=mapper;this.storage=storage;this.inserter=inserter;this.binder=binder;
     }
     private long actor(Authentication a){return ((CurrentUser)a.getPrincipal()).id();}
     private String req(Map<String,Object>b,String key){Object v=b.get(key);if(v==null||v.toString().isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,key+" 不能为空");return v.toString().trim();}
@@ -210,16 +211,69 @@ public class ServiceWorkflowController {
         return batchDetail(id);
     }
 
-    @PostMapping("/reports/{id}/generate-docx") @PreAuthorize("hasAuthority('report:write')") @Transactional
-    public Map<String,Object> generateDocx(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) throws Exception {
-        Map<String,Object> report=one("SELECT * FROM erp_service_report WHERE id=? FOR UPDATE",id);
+    private Map<String,Object> reportForGeneration(long id,boolean lock){
+        var report=one("SELECT * FROM erp_service_report WHERE id=?"+(lock?" FOR UPDATE":""),id);
         if(!Set.of("draft","returned").contains(report.get("status").toString()))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有草稿或退回状态的报告可以生成 DOCX");
+        return report;
+    }
+    private Map<String,Object> templateForGeneration(Map<String,Object>b,Authentication a){
         long templateId=Long.parseLong(req(b,"templateFileId"));
-        Map<String,Object> template=one("SELECT * FROM erp_file_object WHERE id=?",templateId);
+        var template=one("SELECT * FROM erp_file_object WHERE id=?",templateId);
         if(((Number)template.get("uploaded_by")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先上传自己有权使用的 DOCX 模板");
         if(!DOCX.equals(template.get("media_type"))||!template.get("original_name").toString().toLowerCase(Locale.ROOT).endsWith(".docx"))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"模板必须是 DOCX 文件");
-        List<Long> batchIds=mapper.convertValue(b.get("batchIds"),new TypeReference<List<Long>>(){});
-        if(batchIds==null||batchIds.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"至少选择一个已审核照片批次");
+        return template;
+    }
+    private byte[] templateBytes(Map<String,Object> template)throws Exception{
+        byte[] bytes=Files.readAllBytes(storage.resolve(template.get("storage_key").toString()));
+        if(!sha(bytes).equals(template.get("sha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"模板文件校验失败");
+        return bytes;
+    }
+    private com.fasterxml.jackson.databind.JsonNode inspectionSnapshot(long id,Map<String,Object> report)throws Exception{
+        if(!"inspection".equals(report.get("report_type")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"只有消防检测报告支持正文资料绑定");
+        var version=one("SELECT content_json FROM erp_service_report_version WHERE report_id=? AND version_no=?",id,report.get("current_version_no"));
+        var snapshot=mapper.readTree(version.get("content_json").toString()).path("inspectionProfile");
+        if(!snapshot.isObject()||snapshot.path("workPackageId").asLong()!=((Number)report.get("work_package_id")).longValue()||!snapshot.path("content").isObject())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请先保存并绑定检测资料版本");
+        return snapshot;
+    }
+    private List<InspectionDocxBinder.Binding> bindings(Map<String,Object>b){
+        try{return b.get("bodyBindings")==null?List.of():mapper.convertValue(b.get("bodyBindings"),new TypeReference<List<InspectionDocxBinder.Binding>>(){});}
+        catch(IllegalArgumentException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"正文绑定参数无效");}
+    }
+    private void checkExpectedVersion(Map<String,Object> b,Map<String,Object> report,boolean required){
+        Long expected=opt(b,"expectedVersionNo");
+        if((required&&expected==null)||(expected!=null&&expected.longValue()!=((Number)report.get("current_version_no")).longValue()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"报告版本已变化，请重新检查");
+    }
+    private String planHash(Map<String,Object> report,Map<String,Object> template,InspectionDocxBinder.Inspection inspection){
+        return sha(json(List.of(report.get("id"),report.get("current_version_no"),template.get("sha256"),inspection.changes())).getBytes(StandardCharsets.UTF_8));
+    }
+    @PostMapping("/reports/{id}/inspect-docx")
+    @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')")
+    @Transactional(readOnly=true)
+    public Map<String,Object> inspectDocx(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a)throws Exception{
+        var report=reportForGeneration(id,false);
+        checkExpectedVersion(b,report,true);
+        var template=templateForGeneration(b,a);
+        var snapshot=inspectionSnapshot(id,report);
+        try(var doc=new XWPFDocument(new ByteArrayInputStream(templateBytes(template)))){
+            var result=binder.inspect(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),bindings(b));
+            return Map.of("inspection",result,"planSha256",planHash(report,template,result),"templateSha256",template.get("sha256"),"versionNo",report.get("current_version_no"),"profileVersionNo",snapshot.path("versionNo").asInt());
+        }catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 模板无效或损坏",e);}
+    }
+
+    @PostMapping("/reports/{id}/generate-docx") @PreAuthorize("hasAuthority('report:write')") @Transactional(rollbackFor=Exception.class)
+    public Map<String,Object> generateDocx(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) throws Exception {
+        var report=reportForGeneration(id,true);
+        boolean fillBody=Boolean.TRUE.equals(b.get("fillBody"));
+        checkExpectedVersion(b,report,fillBody);
+        var template=templateForGeneration(b,a);
+        long templateId=((Number)template.get("id")).longValue();
+        if(fillBody&&(!Boolean.TRUE.equals(b.get("templateReviewed"))||!Objects.equals(template.get("sha256"),b.get("templateSha256"))))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请先检查模板及旧项目资料、证照和签署区域，再确认生成");
+        List<Long> batchIds=b.get("batchIds")==null?List.of():mapper.convertValue(b.get("batchIds"),new TypeReference<List<Long>>(){});
+        if(batchIds==null||(!fillBody&&batchIds.isEmpty()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"至少选择一个已审核照片批次或正文填充");
+        if(batchIds.stream().anyMatch(x->x==null||x<=0))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效照片批次");
         if(new HashSet<>(batchIds).size()!=batchIds.size())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片批次不能重复选择");
         String photoMode=b.get("photoMode")==null?"append":b.get("photoMode").toString();
         if(!Set.of("append","replace").contains(photoMode))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效照片插入模式");
@@ -238,25 +292,44 @@ public class ServiceWorkflowController {
                 photos.add(new ReportDocxPhotoInserter.Photo(photo.get("system_code").toString(),data,photo.get("original_name").toString(),photo.get("taken_on").toString(),Objects.toString(photo.get("caption"),"")));
             }
         }
-        byte[] templateBytes=Files.readAllBytes(storage.resolve(template.get("storage_key").toString()));
+        byte[] templateBytes=templateBytes(template);
         byte[] output;
+        Map<String,Object> manifest=new LinkedHashMap<>();
+        manifest.put("templateFileId",templateId);manifest.put("templateSha256",template.get("sha256"));
+        manifest.put("reportVersionNo",version);manifest.put("batchIds",batchIds);manifest.put("photoMode",photoMode);
+        manifest.put("fillBody",fillBody);
         try(XWPFDocument doc=new XWPFDocument(new ByteArrayInputStream(templateBytes));java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
-            inserter.insert(doc,photos,"replace".equals(photoMode));
+            if(fillBody){
+                var snapshot=inspectionSnapshot(id,report);
+                var mapping=bindings(b);
+                var inspection=binder.inspect(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),mapping);
+                if(!inspection.errors().isEmpty())throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,String.join("；",inspection.errors().stream().limit(8).toList()));
+                String hash=planHash(report,template,inspection);
+                if(!hash.equals(b.get("bodyPlanSha256")))throw new ResponseStatusException(HttpStatus.CONFLICT,"正文绑定与预检不一致，请重新检查");
+                binder.fill(doc,snapshot.path("content"),report.get("report_no").toString(),report.get("title").toString(),mapping);
+                manifest.put("profileVersionNo",snapshot.path("versionNo").asInt());manifest.put("bodyPlanSha256",hash);
+                manifest.put("bodyTargets",inspection.changes().stream().map(c->Map.of("target",c.target(),"fields",c.fields())).toList());
+                manifest.put("unmappedFields",inspection.unmappedFields());
+            }
+            if(!photos.isEmpty())inserter.insert(doc,photos,"replace".equals(photoMode));
             doc.write(out);output=out.toByteArray();
         } catch(org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"DOCX 模板无效或损坏",e);
         }
-        String filename=template.get("original_name").toString().replaceFirst("(?i)\\.docx$","")+"-照片整理版.docx";
+        String filename=template.get("original_name").toString().replaceFirst("(?i)\\.docx$","")+(fillBody?"-正文填充草稿.docx":"-照片整理版.docx");
         PrivateFileStorage.StoredFile stored=storage.storeBytes(output,filename,DOCX);
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){
+            @Override public void afterCompletion(int status){if(status!=STATUS_COMMITTED)storage.deleteQuietly(stored.key());}
+        });
         try {
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
             long fileId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
             Integer artifactRevision=jdbc.queryForObject("SELECT COALESCE(MAX(artifact_revision_no),0)+1 FROM erp_service_report_artifact WHERE report_id=? AND version_no=? AND artifact_type='docx'",Integer.class,id,version);
-            jdbc.update("INSERT INTO erp_service_report_artifact(report_id,version_no,file_id,artifact_type,artifact_revision_no,sha256,created_by) VALUES(?,?,?,'docx',?,?,?)",id,version,fileId,artifactRevision,stored.sha256(),actor(a));
+            jdbc.update("INSERT INTO erp_service_report_artifact(report_id,version_no,file_id,artifact_type,artifact_revision_no,sha256,created_by,generation_manifest) VALUES(?,?,?,'docx',?,?,?,?)",id,version,fileId,artifactRevision,stored.sha256(),actor(a),json(manifest));
             jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
             for(Long batchId:batchIds)jdbc.update("UPDATE erp_report_photo_batch SET report_id=?,status='locked',locked_at=CURRENT_TIMESTAMP(3) WHERE id=?",id,batchId);
             audit(actor(a),"report.docx.generated","erp_service_report",id,"version="+version+",photos="+photos.size());
-            return Map.of("reportId",id,"versionNo",version,"artifactRevisionNo",artifactRevision,"fileId",fileId,"filename",filename,"sha256",stored.sha256(),"photoCount",photos.size(),"photoMode",b.get("photoMode")==null?"append":b.get("photoMode").toString());
+            return Map.of("reportId",id,"versionNo",version,"artifactRevisionNo",artifactRevision,"fileId",fileId,"filename",filename,"sha256",stored.sha256(),"photoCount",photos.size(),"photoMode",photoMode,"bodyFilled",fillBody);
         } catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }
 

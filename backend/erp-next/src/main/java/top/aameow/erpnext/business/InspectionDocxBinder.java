@@ -25,24 +25,25 @@ public class InspectionDocxBinder {
     public record Field(String key,String value){}
     public record Change(String target,String before,String after,List<String> fields){}
     public record Inspection(List<Field> fields,List<Candidate> candidates,List<Change> changes,List<String> errors,List<String> unmappedFields){}
-    private record Target(String key,XWPFParagraph paragraph){}
+    private record Target(String key,XWPFParagraph paragraph,boolean protectedArea){}
     private record Edit(int start,int end,String value){}
     private record Planned(Target target,List<Edit> edits,Change change){}
     private record Plan(Inspection inspection,List<Planned> edits){}
 
     private ResponseStatusException bad(String message){return new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,message);}
-    private void walk(List<IBodyElement> elements,String prefix,List<Target> out){
+    private void walk(List<IBodyElement> elements,String prefix,List<Target> out,boolean protectedArea){
         int p=0,t=0;
         for(IBodyElement element:elements){
             if(element instanceof XWPFParagraph paragraph){
-                out.add(new Target(prefix+"P"+(++p),paragraph));
+                out.add(new Target(prefix+"P"+(++p),paragraph,protectedArea));
                 if(out.size()>MAX_TARGETS)throw bad("模板正文段落过多，暂不支持自动填充");
             }else if(element instanceof XWPFTable table){
                 String key=prefix+"T"+(++t)+"/";
                 int row=0;
                 for(XWPFTableRow tr:table.getRows()){
                     row++;int cell=0;
-                    for(XWPFTableCell tc:tr.getTableCells())walk(tc.getBodyElements(),key+"R"+row+"/C"+(++cell)+"/",out);
+                    boolean signatureRow=protectedArea||tr.getTableCells().stream().anyMatch(c->protectedText(c.getText()));
+                    for(XWPFTableCell tc:tr.getTableCells())walk(tc.getBodyElements(),key+"R"+row+"/C"+(++cell)+"/",out,signatureRow);
                 }
             }
         }
@@ -93,7 +94,7 @@ public class InspectionDocxBinder {
     private Plan plan(XWPFDocument doc,JsonNode snapshot,String reportNo,String title,List<Binding> bindings){
         Map<String,String> values=fields(snapshot,reportNo,title);
         List<Target> targets=new ArrayList<>();
-        walk(doc.getBodyElements(),"",targets);
+        walk(doc.getBodyElements(),"",targets,false);
         List<String> errors=new ArrayList<>();
         // Header/footer fields require a separate reviewed mapping; never silently leave tokens behind.
         doc.getHeaderList().forEach(h->{if(h.getText().contains("{{erp."))errors.add("页眉含 ERP 标记，当前只支持正文绑定");});
@@ -114,7 +115,7 @@ public class InspectionDocxBinder {
             String visible=p.getText();
             Binding binding=manual.remove(target.key());
             boolean token=visible.contains("{{erp.");
-            boolean eligible=plain(p)&&!protectedText(visible)&&visible.length()<=12000;
+            boolean eligible=!target.protectedArea()&&plain(p)&&!protectedText(visible)&&visible.length()<=12000;
             if(!eligible){
                 if(token||binding!=null)errors.add(target.key()+"：含复杂对象、签署相关文字或不支持的内容");
                 continue;
@@ -141,9 +142,9 @@ public class InspectionDocxBinder {
             if(edits.isEmpty())continue;
             StringBuilder after=new StringBuilder(before);
             for(int i=edits.size()-1;i>=0;i--){Edit e=edits.get(i);after.replace(e.start(),e.end(),e.value());}
-            // Multiline data is deliberately rejected instead of writing control characters as XML text.
-            if(edits.stream().anyMatch(e->e.value().codePoints().anyMatch(Character::isISOControl))){
-                errors.add(target.key()+"：字段含换行或控制字符，请先在资料档案整理为单段文字");continue;
+            // Normal line breaks and tabs are rendered as Word runs, never raw control characters.
+            if(edits.stream().anyMatch(e->e.value().codePoints().anyMatch(c->Character.isISOControl(c)&&c!='\n'&&c!='\r'&&c!='\t'))){
+                errors.add(target.key()+"：字段含不支持的控制字符");continue;
             }
             used.addAll(keys);
             planned.add(new Planned(target,edits,new Change(target.key(),before,after.toString(),keys)));
@@ -176,7 +177,17 @@ public class InspectionDocxBinder {
                     offset=next;
                 }
             }
-            for(int j=0;j<runs.size();j++)if(runs.get(j).getCTR().sizeOfTArray()==1)runs.get(j).setText(chunks.get(j),0);
+            for(int j=0;j<runs.size();j++)if(runs.get(j).getCTR().sizeOfTArray()==1){
+                XWPFRun run=runs.get(j);
+                String content=chunks.get(j).replace("\r\n","\n").replace('\r','\n');
+                String[] parts=content.split("(?=[\\n\\t])|(?<=[\\n\\t])",-1);
+                run.setText("",0);
+                for(String part:parts){
+                    if("\n".equals(part))run.addBreak();
+                    else if("\t".equals(part))run.addTab();
+                    else if(!part.isEmpty())run.setText(part);
+                }
+            }
         }
         return plan.inspection();
     }
