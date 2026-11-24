@@ -56,6 +56,7 @@ public class ReportDocxPhotoInserter {
                     int noteIndex=i+2;
                     if (tableIndex<body.size() && body.get(tableIndex) instanceof XWPFTable table
                         && !table.getRows().isEmpty()) {
+                        validatePhotoGrid(table);
                         blocks.computeIfAbsent(activeSystem,k->new ArrayList<>())
                             .add(new Block(i,tableIndex,noteIndex,table));
                     }
@@ -96,8 +97,9 @@ public class ReportDocxPhotoInserter {
         List<Integer> removals=new ArrayList<>();
         for (Map.Entry<String,List<Block>> entry : blocks.entrySet()) {
             List<Photo> assigned=bySystem.getOrDefault(entry.getKey(),List.of());
-            int required=(assigned.size()+3)/4;
             List<Block> found=entry.getValue();
+            int required=0,capacity=0;
+            while(required<found.size()&&capacity<assigned.size())capacity+=found.get(required++).table().getRows().size()*2;
             for(int n=required;n<found.size();n++) {
                 Block b=found.get(n);
                 removals.add(b.headingIndex()); removals.add(b.tableIndex());
@@ -130,7 +132,7 @@ public class ReportDocxPhotoInserter {
             List<XWPFTable> tables=retained.getOrDefault(system,List.of());
             if(assigned.isEmpty()) continue;
             if(tables.isEmpty()) continue; // checked above
-            int capacity=tables.size()*4;
+            int capacity=tables.stream().mapToInt(t->t.getRows().size()*2).sum();
             XWPFTable last=tables.get(tables.size()-1);
             while(assigned.size()>capacity) {
                 XWPFTableRow row=last.createRow();
@@ -154,6 +156,23 @@ public class ReportDocxPhotoInserter {
         }
     }
 
+    private static void validatePhotoGrid(XWPFTable table){
+        for(XWPFTableRow row:table.getRows()){
+            if(row.getTableCells().size()!=2)throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"现场照片表必须是两列独立单元格");
+            for(XWPFTableCell cell:row.getTableCells()){
+                if(!cell.getTables().isEmpty()||unsafeGridNode(cell.getCTTc().getDomNode()))
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"现场照片表存在合并、嵌套或复杂对象，不能安全覆盖");
+                String text=cell.getText();
+                if(text!=null&&text.matches("(?s).*(签字|签章|盖章|印章|审核人|批准人|检测人).*"))
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"现场照片表含签署信息，不能自动覆盖");
+            }
+        }
+    }
+    private static boolean unsafeGridNode(org.w3c.dom.Node n){
+        if(n.getNodeType()==org.w3c.dom.Node.ELEMENT_NODE&&Set.of("vMerge","hMerge","sdt","fldChar","fldSimple","object","hyperlink").contains(n.getLocalName()))return true;
+        for(var child=n.getFirstChild();child!=null;child=child.getNextSibling())if(unsafeGridNode(child))return true;
+        return false;
+    }
     private static void ensureTwoCells(XWPFTableRow row) {
         while(row.getTableCells().size()<2) row.addNewTableCell();
     }
@@ -164,12 +183,19 @@ public class ReportDocxPhotoInserter {
         XWPFParagraph image=cell.getParagraphs().get(0);
         image.setAlignment(ParagraphAlignment.CENTER);
         try {
-            java.awt.image.BufferedImage decoded=javax.imageio.ImageIO.read(new ByteArrayInputStream(photo.bytes()));
-            if(decoded==null) throw new IllegalArgumentException("invalid image");
+            int imageWidth,imageHeight;
+            try(var stream=javax.imageio.ImageIO.createImageInputStream(new ByteArrayInputStream(photo.bytes()))){
+                var readers=javax.imageio.ImageIO.getImageReaders(stream);
+                if(!readers.hasNext())throw new IllegalArgumentException("invalid image");
+                var reader=readers.next();
+                try{reader.setInput(stream,true,true);imageWidth=reader.getWidth(0);imageHeight=reader.getHeight(0);}
+                finally{reader.dispose();}
+            }
+            if(imageWidth<=0||imageHeight<=0||(long)imageWidth*imageHeight>60000000L)throw new IllegalArgumentException("invalid image dimensions");
             int type=photo.bytes().length>3 && (photo.bytes()[0]&255)==255 ? Document.PICTURE_TYPE_JPEG : Document.PICTURE_TYPE_PNG;
-            double scale=Math.min(1.0,Math.min(245.0/decoded.getWidth(),160.0/decoded.getHeight()));
-            int width=Math.max(1,(int)Math.round(decoded.getWidth()*scale));
-            int height=Math.max(1,(int)Math.round(decoded.getHeight()*scale));
+            double scale=Math.min(1.0,Math.min(245.0/imageWidth,160.0/imageHeight));
+            int width=Math.max(1,(int)Math.round(imageWidth*scale));
+            int height=Math.max(1,(int)Math.round(imageHeight*scale));
             image.createRun().addPicture(new ByteArrayInputStream(photo.bytes()),type,photo.filename(),Units.toEMU(width),Units.toEMU(height));
         } catch(Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"照片无法写入 DOCX："+photo.filename(),e);

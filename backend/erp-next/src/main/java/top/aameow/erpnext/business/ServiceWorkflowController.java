@@ -61,7 +61,7 @@ public class ServiceWorkflowController {
     }
     @PostMapping("/work-packages/{id}/visits") @PreAuthorize("hasAuthority('service:visit:write')") @Transactional
     public Map<String,Object> createVisit(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
-        one("SELECT id FROM erp_service_work_package WHERE id=?",id);
+        one("SELECT id FROM erp_service_work_package WHERE id=? FOR UPDATE",id);
         String title=req(b,"title"),date=req(b,"visitDate"),type=b.get("visitType")==null?"inspection":b.get("visitType").toString();
         if(!Set.of("inspection","rectification_review","supplement","maintenance","other").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效现场服务类型");
         Integer visitNo=jdbc.queryForObject("SELECT COALESCE(MAX(visit_no),0)+1 FROM erp_service_visit WHERE work_package_id=?",Integer.class,id);
@@ -69,11 +69,14 @@ public class ServiceWorkflowController {
             id,visitNo,date,type,title,b.get("summary"),b.get("resultSummary"),actor(a));
         long visitId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         Object staff=b.get("staff");
-        if(staff instanceof List<?> list) for(Object item:list){
-            if(!(item instanceof Map<?,?> m))continue;
+        if(!(staff instanceof List<?> list)||list.isEmpty()||list.size()>100)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择实际到场人员");
+        Set<Long> assignedStaff=new HashSet<>();
+        for(Object item:list){
+            if(!(item instanceof Map<?,?> m))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"现场人员记录无效");
             long employee=Long.parseLong(Objects.toString(m.get("employeeId")));
             String role=Objects.toString(m.get("role"),"field_operator");
-            one("SELECT id FROM erp_employee WHERE id=?",employee);
+            if(!assignedStaff.add(employee))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"现场人员重复");
+            one("SELECT id FROM erp_employee WHERE id=? AND status='active'",employee);
             if(!Set.of("field_operator","engineer","team_lead","observer").contains(role))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效现场人员角色");
             jdbc.update("INSERT INTO erp_service_visit_staff(visit_id,employee_id,staff_role) VALUES(?,?,?)",visitId,employee,role);
         }
@@ -115,6 +118,7 @@ public class ServiceWorkflowController {
     public Map<String,Object> getBatch(@PathVariable long id){return batchDetail(id);}
     private Map<String,Object> batchDetail(long id){
         Map<String,Object> batch=new LinkedHashMap<>(one("SELECT b.*,i.display_name creator_name,r.report_no FROM erp_report_photo_batch b JOIN erp_identity i ON i.id=b.created_by LEFT JOIN erp_service_report r ON r.id=b.report_id WHERE b.id=?",id));
+        batch.put("reviewHistory",jdbc.queryForList("SELECT a.action,a.summary_json,a.occurred_at,i.display_name actor_name FROM erp_audit_event a LEFT JOIN erp_identity i ON i.id=a.actor_identity_id WHERE a.resource_type='erp_report_photo_batch' AND a.resource_id=? AND a.action IN ('report.photo_batch.submitted','report.photo_batch.reviewed','report.photo_batch.returned') ORDER BY a.id",Long.toString(id)));
         batch.put("photos",jdbc.queryForList("SELECT p.id,p.file_id,p.system_code,p.taken_on,p.caption,p.sort_order,p.confirmation_status,p.confirmed_by,p.confirmed_at,f.original_name,f.media_type,f.byte_size file_size,f.sha256 FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.batch_id=? ORDER BY p.sort_order,p.id",id));
         return batch;
     }
@@ -124,7 +128,7 @@ public class ServiceWorkflowController {
         if(!"collecting".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"照片批次已提交审核，不能继续添加");
         long fileId=Long.parseLong(req(b,"fileId"));
         Map<String,Object> file=one("SELECT id,uploaded_by,media_type,byte_size FROM erp_file_object WHERE id=?",fileId);
-        if(((Number)file.get("uploaded_by")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能添加自己上传的照片");
+        if(!(file.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能添加自己上传的照片");
         if(!Set.of("image/jpeg","image/png").contains(file.get("media_type").toString()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"仅支持 JPG/PNG 照片");
         Integer count=jdbc.queryForObject("SELECT COUNT(*) FROM erp_report_photo WHERE batch_id=?",Integer.class,id);
         if(count!=null&&count>=500)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"单批最多 500 张照片");
@@ -199,13 +203,26 @@ public class ServiceWorkflowController {
         audit(actor(a),"report.photo_batch.submitted","erp_report_photo_batch",id,"photos="+total);
         return batchDetail(id);
     }
+    @PostMapping("/photo-batches/{id}/return") @PreAuthorize("hasAuthority('report:review') and hasAuthority('report:photo:read')") @Transactional
+    public Map<String,Object> returnBatch(@PathVariable long id,@RequestBody Map<String,Object> request,Authentication a){
+        var batch=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",id);
+        if(!"submitted".equals(batch.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"仅待审核批次可以退回");
+        requirePhotoReviewer(batch,actor(a));
+        String reason=req(request,"reason");if(reason.length()>1000)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"退回原因过长");
+        jdbc.update("UPDATE erp_report_photo_batch SET status='collecting',reviewed_by=NULL,reviewed_at=NULL WHERE id=?",id);
+        audit(actor(a),"report.photo_batch.returned","erp_report_photo_batch",id,reason);
+        return batchDetail(id);
+    }
+    private void requirePhotoReviewer(Map<String,Object> b,long identity){
+        if(((Number)b.get("created_by")).longValue()==identity)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片整理人不能审核自己的批次");
+        Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e JOIN erp_employee_qualification q ON q.employee_id=e.id WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)",Integer.class,identity);
+        if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片批次审核必须由具有有效工程师资格的员工完成");
+    }
     @PostMapping("/photo-batches/{id}/review") @PreAuthorize("hasAuthority('report:review')") @Transactional
     public Map<String,Object> reviewBatch(@PathVariable long id,Authentication a){
         Map<String,Object>b=one("SELECT * FROM erp_report_photo_batch WHERE id=? FOR UPDATE",id);
         if(!"submitted".equals(b.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已提交的照片批次可以审核");
-        if(((Number)b.get("created_by")).longValue()==actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片整理人不能审核自己的批次");
-        Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e JOIN erp_employee_qualification q ON q.employee_id=e.id WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)",Integer.class,actor(a));
-        if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片批次审核必须由具有有效工程师资格的员工完成");
+        requirePhotoReviewer(b,actor(a));
         jdbc.update("UPDATE erp_report_photo_batch SET status='reviewed',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP(3) WHERE id=?",actor(a),id);
         audit(actor(a),"report.photo_batch.reviewed","erp_report_photo_batch",id,"reviewed");
         return batchDetail(id);

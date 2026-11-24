@@ -236,6 +236,11 @@ async function removePhoto(photo) {
 async function submitBatch() {
   try{const batchId=batch.value.id;await api('/service-workflow/photo-batches/'+batchId+'/submit',{method:'POST'});await selectPackage(workPackage.value.id);await openBatch(batchId);notice.value='照片批次已提交内部审核'}catch(e){error.value=e.message}
 }
+async function returnBatch(){
+ const reason=prompt('请填写退回原因：');if(!reason?.trim()||busy.value)return
+ const id=batch.value.id;busy.value=true
+ try{await api('/service-workflow/photo-batches/'+id+'/return',{method:'POST',body:JSON.stringify({reason})});await selectPackage(workPackage.value.id);await openBatch(id);notice.value='照片批次已退回整理'}catch(e){error.value=e.message}finally{busy.value=false}
+}
 async function reviewBatch() {
   try{const batchId=batch.value.id;await api('/service-workflow/photo-batches/'+batchId+'/review',{method:'POST'});await selectPackage(workPackage.value.id);await openBatch(batchId);notice.value='照片批次审核通过'}catch(e){error.value=e.message}
 }
@@ -346,7 +351,7 @@ onBeforeUnmount(releasePreviews)
         <label>到场日期<input v-model="visitForm.visitDate" type="date" required></label>
         <label>服务类型<select v-model="visitForm.visitType"><option value="inspection">首次检测</option><option value="rectification_review">整改复核</option><option value="supplement">补充采集</option><option value="maintenance">维护保养</option><option value="other">其他</option></select></label>
         <label>标题<input v-model="visitForm.title" required></label>
-        <label class="wide">执行人员<select v-model="visitForm.staff" multiple><option v-for="e in employees" :key="e.id" :value="{employeeId:e.id,role:e.employee_type==='engineer'?'engineer':'field_operator'}">{{ e.full_name }}（{{ e.employee_type==='engineer'?'工程师':e.employee_type==='operator'?'操作员':'员工' }}）</option></select></label>
+        <label class="wide">执行人员<select v-model="visitForm.staff" multiple><option v-for="e in employees.filter(x=>x.status==='active')" :key="e.id" :value="{employeeId:e.id,role:e.employee_type==='engineer'?'engineer':'field_operator'}">{{ e.full_name }}（{{ e.employee_type==='engineer'?'工程师':e.employee_type==='operator'?'操作员':'员工' }}）</option></select></label>
         <label class="wide">现场情况<textarea v-model="visitForm.summary" rows="2"></textarea></label>
         <label class="wide">结果/待办<textarea v-model="visitForm.resultSummary" rows="2"></textarea></label>
         <button class="primary" :disabled="busy">保存现场记录</button>
@@ -422,7 +427,7 @@ onBeforeUnmount(releasePreviews)
         </tbody></table></div>
         <div v-if="focusedPhoto" class="photo-lightbox" role="dialog" aria-modal="true" aria-label="照片预览" @click.self="focusedPhoto=null" @keydown.esc="focusedPhoto=null"><div><button autofocus @click="focusedPhoto=null">关闭预览</button><p>{{focusedPhoto.original_name}} · {{focusedPhoto.system_code||'未分类'}}</p><img :src="previewUrls[focusedPhoto.file_id]" :alt="focusedPhoto.original_name"></div></div>
         <div v-if="photoEditable" class="sw-bottom-actions"><button class="primary" :disabled="busy||photoRows.some(dirty)" @click="submitBatch">提交照片审核</button><small>{{photoRows.some(dirty)?'请先保存所有单张编辑，再提交审核。':'所有照片必须完成分类、日期和人工确认。'}}</small></div>
-        <div v-if="batch.status==='submitted'&&can('report:review')&&Number(batch.created_by)!==props.userId" class="sw-bottom-actions"><button class="primary" @click="reviewBatch">审核通过照片批次</button></div>
+        <div v-if="batch.status==='submitted'&&can('report:review')&&Number(batch.created_by)!==props.userId" class="sw-bottom-actions"><button class="primary" @click="reviewBatch">审核通过照片批次</button><button :disabled="busy" @click="returnBatch">退回整理</button></div><details v-if="batch.reviewHistory?.length"><summary>照片审核历史</summary><div v-for="(h,i) in batch.reviewHistory" :key="i">{{h.occurred_at}} · {{h.actor_name}} · {{({ 'report.photo_batch.submitted':'提交','report.photo_batch.reviewed':'通过','report.photo_batch.returned':'退回'})[h.action]}} · {{typeof h.summary_json==='string'?JSON.parse(h.summary_json).summary:h.summary_json?.summary}}</div></details>
       </div>
     </div>
 
