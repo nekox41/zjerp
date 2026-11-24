@@ -159,6 +159,15 @@ class Migration:
         if id not in self.source.get(table,{}):
             raise ValueError("Missing archived source: "+table+"/"+id)
         return self.source[table][id]
+    def verify_target_file(self,file_id):
+        saved=self.target("erp_file_object",file_id)
+        storage_key=str(uuid.UUID(saved["storage_key"]))
+        if storage_key!=saved["storage_key"]:
+            raise ValueError("Invalid private storage key")
+        path=safe_path(self.storage,storage_key)
+        if not path.is_file() or path.stat().st_size!=saved["byte_size"] or digest(path)!=saved["sha256"]:
+            raise ValueError("Target attachment missing or differs from metadata: "+str(file_id))
+        return saved
     def target(self,table,id):
         if table not in TARGETS:
             raise ValueError("Unknown target table")
@@ -178,6 +187,8 @@ class Migration:
         if t!=expected:
             raise ValueError("Target type mismatch for "+table+"/"+id)
         self.target(t,n)
+        if t=="erp_file_object" and (n not in self.new_file_ids or self.apply):
+            self.verify_target_file(n)
         return n
     def map(self,table,id,source,decision,target,create):
         id=ident(id) if table in SOURCE_TABLES else key(id)
@@ -240,12 +251,14 @@ class Migration:
                 with source.open("rb") as src,dst.open("xb") as dest:
                     self.created_files.append(dst)
                     shutil.copyfileobj(src,dest,1024*1024)
-                if digest(dst)!=info["sha256"]:
+                    dest.flush()
+                    os.fsync(dest.fileno())
+                if dst.stat().st_size!=info["size"] or digest(dst)!=info["sha256"]:
                     raise ValueError("Copied original differs from archive")
             return self.execute("INSERT INTO erp_file_object(storage_key,sha256,byte_size,media_type,original_name,uploaded_by) VALUES(%s,%s,%s,%s,%s,%s)",(name,info["sha256"],info["size"],media,filename,self.actor))
         file_id=self.map(table,sid,row,{**d,"archiveFileSha256":info["sha256"]},"erp_file_object",create_file)
         saved=self.target("erp_file_object",file_id)
-        if saved["sha256"]!=info["sha256"]:
+        if saved["sha256"]!=info["sha256"] or saved["byte_size"]!=info["size"] or saved["media_type"]!=media:
             raise ValueError("Target file metadata differs from archive")
         if file_id not in self.new_file_ids or self.apply:
             storage_key=str(uuid.UUID(saved["storage_key"]))
@@ -566,9 +579,49 @@ class Migration:
 def blank_plan(manifest,hash):
     return {"format":"erp-legacy-review-v1","archiveSha256":hash,"note":"Add explicitly reviewed rows only; see LEGACY_MIGRATION.md. All unselected records remain in raw archive.",**{s:[] for s in SECTIONS}}
 
+
+TRIAL_MARKER=".erp-next-trial.json"
+def trial_identity(cursor,storage):
+    cursor.execute("SELECT DATABASE() AS db,@@server_uuid AS server_uuid")
+    server=cursor.fetchone()
+    if server["db"]!="erp_next":
+        raise ValueError("Only erp_next target schema is supported")
+    cursor.execute("SELECT trial_id,server_uuid FROM erp_trial_isolation_marker WHERE id=1")
+    db=cursor.fetchone()
+    marker=json.loads(safe_path(storage,TRIAL_MARKER).read_text(encoding="utf-8"))
+    expected={"format":"erp-next-trial-v1","trialId":db["trial_id"],"serverUuid":server["server_uuid"]} if db else None
+    if not db or db["server_uuid"]!=server["server_uuid"] or marker!=expected:
+        raise ValueError("Trial database and private file marker mismatch; stop")
+    return marker
+
+def receipt_for(identity,archive_hash,plan_hash):
+    return {"format":"erp-next-preview-v1","trial":identity,"archiveSha256":archive_hash,"planSha256":plan_hash}
+
+def verify_receipt(path,expected):
+    if not path or json.loads(Path(path).read_text(encoding="utf-8"))!=expected:
+        raise ValueError("Preview receipt must match exact trial target, archive and plan")
+
+def reconcile(migration):
+    migration.cur.execute("SELECT source_table,source_key,source_sha256,target_table,target_id FROM erp_legacy_migration_map WHERE source_namespace=%s ORDER BY source_table,source_key",(migration.ns,))
+    rows=migration.cur.fetchall()
+    errors=[];counts={};files=set()
+    for row in rows:
+        try:
+            table,id=row["source_table"],row["source_key"]
+            if table in SOURCE_TABLES and sha(migration.legacy(table,id))!=row["source_sha256"]:
+                raise ValueError("Archived source hash differs")
+            target=row["target_table"];n=row["target_id"]
+            migration.target(target,n)
+            if target=="erp_file_object" and n not in files:
+                migration.verify_target_file(n);files.add(n)
+            counts[table]=counts.get(table,0)+1
+        except (ValueError,FileNotFoundError,OSError) as e:
+            errors.append({"sourceTable":row["source_table"],"sourceKey":row["source_key"],"targetTable":row["target_table"],"targetId":row["target_id"],"error":str(e)})
+    return {"mappedRows":len(rows),"verifiedRowsByTable":counts,"verifiedFiles":len(files),"errors":errors,"note":"Verifies archive source hashes, target existence and attachment bytes; business field equivalence still requires reviewed mapping and manual sampling."}
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command",choices=["new-plan","preview","apply"])
+    parser.add_argument("command",choices=["new-plan","preview","apply","reconcile"])
     parser.add_argument("--archive",required=True)
     parser.add_argument("--plan",required=True)
     parser.add_argument("--host",default="127.0.0.1")
@@ -578,6 +631,7 @@ def main():
     parser.add_argument("--files-root")
     parser.add_argument("--isolated-trial",action="store_true")
     parser.add_argument("--confirm-plan-sha256")
+    parser.add_argument("--preview-receipt",help="New receipt path for preview; existing matching receipt for apply")
     args=parser.parse_args()
     os.umask(0o077)
     root=Path(args.archive).resolve(strict=True)
@@ -588,9 +642,13 @@ def main():
     if not args.isolated_trial or not args.user or not args.files_root or not args.actor:
         parser.error("Only isolated trial erp_next is supported; --isolated-trial --user --actor --files-root required")
     plan=read_plan(args.plan,hash)
-    if not any(plan.get(s) for s in SECTIONS):
+    if args.command!="reconcile" and not any(plan.get(s) for s in SECTIONS):
         parser.error("Empty reviewed plan")
     plan_hash=sha(plan)
+    if args.command in ("preview","apply") and not args.preview_receipt:
+        parser.error("Preview and apply require --preview-receipt")
+    if args.command=="preview" and Path(args.preview_receipt).exists():
+        parser.error("Preview receipt already exists; choose a new path")
     if args.command=="apply" and args.confirm_plan_sha256!=plan_hash:
         parser.error("Apply requires exact plan hash printed by preview")
     storage=Path(args.files_root).resolve(strict=True)
@@ -607,11 +665,22 @@ def main():
         if result["db"]!="erp_next" or result["locked"]!=1:
             raise ValueError("Target DB invalid or another migration is active")
         locked=True
+        identity=trial_identity(c,storage)
+        receipt=receipt_for(identity,hash,plan_hash)
+        if args.command=="apply":
+            verify_receipt(args.preview_receipt,receipt)
         c.execute("SELECT COUNT(*) AS n FROM erp_identity i JOIN erp_identity_role ir ON ir.identity_id=i.id JOIN erp_role r ON r.id=ir.role_id WHERE i.id=%s AND i.status='active' AND r.code='admin'",(args.actor,))
         if c.fetchone()["n"]!=1:
             raise ValueError("A pre-existing active target admin is required")
         migration=Migration(conn,root,manifest,hash,plan,storage,args.command=="apply")
         migration.actor=args.actor
+        if args.command=="reconcile":
+            summary=reconcile(migration)
+            conn.rollback()
+            print(json.dumps({"mode":"reconcile",**summary},ensure_ascii=False,indent=2))
+            if summary["errors"]:
+                raise ValueError("Reconciliation found mismatches; do not promote trial data")
+            return
         summary=migration.run()
         if args.command=="apply":
             migration.execute("INSERT INTO erp_legacy_migration_run(source_namespace,archive_sha256,decision_sha256,summary_json) VALUES(%s,%s,%s,%s) ON DUPLICATE KEY UPDATE id=id",(migration.ns,hash,plan_hash,canonical(summary)))
@@ -619,7 +688,8 @@ def main():
             conn.commit()
         else:
             conn.rollback()
-        print(json.dumps({"mode":args.command,"planSha256":plan_hash,**summary},ensure_ascii=False,indent=2))
+            archive_lib.secure_write(Path(args.preview_receipt),canonical(receipt)+"\n")
+        print(json.dumps({"mode":args.command,"trialId":identity["trialId"],"planSha256":plan_hash,**summary},ensure_ascii=False,indent=2))
     except Exception:
         try:
             conn.rollback()

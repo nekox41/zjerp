@@ -45,6 +45,22 @@ class MigrationValidationTest(unittest.TestCase):
             (root/"files/original.txt").write_text("tampered",encoding="utf-8")
             with self.assertRaises(ValueError):
                 exporter.verify(root)
+    def test_receipt_binding_and_path_rejection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);p=root/"receipt.json"
+            identity={"format":"erp-next-trial-v1","trialId":"test","serverUuid":"server"}
+            expected=importer.receipt_for(identity,"archive","plan")
+            exporter.secure_write(p,exporter.canonical(expected))
+            importer.verify_receipt(p,expected)
+            with self.assertRaises(ValueError):
+                importer.verify_receipt(p,importer.receipt_for(identity,"archive","other"))
+            for relative in ("x/../receipt.json","./receipt.json","x//y","/tmp/test"):
+                with self.assertRaises(ValueError):
+                    exporter.safe_path(root,relative)
+            (root/"real").mkdir()
+            (root/"alias").symlink_to(root/"real",target_is_directory=True)
+            with self.assertRaises(ValueError):
+                exporter.safe_path(root,"alias/child")
     def test_raw_and_typed_values(self):
         self.assertEqual(exporter.encode(bytearray(b"\x00\xff"))["base64"],"AP8=")
         self.assertEqual(exporter.encode(decimal.Decimal("1.2345678901234567"))["value"],"1.2345678901234567")

@@ -50,12 +50,15 @@ def quote_ident(s):
 def safe_path(root, relative):
     if not isinstance(relative, str) or not relative or "\\" in relative:
         raise ValueError("invalid archive path")
-    p = root / relative
-    if p.is_symlink() or not p.resolve().is_relative_to(root.resolve()) or Path(relative).is_absolute():
+    if Path(relative).is_absolute() or any(part in ("..",".","") for part in relative.split("/")):
+        raise ValueError("unsafe archive component")
+    p=root
+    for part in relative.split("/"):
+        p=p/part
+        if p.is_symlink():
+            raise ValueError("unsafe archive symlink")
+    if not p.resolve().is_relative_to(root.resolve()):
         raise ValueError("unsafe archive path")
-    for part in p.relative_to(root).parts:
-        if part in ("..", ".", ""):
-            raise ValueError("unsafe archive component")
     return p
 
 def connect_source(args):
@@ -165,15 +168,21 @@ def export(args):
 
 def verify(root):
     root = Path(root).resolve(strict=True)
-    mp = root / "manifest.json"
+    mp = safe_path(root,"manifest.json")
     actual = digest(mp)
-    if actual != (root / "manifest.sha256").read_text(encoding="utf-8").strip():
+    if actual != safe_path(root,"manifest.sha256").read_text(encoding="utf-8").strip():
         raise ValueError("Manifest SHA256 mismatch")
     manifest = json.loads(mp.read_text(encoding="utf-8"))
     if manifest.get("format") != "erp-legacy-archive-v1":
         raise ValueError("Unknown archive format")
+    if not re.fullmatch(r"server_[A-Za-z0-9_]{1,56}",str(manifest.get("sourceSchema",""))) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",str(manifest.get("sourceNamespace",""))):
+        raise ValueError("Invalid archive source identity")
     seen = set()
     expected = {"manifest.json", "manifest.sha256"}
+    def track(relative):
+        if relative in expected:
+            raise ValueError("Duplicate archive member: "+relative)
+        expected.add(relative)
     for table in manifest["tables"]:
         name = table["table"]
         if name in seen:
@@ -181,7 +190,7 @@ def verify(root):
         seen.add(name)
         if digest(safe_path(root, table["ddl"])) != table["ddlSha256"]:
             raise ValueError("DDL checksum mismatch: " + name)
-        expected.add(table["ddl"])
+        track(table["ddl"])
         if table["kind"] == "BASE TABLE":
             p = safe_path(root, table["data"])
             if digest(p) != table["sha256"]:
@@ -190,7 +199,7 @@ def verify(root):
                 count = sum(1 for line in f if line.strip())
             if count != table["rows"]:
                 raise ValueError("Row count mismatch: " + name)
-            expected.add(table["data"])
+            track(table["data"])
             if "rawData" not in table:
                 raise ValueError("Raw row preservation missing: "+name)
             raw=safe_path(root,table["rawData"])
@@ -199,7 +208,7 @@ def verify(root):
             with raw.open("r",encoding="utf-8") as f:
                 if sum(1 for line in f if line.strip())!=table["rows"]:
                     raise ValueError("Raw row count mismatch: "+name)
-            expected.add(table["rawData"])
+            track(table["rawData"])
     file_names = set()
     for f in manifest["files"]:
         if f["path"] in file_names:
@@ -209,7 +218,7 @@ def verify(root):
         p = safe_path(root, relative)
         if p.stat().st_size != f["size"] or digest(p) != f["sha256"]:
             raise ValueError("File checksum/size mismatch: " + f["path"])
-        expected.add(relative)
+        track(relative)
     for d in manifest["directories"]:
         if not safe_path(root, "files/" + d).is_dir():
             raise ValueError("Missing archived directory")
@@ -219,6 +228,8 @@ def verify(root):
             raise ValueError("Archive symlink is forbidden")
         if p.is_file():
             found.add(p.relative_to(root).as_posix())
+        elif not p.is_dir():
+            raise ValueError("Archive contains nonregular member")
     if found != expected:
         raise ValueError("Archive contains missing or untracked files")
     return manifest, actual
