@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api, downloadFile } from './api'
+import MaintenanceDocuments from './MaintenanceDocuments.vue'
 const props=defineProps({permissions:{type:Array,default:()=>[]},destination:{type:Object,default:null}})
 const emit=defineEmits(['navigate'])
 const can=p=>props.permissions.includes(p)
@@ -23,6 +24,7 @@ const maintenanceForm=ref({projectId:'',currentContractId:'',honeybeeContractUpl
 const visitForm=ref({visitDate:new Date().toISOString().slice(0,10),contractId:'',employeeIds:[],notes:''})
 const renewalForm=ref({contractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''})
 const renewalHistoryDetail=ref(null)
+const documentContractId=ref(null)
 async function openRenewalHistory(contractId){
   try{renewalHistoryDetail.value=await api('/business/contracts/'+contractId)}catch(e){error.value=e.message}
 }
@@ -130,6 +132,7 @@ async function saveLeadership(){
 }
 async function openMaintenance(id){
   maintenanceForm.value.projectId=String(id)
+  documentContractId.value=null
   visitForm.value.contractId=''
   visitForm.value.employeeIds=[]
   try{
@@ -254,8 +257,10 @@ onMounted(async ()=>{
         <div v-for="c in maintenance.contractHistory||[]" :key="c.id" class="pm-contract">
           <b>{{c.contract_no}} · {{c.title}}</b>
           <small>{{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}} · {{c.status}}</small>
+          <button type="button" class="secondary-button" @click="documentContractId=documentContractId===c.id?null:c.id">{{documentContractId===c.id?'收起年度资料':'维保卡 / 附带资料'}}</button>
           <button v-if="can('contract:read')" type="button" class="secondary-button" @click="openRenewalHistory(c.id)">查看该合同附件</button>
         </div>
+        <MaintenanceDocuments v-if="documentContractId" :key="maintenanceForm.projectId+'-'+documentContractId" :project-id="Number(maintenanceForm.projectId)" :contract-id="Number(documentContractId)" :permissions="props.permissions" />
         <div v-if="renewalHistoryDetail" class="pm-contract">
           <b>{{renewalHistoryDetail.contract_no}} · 独立附件记录</b>
           <div v-for="file in renewalHistoryDetail.files||[]" :key="file.id" class="pm-file">

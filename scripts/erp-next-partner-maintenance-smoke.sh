@@ -160,3 +160,37 @@ curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/rep
 curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/maintenance" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 维护到场'
 curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/contracts" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-RENEWAL-001'
 curl -fsS "http://127.0.0.1:8090/api/business/customers/$CUSTOMER_ID/history/projects" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert any(x["id"]==int(sys.argv[1]) for x in json.load(sys.stdin)["rows"])' "$UNCOVERED_ID"
+
+# C04/C05: preview is read-only, generated card has a stable number and project/contract history.
+DOC_SCOPE="http://127.0.0.1:8090/api/maintenance/projects/$UNCOVERED_ID/contracts/$RENEWAL_ID"
+CARD_PAYLOAD='{"company":"河南众基消防技术有限公司","leader":"张三","phone":"13800138000","startsOn":"2027-01-01","endsOn":"2027-12-31","systems":"火灾自动报警系统、自动喷水灭火系统、消火栓系统"}'
+BEFORE=$(curl -fsS "$DOC_SCOPE" -H "Authorization: Bearer $TOKEN")
+curl -fsS -X POST "$DOC_SCOPE/preview" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$CARD_PAYLOAD" -o /tmp/erp-wbcard-preview.pdf
+head -c 5 /tmp/erp-wbcard-preview.pdf | grep -q '%PDF-'
+AFTER=$(curl -fsS "$DOC_SCOPE" -H "Authorization: Bearer $TOKEN")
+test "$BEFORE" = "$AFTER"
+CARD=$(curl -fsS -X POST "$DOC_SCOPE/cards" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$CARD_PAYLOAD")
+CARD_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CARD")
+CARD_FILE=$(python -c 'import json,sys; print(json.load(sys.stdin)["file_id"])' <<< "$CARD")
+CARD_CODE=$(python -c 'import json,sys; print(json.load(sys.stdin)["code"])' <<< "$CARD")
+DUP_PAYLOAD=$(python -c 'import json,sys; x=json.loads(sys.argv[1]); x["code"]=sys.argv[2]; print(json.dumps(x))' "$CARD_PAYLOAD" "$CARD_CODE")
+DUP_CARD=$(curl -sS -o /tmp/erp-duplicate-card.json -w '%{http_code}' -X POST "$DOC_SCOPE/cards" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$DUP_PAYLOAD")
+test "$DUP_CARD" = "409"
+curl -fsS -X PUT "http://127.0.0.1:8090/api/maintenance/cards/$CARD_ID/status" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"printed":true,"sent":true}' | python -c 'import json,sys; x=json.load(sys.stdin); assert x["printed"] and x["sent"]'
+curl -fsS "http://127.0.0.1:8090/api/files/$CARD_FILE/download" -H "Authorization: Bearer $TOKEN" -o /tmp/erp-wbcard-generated.pdf
+head -c 5 /tmp/erp-wbcard-generated.pdf | grep -q '%PDF-'
+curl -fsS "$DOC_SCOPE" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; x=json.load(sys.stdin); assert len(x["cards"])==1 and x["cards"][0]["code"]==sys.argv[1]' "$CARD_CODE"
+curl -fsS "http://127.0.0.1:8090/api/maintenance/projects/$UNCOVERED_ID/contracts/$CONTRACT_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert json.load(sys.stdin)["cards"]==[]'
+CONTACT=$(curl -fsS -X POST http://127.0.0.1:8090/api/maintenance/contacts -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 维保联系人","phone":"13800138000"}')
+CONTACT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CONTACT")
+curl -fsS -X PUT "http://127.0.0.1:8090/api/maintenance/contacts/$CONTACT_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 维保联系人","phone":"13800138001","active":false}' | grep -q '13800138001'
+# Archive a PDF as an independent unchanged resource, then disable it without removing annual history.
+M_UPLOAD=$(curl -fsS -X POST http://127.0.0.1:8090/api/files -H "Authorization: Bearer $TOKEN" -F 'file=@/tmp/erp-wbcard-preview.pdf;type=application/pdf')
+M_FILE=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$M_UPLOAD")
+MATERIAL=$(curl -fsS -X POST http://127.0.0.1:8090/api/maintenance/materials -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"fileId\":$M_FILE,\"name\":\"CI 附带资料\"}")
+MATERIAL_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$MATERIAL")
+curl -fsS -X POST "$DOC_SCOPE/materials" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"materialId\":$MATERIAL_ID}" >/dev/null
+curl -fsS -X PUT "http://127.0.0.1:8090/api/maintenance/materials/$MATERIAL_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 已停用资料","active":false}' >/dev/null
+curl -fsS "$DOC_SCOPE" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; x=json.load(sys.stdin); assert len(x["materials"])==1 and x["materials"][0]["title"]=="CI 附带资料"'
+curl -fsS "http://127.0.0.1:8090/api/files/$M_FILE/download" -H "Authorization: Bearer $TOKEN" -o /tmp/erp-material-download.pdf
+cmp /tmp/erp-wbcard-preview.pdf /tmp/erp-material-download.pdf
