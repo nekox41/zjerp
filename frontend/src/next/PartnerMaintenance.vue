@@ -84,11 +84,12 @@ async function linkPartner(){
   catch(e){error.value=e.message}
 }
 async function unlinkPartner(partnerId){
-  if(!linkForm.value.contractId||!confirm('确定解除此合作方与当前合同的关联？历史审计记录仍会保留。'))return
+  const contractId=contractDetail.value?.id
+  if(!contractId||!confirm('确定解除此合作方与当前合同的关联？历史审计记录仍会保留。'))return
   busy.value=true;error.value=''
   try{
-    await api('/business/contracts/'+linkForm.value.contractId+'/partners/'+partnerId,{method:'DELETE'})
-    await openContractDetail(Number(linkForm.value.contractId))
+    await api('/business/contracts/'+contractId+'/partners/'+partnerId,{method:'DELETE'})
+    await openContractDetail(contractId)
     if(partner.value)await openPartner(partner.value.id)
     await load()
     notice.value='已解除合作关系，并重新计算合同分成'
