@@ -16,7 +16,17 @@ import java.util.regex.Pattern;
  */
 @Component
 public class InspectionDocxBinder {
-    private static final Pattern TOKEN=Pattern.compile("\\{\\{erp\\.([A-Za-z][A-Za-z0-9]*(?:\\.(?:[A-Za-z][A-Za-z0-9]*|[0-9]+))+)\\}\\}");
+    private static final Pattern TOKEN=Pattern.compile("\\{\\{erp\\.([A-Za-z][A-Za-z0-9]*(?:\\[[^\\]\\r\\n{}]+\\])?(?:\\.(?:[A-Za-z][A-Za-z0-9]*|[0-9]+))+)\\}\\}");
+    private static final Pattern SCOPED=Pattern.compile("(records|facilities|summaries)\\[([^\\]\\r\\n{}]+)\\]\\.([0-9]+)\\.([A-Za-z][A-Za-z0-9]*)");
+    private String resolveScoped(String key,JsonNode snapshot){
+        var m=SCOPED.matcher(key);if(!m.matches())return key;
+        int wanted;try{wanted=Integer.parseInt(m.group(3));}catch(NumberFormatException e){return key;}
+        var array=snapshot.path(m.group(1));int pos=0;
+        if(array.isArray())for(int i=0;i<array.size();i++){
+            if(m.group(2).equals(array.get(i).path("system").asText())&&pos++==wanted)return m.group(1)+"."+i+"."+m.group(4);
+        }
+        return key;
+    }
     private static final Set<String> SECTIONS=Set.of("general","buildings","facilities","records","instruments","summaries","conclusion");
     private static final Set<String> PROTECTED=Set.of("签字","签章","盖章","印章","批准人","审核人","检测人","报告人","项目负责人","技术负责人","骑缝章","营业执照","资格证");
     private static final int MAX_TARGETS=20000;
@@ -188,7 +198,7 @@ public class InspectionDocxBinder {
             }else if(token){
                 var matcher=TOKEN.matcher(before);
                 while(matcher.find()){
-                    String key=matcher.group(1),value=values.get(key);
+                    String key=resolveScoped(matcher.group(1),snapshot),value=values.get(key);
                     if(value==null){errors.add(target.key()+"：资料字段不存在或为空："+key);continue;}
                     edits.add(new Edit(matcher.start(),matcher.end(),value));keys.add(key);
                 }

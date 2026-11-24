@@ -36,24 +36,26 @@ public class InspectionProfileController {
         if(jdbc.queryForList("SELECT id FROM erp_service_work_package WHERE id=?"+(lock?" FOR UPDATE":""),id).isEmpty())
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"服务工作包不存在");
     }
-    private void validateObject(String section,JsonNode row){
+    private void validateObject(String section,JsonNode row,Set<String> allowedSystems){
         if(!row.isObject())throw bad("无效数据结构："+section);
         row.fields().forEachRemaining(e->{
             if(!FIELDS.get(section).contains(e.getKey())||!e.getValue().isTextual()||e.getValue().textValue().length()>12000)
                 throw bad("无效字段或内容超长："+section+"."+e.getKey());
-            if("system".equals(e.getKey())&&!e.getValue().textValue().isBlank()&&!systems.supportedSystems().contains(e.getValue().textValue()))
+            if("system".equals(e.getKey())&&!e.getValue().textValue().isBlank()&&!allowedSystems.contains(e.getValue().textValue()))
                 throw bad("无效消防系统分类");
         });
     }
     private void validate(JsonNode content){
         if(content==null||!content.isObject()||content.toString().length()>2_000_000)throw bad("检测资料为空或超过大小限制");
+        Set<String> allowedSystems=new LinkedHashSet<>(systems.supportedSystems());
+        allowedSystems.addAll(jdbc.query("SELECT DISTINCT system_name FROM erp_inspection_template WHERE template_kind='system'",(rs,i)->rs.getString(1)));
         content.fields().forEachRemaining(e->{
             String key=e.getKey();JsonNode value=e.getValue();
             if(!FIELDS.containsKey(key))throw bad("未知检测资料分区："+key);
-            if("general".equals(key)||"conclusion".equals(key)){validateObject(key,value);return;}
+            if("general".equals(key)||"conclusion".equals(key)){validateObject(key,value,allowedSystems);return;}
             int limit="records".equals(key)?3000:300;
             if(!value.isArray()||value.size()>limit)throw bad("无效记录数量："+key);
-            value.forEach(row->validateObject(key,row));
+            value.forEach(row->validateObject(key,row,allowedSystems));
         });
     }
     private Map<String,Object> read(long id,Integer version){

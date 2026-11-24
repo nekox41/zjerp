@@ -30,13 +30,19 @@ public class InspectionTemplateController {
         boolean manager=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:template:write"));
         return jdbc.queryForList("SELECT t.*,f.original_name,f.byte_size FROM erp_inspection_template t JOIN erp_file_object f ON f.id=t.file_id WHERE (?=1 OR t.active=1) ORDER BY t.template_kind,t.system_name,t.template_name,t.revision_no DESC",manager&&includeInactive?1:0);
     }
+    @GetMapping("/systems") @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:photo:read') or hasAuthority('report:template:write')")
+    public List<String> systems(){
+        Set<String> names=new LinkedHashSet<>(new ReportDocxPhotoInserter().supportedSystems());
+        names.addAll(jdbc.query("SELECT DISTINCT system_name FROM erp_inspection_template WHERE template_kind='system' ORDER BY system_name",(rs,i)->rs.getString(1)));
+        return new ArrayList<>(names);
+    }
     @PostMapping
     @PreAuthorize("hasAuthority('report:template:write') and hasAuthority('file:upload')") @Transactional(rollbackFor=Exception.class)
     public Map<String,Object> create(@RequestBody Map<String,Object>b,Authentication a)throws Exception{
         String kind=required(b,"kind",16),name=required(b,"name",150);
         if(!Set.of("base","system").contains(kind))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"模板类型无效");
         String system="system".equals(kind)?required(b,"system",80):"";
-        if(system.contains("{{")||system.contains("}}")||system.equals("现场检测照片")||system.chars().anyMatch(Character::isISOControl))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"消防系统名称无效");
+        if(system.contains("{{")||system.contains("}}")||system.contains("[")||system.contains("]")||system.equals("现场检测照片")||system.chars().anyMatch(Character::isISOControl))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"消防系统名称无效");
         if(!Boolean.TRUE.equals(b.get("cleanConfirmed")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请确认模板已清除旧项目、检测结果、照片、签署及其他不应复用的信息");
         String notes=Objects.toString(b.get("notes"),"");if(notes.length()>1000)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"备注过长");
         var f=one("SELECT * FROM erp_file_object WHERE id=?",fileId(b.get("fileId")));

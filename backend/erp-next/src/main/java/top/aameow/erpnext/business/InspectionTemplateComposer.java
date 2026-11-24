@@ -61,7 +61,7 @@ final class InspectionTemplateComposer {
         Element found=null;
         for(var e:children(b)){
             if(W.equals(e.getNamespaceURI())&&"p".equals(e.getLocalName())&&MARKER.equals(text(e))){
-                if(found!=null)throw bad("基础模板只能有一个系统章节插入标记");found=e;
+                if(found!=null)throw bad("基础模板只能有一个系统章节插入标记");guard(e,Set.of(),false);found=e;
             }else if(text(e).contains(MARKER)||"现场检测照片".equals(text(e)))throw bad("基础模板不能包含其他系统插入标记或原现场照片章节");
         }
         if(found==null)throw bad("基础模板须在独立普通段落中包含 "+MARKER);
@@ -112,12 +112,12 @@ final class InspectionTemplateComposer {
     }
     private static Element grid(Document d){
         Element table=w(d,"tbl"),pr=w(d,"tblPr");table.appendChild(pr);
-        Element width=w(d,"tblW");attr(width,"type","dxa");attr(width,"w","9600");pr.appendChild(width);
+        Element width=w(d,"tblW");attr(width,"type","dxa");attr(width,"w","9840");pr.appendChild(width);
         Element layout=w(d,"tblLayout");attr(layout,"type","fixed");pr.appendChild(layout);
         Element grid=w(d,"tblGrid");table.appendChild(grid);
-        for(int i=0;i<2;i++){Element col=w(d,"gridCol");attr(col,"w","4800");grid.appendChild(col);}
+        for(int i=0;i<2;i++){Element col=w(d,"gridCol");attr(col,"w","4920");grid.appendChild(col);}
         for(int i=0;i<2;i++){Element row=w(d,"tr");table.appendChild(row);
-            for(int j=0;j<2;j++){Element cell=w(d,"tc"),cp=w(d,"tcPr"),cw=w(d,"tcW");row.appendChild(cell);cell.appendChild(cp);cp.appendChild(cw);attr(cw,"w","4800");attr(cw,"type","dxa");cell.appendChild(p(d,"",false,false));}}
+            for(int j=0;j<2;j++){Element cell=w(d,"tc"),cp=w(d,"tcPr"),cw=w(d,"tcW");row.appendChild(cell);cell.appendChild(cp);cp.appendChild(cw);attr(cw,"w","4920");attr(cw,"type","dxa");cell.appendChild(p(d,"",false,false));}}
         return table;
     }
     static byte[] compose(byte[] base,List<Section> sections)throws Exception{
@@ -129,12 +129,17 @@ final class InspectionTemplateComposer {
             for(int i=0;i<nodes.getLength();i++)styles.add(((Element)nodes.item(i)).getAttributeNS(W,"styleId"));
         }
         Set<String> systems=new HashSet<>();int totalRows=0;
+        Set<String> selectedNames=new HashSet<>();for(Section section:sections)selectedNames.add(section.system());
+        if(selectedNames.size()!=sections.size())throw bad("同一消防系统只能选择一个章节模板");
         for(Section section:sections){
             if(!systems.add(section.system()))throw bad("同一消防系统只能选择一个章节模板");
             var fragment=body(parse(parts(section.docx()).get("word/document.xml")));
             totalRows+=validateSystem(fragment,styles,true).rows();if(totalRows>10000)throw bad("报告检测表合计超过10000行");
             b.insertBefore(p(d,section.system(),true,true),at);
-            for(var e:children(fragment))if(!"sectPr".equals(e.getLocalName()))b.insertBefore(d.importNode(e,true),at);
+            for(var e:children(fragment))if(!"sectPr".equals(e.getLocalName())){
+                if("p".equals(e.getLocalName())&&selectedNames.contains(text(e)))throw bad("系统章节模板请移除独立系统标题，由组合器统一生成");
+                b.insertBefore(d.importNode(e,true),at);
+            }
             b.insertBefore(p(d,"现场检测照片",true,true),at);
             b.insertBefore(grid(d),at);
             b.insertBefore(p(d,"注：应附彩色照片并注明日期，日期应如实填写。",false,false),at);

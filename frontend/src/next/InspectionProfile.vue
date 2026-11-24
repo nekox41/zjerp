@@ -4,7 +4,7 @@ import { api } from './api'
 const props=defineProps({workPackageId:{type:Number,required:true},projectName:{type:String,default:''},permissions:{type:Array,default:()=>[]}})
 const canWrite=computed(()=>props.permissions.includes('report:write'))
 const endpoint='/service-workflow/work-packages/'+props.workPackageId+'/inspection-profile'
-const systems=['火灾自动报警系统','消防给水系统','消火栓系统','自动喷水灭火系统','防烟排烟系统','消防应急照明和疏散指示系统','防火分隔设施','电气火灾监控系统','消防电源监控系统','火灾警报和消防应急广播系统','消防专用电话系统','消防电梯','消防供配电设施','建筑灭火器']
+const systems=ref(['火灾自动报警系统','消防给水系统','消火栓系统','自动喷水灭火系统','防烟排烟系统','消防应急照明和疏散指示系统','防火分隔设施','电气火灾监控系统','消防电源监控系统','火灾警报和消防应急广播系统','消防专用电话系统','消防电梯','消防供配电设施','建筑灭火器'])
 const general=[['projectName','工程名称'],['address','工程地址'],['projectCategory','工程类别'],['constructionUnit','建设单位'],['constructionQualification','建设单位资质'],['designUnit','设计单位'],['designQualification','设计单位资质'],['contractor','施工单位'],['contractorQualification','施工单位资质'],['supervisionUnit','监理单位'],['supervisionQualification','监理单位资质'],['totalArea','建筑总面积（注明单位）'],['commissioningUnit','委托单位'],['contact','委托联系人'],['phone','联系电话'],['commissionedOn','委托时间'],['inspectionDates','检测日期/范围'],['reportNo','报告编号'],['reportDate','报告日期'],['inspectionCategory','检测类别'],['overview','检测概况'],['introduction','工程简介'],['scope','检测范围'],['basis','检测依据']]
 const sections=[
  {key:'buildings',name:'建筑单体与区域',fields:[['name','单体/区域名称'],['structure','结构类型'],['use','使用性质'],['fireResistance','耐火等级'],['aboveGroundFloors','地上层数'],['belowGroundFloors','地下层数'],['height','建筑高度'],['length','建筑长度'],['footprint','占地面积'],['aboveGroundArea','地上建筑面积'],['belowGroundArea','地下建筑面积']]},
@@ -32,7 +32,7 @@ async function openVersion(v){
 }
 function addRow(s){const row=Object.fromEntries(s.fields.map(([key])=>[key,'']));if(s.key==='records'&&recordFilter.value)row.system=recordFilter.value;profile.value[s.key].push(row)}
 const visibleRows=computed(()=>section.value&&profile.value?profile.value[section.value.key].map((row,index)=>({row,index})).filter(x=>section.value.key!=='records'||!recordFilter.value||x.row.system===recordFilter.value):[])
-onMounted(()=>load(true))
+onMounted(async()=>{try{systems.value=await api('/inspection-templates/systems')}catch(e){error.value=e.message}await load(true)})
 </script>
 <template>
 <section class="ip-panel">
