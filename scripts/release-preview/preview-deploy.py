@@ -53,8 +53,11 @@ def process(name):
         stat=Path(f"/proc/{pid}/stat").read_text().rsplit(")",1)[1].split()
         if stat[0]=="Z" or stat[19]!=r["start"]: return None
         if Path(f"/proc/{pid}").stat().st_uid!=os.getuid(): raise RuntimeError("进程归属不符")
-        env=Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
-        if ("ZJERP_PREVIEW_PROCESS="+r["token"]).encode() not in env: raise RuntimeError("进程标记不符")
+        # nginx rewrites its process title and may overwrite the original environment.
+        # PID start time, owner and the unique absolute configuration/JAR path identify our process.
+        cmd=Path(f"/proc/{pid}/cmdline").read_bytes()
+        expected=str(STATE/("nginx.conf" if name=="web" else "app/app.jar")).encode()
+        if expected not in cmd: raise RuntimeError("进程标记不符")
         return pid
     except FileNotFoundError: return None
 def stop_proc(name):
@@ -68,7 +71,7 @@ def stop_proc(name):
     child(name+".process.json").unlink(missing_ok=True)
 def start_proc(name,args,env=None):
     token=secrets.token_hex(24)
-    base={k:v for k,v in os.environ.items() if not k.startswith(("SPRING_","ERP_","PG","JAVA_TOOL_OPTIONS","JDK_JAVA_OPTIONS","_JAVA_OPTIONS"))}
+    base={k:v for k,v in os.environ.items() if k in ("PATH","HOME","LANG","TZ","TMPDIR","USER","LOGNAME") or k.startswith("LC_")}
     base.update(env or {});base["ZJERP_PREVIEW_PROCESS"]=token
     with child(name+".log").open("wb") as log:
         p=subprocess.Popen([str(x) for x in args],env=base,stdout=log,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,start_new_session=True,close_fds=True)
@@ -98,6 +101,7 @@ if any(c in str(STATE) for c in "'\"\\\n\r$;") or len(str(sock).encode())>85: sy
 stop_all()
 for port in (web,api,db):
     with socket.socket() as s:
+        s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
         try: s.bind(("127.0.0.1",port))
         except OSError: sys.exit(f"端口 {port} 已占用；请先停止旧测试 Docker 或其他占用程序。未清空数据库。")
 # All paths are dedicated and checked; do not traverse nested mounts.
@@ -117,6 +121,7 @@ shutil.copy2(ROOT/"app.jar",app/"app.jar")
 shutil.copytree(ROOT/"web",app/"web")
 shutil.copytree(ROOT/"db",app/"db")
 user=pwd.getpwuid(os.getuid()).pw_name
+if user=="erp_next": sys.exit("请使用非 erp_next 的普通 Linux 账号运行")
 password=secrets.token_hex(32);token=secrets.token_hex(32)
 pg("initdb","-D",data,"-U",user,"--encoding=UTF8","--locale=C.UTF-8","--auth-local=peer","--auth-host=scram-sha-256")
 with (data/"postgresql.conf").open("a") as f:

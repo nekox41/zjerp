@@ -71,3 +71,7 @@ erp-next/.local-smoke-*.env
 
 # Host-side ERP Next build lock
 .erp-next-local-build.lock
+
+# Local preview package output
+/release/
+/erp-next-preview-linux.tar.gz*

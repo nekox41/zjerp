@@ -1,3 +1,6 @@
+
+> 最新开发流程：优先下载 GitHub Releases 的预发行包，在宿主机直接运行 JRE/Nginx/独立 PostgreSQL 17。包内 deploy.sh 每次重建测试数据，无需源码、Docker 或编译环境。本文原 Docker 流程保留为备选；正式部署和迁移仍未开放。
+
 # ERP Next V1 — 部署、备份与验收
 
 > 当前文档面向独立新库 `erp_next` 的首次部署。**不要**将数据库指向旧系统 `server`；不要使用 `docker compose down -v`。

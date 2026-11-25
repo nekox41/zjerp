@@ -13,7 +13,7 @@ fi
 if [[ "$action" == start || "$action" == fresh ]]; then
  (cd "$ROOT" && sha256sum -c SHA256SUMS --quiet)
  java17=/usr/lib/jvm/java-17-openjdk-$(dpkg --print-architecture)/bin/java
- java_ok(){ [[ -x "$java17" ]] || { command -v java >/dev/null && java -version 2>&1 | grep -Eq 'version "17[.]'; }; }
+ java_ok(){ [[ -x "$java17" ]] || { command -v java >/dev/null && java -version 2>&1 | grep -E 'version "17[.]' >/dev/null; }; }
  packages=()
  java_ok || packages+=(openjdk-17-jre-headless)
  command -v nginx >/dev/null || packages+=(nginx)
@@ -28,7 +28,7 @@ if [[ "$action" == start || "$action" == fresh ]]; then
      sudo apt-get install -y curl ca-certificates gnupg
      key="$(mktemp)"
      curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o "$key"
-     gpg --batch --show-keys --with-colons "$key" | grep -q 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8' || { rm -f "$key"; exit 1; }
+     gpg --batch --show-keys --with-colons "$key" | grep 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8' >/dev/null || { rm -f "$key"; exit 1; }
      sudo install -d /usr/share/postgresql-common/pgdg
      sudo install -m 0644 "$key" /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
      rm -f "$key"

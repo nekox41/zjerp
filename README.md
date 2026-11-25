@@ -35,16 +35,23 @@ mvn -B -f backend/erp-next/pom.xml verify
 cd frontend && npm ci && npm run build:prod
 ```
 
-## WSL2 本地一键测试与验收部署
+## 开发预览版：下载 Release 一键部署（推荐）
 
-Ubuntu 22.04 / Docker Compose v2，仓库建议克隆到 WSL Linux 文件系统（如 ~/zjerp）。本地体验部署需要宿主机 JDK 17、Maven、Node.js 22 和 npm 10，以及 python3、curl、flock（Ubuntu 软件包 python3、curl、util-linux）。依赖缓存跨部署保留，Docker 只打包编译好的 JAR 和 dist；不需要 Python MySQL 依赖。独立自动化测试仍使用容器构建工具。
+每次推送开发分支或 master 后，GitHub Actions 自动构建新版后端与前端、执行单元测试和两次裸机部署验证，成功后发布带 commit 标识的预发行版。其他分支及 PR 运行构建，但不发布；一次 push 中包含多个 commit 时构建推送后的分支头。
+
+打开 [Releases](https://github.com/nekox41/zjerp/releases)，选择最新成功的 preview，下载 `erp-next-preview-linux.tar.gz` 和对应 `.sha256` 文件。
 
 ```bash
-bash test.sh        # 完整构建与隔离 Smoke，日志在 test-results/
-bash deploy.sh      # 每次清空独立新版测试库及附件，重新部署
+sha256sum -c erp-next-preview-linux.tar.gz.sha256
+mkdir -p ~/zjerp-preview
+tar -xzf erp-next-preview-linux.tar.gz -C ~/zjerp-preview
+cd ~/zjerp-preview
+bash deploy.sh
 ```
 
-部署后访问 http://localhost:8089/next.html，测试账号 `admin` / `123456`（仅限本机）。每次部署自动清空新版测试数据，无需备份或迁移；旧生产系统不连接、不修改。生产迁移待完整版开发完成后单独安排。详见 [WSL2 本地测试部署](erp-next/WSL_ACCEPTANCE.md)。
+Ubuntu/WSL 或 Debian 普通用户运行。首次自动检测并安装 JRE 17、Nginx、PostgreSQL 17、Python3 等运行依赖（必要时 sudo），以后无需重新下载构建依赖，无需 Docker、Maven、Node.js、npm。每次部署自动重建独立测试数据库及附件，旧生产库不连接。访问 http://localhost:8089/next.html，admin / 123456，仅回环测试，禁止使用真实业务资料或部署到生产。
+
+旧 Docker 体验环境若占用端口，在原源码仓库执行 `bash deploy.sh stop`。裸机预览的停止/状态/日志命令为 Release 目录中的 `bash deploy.sh stop|status|logs`。源码 Docker 构建入口继续保留，详见 [本地体验部署](erp-next/WSL_ACCEPTANCE.md)。
 
 ## Codespaces 一键启动新版 ERP（普通空库）
 
