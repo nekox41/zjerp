@@ -95,3 +95,5 @@ sha256sum "backups/erp_next_$STAMP.sql" "backups/erp_next_files_$STAMP.tar.gz" >
 ## WSL2 候选版一键验收
 
 `bash test.sh` 使用容器提供构建工具并记录日志；`bash deploy.sh` 重建专用一次性体验环境（不含旧库），与本页普通部署及生产卷分离。参见 [WSL_ACCEPTANCE.md](WSL_ACCEPTANCE.md)。
+
+体验部署先在宿主机编译并打包运行镜像，成功后才重建独立测试数据库与附件；不清除 Maven/npm 依赖缓存。正式/自动化容器构建入口保持原状。

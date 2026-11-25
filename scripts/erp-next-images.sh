@@ -40,3 +40,8 @@ EOF
 erp_build_images(){
   erp_image_check maven:3.9.9-eclipse-temurin-17 eclipse-temurin:17-jre node:22-alpine nginx:stable-alpine postgres:17 flyway/flyway:10.20.1
 }
+
+# Local deployment builds on the host; do not pull Maven or Node builder images.
+erp_runtime_images(){
+  erp_image_check eclipse-temurin:17-jre nginx:stable-alpine postgres:17 flyway/flyway:10.20.1
+}

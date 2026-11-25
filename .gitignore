@@ -68,3 +68,6 @@ __pycache__/
 test-results/
 erp-next/.local-smoke-*.yaml
 erp-next/.local-smoke-*.env
+
+# Host-side ERP Next build lock
+.erp-next-local-build.lock

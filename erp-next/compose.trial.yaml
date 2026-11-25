@@ -42,7 +42,7 @@ services:
     user: "${ERP_TRIAL_UID:?Set ERP_TRIAL_UID}:${ERP_TRIAL_GID:?Set ERP_TRIAL_GID}"
     build:
       context: ../backend/erp-next
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.runtime
       args:
         ERP_IMAGE_PREFIX: ${ERP_IMAGE_PREFIX:-}
     environment:
@@ -76,7 +76,7 @@ services:
   erp-next-web:
     build:
       context: ../frontend
-      dockerfile: Dockerfile.erp-next
+      dockerfile: Dockerfile.erp-next.runtime
       args:
         ERP_IMAGE_PREFIX: ${ERP_IMAGE_PREFIX:-}
     ports:

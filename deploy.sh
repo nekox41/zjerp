@@ -9,7 +9,8 @@ usage(){ cat <<'EOF'
 Usage: bash deploy.sh [start|fresh|status|logs|stop]
 默认 start（fresh 为同义命令）：每次删除新版测试库全部记录与私有附件，重新初始化并部署。
 仅使用独立测试 PostgreSQL，不检测、连接或迁移旧生产 server。
-不删除其他项目容器、共享数据库、历史归档或旧版附件；Docker 构建缓存保留。
+宿主机使用 JDK 17、Maven、Node.js 22、npm 10 构建；Docker 只打包运行产物。
+保留 ~/.m2/repository、npm 缓存及 frontend/node_modules；不删除其他项目容器、共享数据库、历史归档或旧版附件。
 测试端口仅绑定 127.0.0.1，账号 admin，密码 123456；禁止用于生产。
 ERP_TRIAL_DIR 可指定专用状态目录（默认 ~/.local/share/zjerp-trial）。
 首次创建状态目录时可设置 ERP_NEXT_WEB_PORT / ERP_NEXT_API_PORT（默认 8089/8090）。
@@ -76,9 +77,18 @@ case "$action" in
  stop) dc stop erp-next-web erp-next-api erp-next-schema erp-next-postgres; exit;;
 esac
 echo "=== 本地测试全新部署：旧新版业务数据与附件将清空 ==="
-erp_build_images
+# Protect host build outputs even if two different trial state directories use this checkout.
+exec 8>"$ROOT/.erp-next-local-build.lock"
+flock -n 8 || { echo "同一仓库已有本地构建正在运行" >&2; exit 1; }
+echo "[构建] 在宿主机编译前后端（复用本地依赖）"
+bash "$ROOT/scripts/erp-next-build-local.sh"
+echo "[打包] 仅将 JAR 和静态文件装入运行镜像"
+erp_runtime_images
 dc config --quiet
 dc build erp-next-api erp-next-web
+flock -u 8
+exec 8>&-
+# No database or running container is changed until both builds and image packaging succeed.
 # The old MySQL trial has a different Compose project. Retire only its own containers;
 # do not delete its volume (it could contain an imported legacy server schema).
 for svc in erp-next-web erp-next-api erp-next-schema erp-next-mysql; do
@@ -103,12 +113,12 @@ else
 fi
 for item in schema-init-pending schema-build last-successful-commit latest-preview review.json; do rm -f -- "$STATE/$item"; done
 printf '123456\n' > "$STATE/admin-password"
-dc up -d --wait --wait-timeout 180 erp-next-postgres
+dc up -d --no-build --wait --wait-timeout 180 erp-next-postgres
 echo "[2/3] 初始化最终 Schema"
-dc up --no-deps --force-recreate --exit-code-from erp-next-schema erp-next-schema
+dc up --no-build --no-deps --force-recreate --exit-code-from erp-next-schema erp-next-schema
 echo "[3/3] 启动新 API 与 Web"
-dc up -d --no-deps --force-recreate --wait --wait-timeout 180 erp-next-api
-dc up -d --no-deps --force-recreate --wait --wait-timeout 90 erp-next-web
+dc up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 erp-next-api
+dc up -d --no-build --no-deps --force-recreate --wait --wait-timeout 90 erp-next-web
 python3 - "$ERP_NEXT_WEB_PORT" <<'PY'
 import json,os,sys,urllib.request
 base="http://127.0.0.1:"+sys.argv[1]+"/next-api"

@@ -37,7 +37,7 @@ cd frontend && npm ci && npm run build:prod
 
 ## WSL2 本地一键测试与验收部署
 
-Ubuntu 22.04 / Docker Compose v2，仓库建议克隆到 WSL Linux 文件系统（如 ~/zjerp）。不要求宿主机安装 Maven、JDK、Node 或 Python MySQL 依赖。需有 python3、curl、flock（Ubuntu 软件包 python3、curl、util-linux）。
+Ubuntu 22.04 / Docker Compose v2，仓库建议克隆到 WSL Linux 文件系统（如 ~/zjerp）。本地体验部署需要宿主机 JDK 17、Maven、Node.js 22 和 npm 10，以及 python3、curl、flock（Ubuntu 软件包 python3、curl、util-linux）。依赖缓存跨部署保留，Docker 只打包编译好的 JAR 和 dist；不需要 Python MySQL 依赖。独立自动化测试仍使用容器构建工具。
 
 ```bash
 bash test.sh        # 完整构建与隔离 Smoke，日志在 test-results/
