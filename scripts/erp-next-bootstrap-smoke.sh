@@ -41,6 +41,9 @@ ORG_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$OR
 EMP=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeCode\":\"CI-001\",\"fullName\":\"CI 员工\",\"organizationId\":$ORG_ID,\"employeeType\":\"engineer\"}")
 EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$EMP")
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/employees/$EMP_ID/qualifications" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"qualificationName":"CI 项目负责人资格","expiresOn":"2099-12-31"}' >/dev/null
+curl -fsS "${SMOKE_API_URL}/api/business/employees/$EMP_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys;e=json.load(sys.stdin);assert e["employee_code"]=="CI-001" and e["full_name"]=="CI 员工" and e["employee_type"]=="engineer";assert e["created_at"] and e["updated_at"]'
+curl -fsS "${SMOKE_API_URL}/api/business/employees?q=CI-001" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys;rows=json.load(sys.stdin);assert any(e["employee_code"]=="CI-001" and e["has_valid_qualification"] is True for e in rows)'
+curl -fsS "${SMOKE_API_URL}/api/business/employees/$EMP_ID/qualifications" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys;assert any(q["qualification_name"]=="CI 项目负责人资格" for q in json.load(sys.stdin))'
 CUSTOMER=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"customerCode\":\"CI-C-001\",\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
 CUSTOMER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CUSTOMER")
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 联系人","phone":"123456"}' >/dev/null
