@@ -14,6 +14,7 @@ Usage: bash start.sh [start|status|logs|stop|help]
   logs    follow application logs
   stop    stop containers, preserving database and private files
 All commands operate ONLY on erp-next/compose.yaml.
+For WSL2 legacy-data acceptance and migration, use bash deploy.sh instead.
 EOF
 }
 command_name="${1:-start}"
@@ -73,8 +74,31 @@ case "$command_name" in
   stop) compose down --remove-orphans; echo "Containers stopped; database and attachment volumes are preserved."; exit ;;
 esac
 compose config --quiet
-echo "Building and starting isolated ERP Next (MySQL, Flyway, API, Web)..."
-compose up -d --build
+echo "[1/4] Building ERP Next API and Web images..."
+compose build erp-next-api erp-next-web
+echo "[2/4] Starting MySQL and waiting for health..."
+if ! compose up -d --wait --wait-timeout 180 erp-next-mysql; then
+  compose ps -a >&2
+  compose logs --tail=100 erp-next-mysql >&2
+  exit 1
+fi
+# Do not migrate while the application can still write to its database.
+compose stop erp-next-web erp-next-api
+echo "[3/4] Running Flyway migration (live output; do not interrupt active SQL)..."
+if ! compose up --no-deps --force-recreate --exit-code-from erp-next-schema erp-next-schema; then
+  echo "Flyway failed. Existing database and private files are preserved. Do not delete volumes or repair migration history blindly." >&2
+  compose ps -a >&2
+  compose logs --tail=100 erp-next-schema >&2
+  exit 1
+fi
+echo "[4/4] Starting API and Web after successful migration..."
+# Avoid running Flyway a second time; the preceding command must succeed first.
+if ! compose up -d --no-deps --wait --wait-timeout 180 erp-next-api ||
+   ! compose up -d --no-deps --wait --wait-timeout 60 erp-next-web; then
+  compose ps -a >&2
+  compose logs --tail=100 erp-next-api erp-next-web >&2
+  exit 1
+fi
 echo "Waiting for frontend and backend health (up to 180 seconds)..."
 healthy=0
 for ((i=0;i<90;i++)); do
