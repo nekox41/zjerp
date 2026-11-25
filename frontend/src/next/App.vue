@@ -10,6 +10,7 @@ import FireStandardLibrary from './FireStandardLibrary.vue'
 import PartnerMaintenance from './PartnerMaintenance.vue'
 import MigrationConsole from './MigrationConsole.vue'
 import AccountManagement from './AccountManagement.vue'
+import ThemeSwitch from './ThemeSwitch.vue'
 
 const loading = ref(true)
 const submitting = ref(false)
@@ -133,11 +134,11 @@ onMounted(refresh)
       <div class="aside-copy">
         <span class="eyebrow">A CLEARER WAY TO WORK</span>
         <h1>让业务关系清晰，<br>让每一步都有方向。</h1>
-        <p>新版 ERP 正在逐步构建。先从安全、清晰的工作空间开始。</p>
+        <p>统一管理客户、合同、项目与技术服务。</p>
       </div>
       <div class="aside-foot">ZJ ERP · NEXT GENERATION</div>
     </section>
-    <section class="auth-main">
+    <section class="auth-main"><div class="auth-theme"><ThemeSwitch /></div>
       <div class="auth-card">
         <div class="mobile-brand"><span class="brand-mark">众</span><b>众基 ERP</b></div>
         <template v-if="!initialized">
@@ -196,15 +197,15 @@ onMounted(refresh)
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ pageTitle }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
-      <div class="content">
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ pageTitle }}</h1></div><div class="topbar-actions"><ThemeSwitch/><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></div></header>
+      <div class="content" :key="tab+':'+navigationKey">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
         <template v-if="tab==='overview'">
-          <section class="welcome-card"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>你好，{{ user.displayName }}</h2><p>平台基础已经就绪。接下来将逐步开放客户、合同、项目与交付流程。</p></div><div class="welcome-symbol">众</div></section>
+          <section class="welcome-card"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>你好，{{ user.displayName }}</h2><p>从左侧选择业务模块，开始今天的工作。</p></div><div class="welcome-symbol">众</div></section>
           <div class="section-heading"><div><h2>平台状态</h2><p>当前已启用的基础能力</p></div><span class="status-pill"><i></i>运行中</span></div>
           <div class="stat-grid"><article class="stat-card"><span>当前账号</span><b>{{ user.username }}</b><small>身份认证已启用</small></article><article class="stat-card"><span>账户权限</span><b>{{ user.username==='admin'?'超级账户':can('report:review')?'管理人员':'普通员工' }}</b><small>固定账户权限</small></article><article class="stat-card"><span>账号档案</span><b>{{ identities.length || '—' }}</b><small>当前可查看的账号</small></article></div>
-          <section class="next-card"><div class="next-icon">✦</div><div><b>接下来会发生什么？</b><p>新版业务模块将按真实工作流程逐步上线。现阶段不会展示尚未实现的功能入口，也不会将旧系统数据误当作新系统数据。</p></div></section>
+          
         </template>
         <AccountManagement v-else-if="tab==='identities'&&can('identity:write')" :user-id="user.id" @self-changed="logout" @updated="loadWorkspace"/>
         <MigrationConsole v-else-if="tab==='migration'&&can('identity:write')" />

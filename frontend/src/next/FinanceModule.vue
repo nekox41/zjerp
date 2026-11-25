@@ -1,4 +1,5 @@
 <script setup>
+import FormDialog from './FormDialog.vue'
 import { computed, onMounted, ref } from 'vue'
 import { api, downloadFile } from './api'
 
@@ -29,11 +30,17 @@ onMounted(async()=>{await refresh();try{projectOptions.value=(await api('/financ
 <section v-if="selected || can('expense:write')" class="panel finance-panel">
   <h3>{{selected?selected.claim_no+' · '+selected.status:'创建费用报账单'}}</h3>
   <p v-if="selected">总额：{{money(selected.total_amount)}} {{selected.currency}} · 版本：{{selected.version_no}}</p>
-  <form v-if="!selected || editable" class="form-stack" @submit.prevent="save">
-    <div class="create-grid compact"><label v-if="!selected">报账编号<input v-model="form.claimNo" required maxlength="80"></label><label>标题<input v-model="form.title" required maxlength="240"></label><label v-if="!selected">所属项目（可选）<select v-model="form.projectId"><option value="">不关联项目</option><option v-for="p in projectOptions" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label></div>
-    <h4>费用明细</h4><div v-for="(line,i) in form.lines" :key="i" class="create-grid compact"><label>费用说明<input v-model="line.description" required maxlength="500"></label><label>类别<select v-model="line.category"><option value="travel">差旅</option><option value="transport">交通</option><option value="materials">材料</option><option value="other">其他</option></select></label><label>发生日期<input v-model="line.incurredOn" type="date" required></label><label>金额<input v-model="line.amount" type="number" min="0.01" step="0.01" required></label><button type="button" class="secondary-button" :disabled="form.lines.length===1" @click="form.lines.splice(i,1)">删除明细</button></div>
-    <div class="report-actions"><button type="button" class="secondary-button" @click="addLine">添加明细</button><button class="primary-button" :disabled="busy">保存报账</button></div>
-  </form>
+  <FormDialog v-if="!selected || editable" title="填写报账" :steps="['报账信息','费用明细']" :busy="busy" :error="error" @clear-error="error=''">
+<template #default="{step,finish}"><form class="form-stack" @submit.prevent="finish(()=>save())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<div class="create-grid compact"><label v-if="!selected">报账编号<input v-model="form.claimNo" required maxlength="80"></label><label>标题<input v-model="form.title" required maxlength="240"></label><label v-if="!selected">所属项目（可选）<select v-model="form.projectId"><option value="">不关联项目</option><option v-for="p in projectOptions" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label></div>
+</div>
+<div v-show="step===1" data-wizard-step="1" class="wizard-fields">
+<h4>费用明细</h4>
+<div v-for="(line,i) in form.lines" :key="i" class="create-grid compact"><label>费用说明<input v-model="line.description" required maxlength="500"></label><label>类别<select v-model="line.category"><option value="travel">差旅</option><option value="transport">交通</option><option value="materials">材料</option><option value="other">其他</option></select></label><label>发生日期<input v-model="line.incurredOn" type="date" required></label><label>金额<input v-model="line.amount" type="number" min="0.01" step="0.01" required></label><button type="button" class="secondary-button" :disabled="form.lines.length===1" @click="form.lines.splice(i,1)">删除明细</button></div>
+<div class="report-actions"><button type="button" class="secondary-button" @click="addLine">添加明细</button><button class="primary-button" :disabled="busy">保存报账</button></div>
+</div>
+</form></template></FormDialog>
   <div v-if="selected">
     <h4>附件</h4><input v-if="editable" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.docx" @change="upload"><p v-for="a in selected.attachments" :key="a.id" class="log-line">{{a.original_name}} · {{a.sha256}} <button class="secondary-button" @click="downloadFile(a.file_id,a.original_name)">下载</button></p>
     <div class="report-actions"><button v-if="own&&selected.status==='draft'" class="primary-button" :disabled="busy" @click="action('submit')">提交审批</button><button v-if="can('expense:approve')&&selected.status==='submitted'&&!own" class="primary-button" :disabled="busy" @click="action('approve')">批准</button><label v-if="can('expense:approve')&&selected.status==='submitted'&&!own">退回原因<input v-model="reason"></label><button v-if="can('expense:approve')&&selected.status==='submitted'&&!own" class="secondary-button" :disabled="busy||!reason.trim()" @click="action('return')">退回修改</button><label v-if="can('expense:pay')&&selected.status==='approved'&&!own">付款流水号<input v-model="payment.paymentReference"></label><label v-if="can('expense:pay')&&selected.status==='approved'&&!own">付款金额<input v-model="payment.paidAmount" type="number" min="0.01" step="0.01"></label><button v-if="can('expense:pay')&&selected.status==='approved'&&!own" class="primary-button" :disabled="busy||!payment.paymentReference.trim()" @click="action('pay')">登记全额付款</button></div>

@@ -1,4 +1,5 @@
 <script setup>
+import FormDialog from './FormDialog.vue'
 import { computed, onMounted, ref } from 'vue'
 import { api, downloadFile } from './api'
 import MaintenanceDocuments from './MaintenanceDocuments.vue'
@@ -184,40 +185,68 @@ onMounted(async ()=>{
   <p v-if="error" class="pm-msg error">{{error}}</p><p v-if="notice" class="pm-msg success">{{notice}}</p>
 
   <div v-if="tab==='partners'" class="pm-layout">
-    <div v-if="can('partner:write')" class="pm-panel"><h3>新增中间人</h3><form @submit.prevent="createPartner" class="pm-form">
-      <label>合作方编号<input v-model="partnerForm.partnerCode" required></label><label>名称<input v-model="partnerForm.name" required></label>
-      <label>类型<select v-model="partnerForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label><label>联系人<input v-model="partnerForm.contactName"></label>
-      <label>电话<input v-model="partnerForm.phone"></label><label>邮箱<input v-model="partnerForm.email"></label><label class="wide">地址<input v-model="partnerForm.address"></label><label class="wide">备注<textarea v-model="partnerForm.notes"></textarea></label><button class="primary" :disabled="busy">创建中间人</button>
-    </form></div>
+    <div v-if="can('partner:write')" class="pm-panel"><h3>新增中间人</h3><FormDialog title="新建中间人" :steps="['主体资料','联系人与联系方式']" :busy="busy" :error="error" @clear-error="error=''">
+<template #default="{step,finish}"><form @submit.prevent="finish(()=>createPartner())" class="pm-form">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>合作方编号<input v-model="partnerForm.partnerCode" required></label>
+<label>名称<input v-model="partnerForm.name" required></label>
+<label>类型<select v-model="partnerForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label>
+</div>
+<div v-show="step===1" data-wizard-step="1" class="wizard-fields">
+<label>联系人<input v-model="partnerForm.contactName"></label>
+<label>电话<input v-model="partnerForm.phone"></label>
+<label>邮箱<input v-model="partnerForm.email"></label>
+<label class="wide">地址<input v-model="partnerForm.address"></label>
+<label class="wide">备注<textarea v-model="partnerForm.notes"></textarea></label>
+<button class="primary" :disabled="busy">创建中间人</button>
+</div>
+</form></template></FormDialog></div>
     <div class="pm-panel"><h3>中间人列表</h3><div class="pm-list"><button v-for="p in partners" :key="p.id" @click="openPartner(p.id)" :class="{selected:partner?.id===p.id}"><b>{{p.name}}</b><small>{{p.partner_code}} · {{p.contract_count}} 份关联合同</small></button><p v-if="!partners.length" class="pm-empty">暂无中间人</p></div>
       <div v-if="partner" class="pm-detail">
         <div class="pm-detail-head"><h4>{{partner.name}} · 中间人档案</h4><button v-if="can('partner:write')" class="secondary-button" @click="partnerEditOpen=!partnerEditOpen">{{partnerEditOpen?'收起编辑':'编辑档案'}}</button></div>
         <p>编号：{{partner.partner_code}} · 状态：{{partner.status==='active'?'启用':'停用'}}</p>
-        <form v-if="partnerEditOpen" class="pm-form" @submit.prevent="savePartner">
-          <label>名称<input v-model="partnerEditForm.name" required></label>
-          <label>类型<select v-model="partnerEditForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label>
-          <label>联系人<input v-model="partnerEditForm.contactName"></label><label>电话<input v-model="partnerEditForm.phone"></label>
-          <label>邮箱<input v-model="partnerEditForm.email"></label><label>状态<select v-model="partnerEditForm.status"><option value="active">启用</option><option value="disabled">停用</option></select></label>
-          <label class="wide">地址<input v-model="partnerEditForm.address"></label><label class="wide">备注<textarea v-model="partnerEditForm.notes"></textarea></label>
-          <button class="primary" :disabled="busy">保存档案</button>
-        </form>
+        <FormDialog v-if="partnerEditOpen" title="编辑中间人" :steps="['主体资料','联系人与状态']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="partnerEditOpen=false">
+<template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>savePartner())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>名称<input v-model="partnerEditForm.name" required></label>
+<label>类型<select v-model="partnerEditForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label>
+</div>
+<div v-show="step===1" data-wizard-step="1" class="wizard-fields">
+<label>联系人<input v-model="partnerEditForm.contactName"></label>
+<label>电话<input v-model="partnerEditForm.phone"></label>
+<label>邮箱<input v-model="partnerEditForm.email"></label>
+<label>状态<select v-model="partnerEditForm.status"><option value="active">启用</option><option value="disabled">停用</option></select></label>
+<label class="wide">地址<input v-model="partnerEditForm.address"></label>
+<label class="wide">备注<textarea v-model="partnerEditForm.notes"></textarea></label>
+<button class="primary" :disabled="busy">保存档案</button>
+</div>
+</form></template></FormDialog>
         <h4>关联合同</h4><div v-for="c in partner.contracts||[]" :key="c.id" class="pm-contract"><b>{{c.title}}</b><small>{{c.contract_no}} · 分成 {{c.share_percent}}% · {{c.status}}</small><button v-if="can('contract:read')" class="secondary-button" @click="emit('navigate','business','contracts',c.id)">合同档案</button></div><p v-if="!partner.contracts?.length" class="pm-empty">尚未关联合同</p>
       </div>
     </div>
   </div>
 
   <div v-if="tab==='links'" class="pm-layout">
-    <div class="pm-panel"><h3>合同介绍来源与分成</h3><form class="pm-form" @submit.prevent="linkPartner">
-      <label>合同<select v-model="linkForm.contractId" @change="openContractDetail(Number(linkForm.contractId))" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
-      <label>合作方<select v-model="linkForm.partnerId" required><option value="">选择合作方</option><option v-for="p in partners" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
-      <label>合同分成比例（%）<input v-model="linkForm.sharePercent" type="number" min="0" max="100" step="0.01" required></label><label>备注<input v-model="linkForm.notes"></label><button v-if="can('contract:write')&&can('partner:read')" class="primary">保存合作关系</button>
-    </form><p class="pm-note">一个合作方可以关联多份合同；每份合同可记录多个合作方，分成比例合计不得超过 100%。这里只记录约定比例，不登记实际付款。</p>
+    <div class="pm-panel"><h3>合同介绍来源与分成</h3><FormDialog v-if="(can('contract:write')&&can('partner:read'))" title="关联合同中间人" :steps="['合同与分成']" :busy="busy" :error="error" @clear-error="error=''" save-label="保存">
+<template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>linkPartner())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>合同<select v-model="linkForm.contractId" @change="openContractDetail(Number(linkForm.contractId))" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
+<label>合作方<select v-model="linkForm.partnerId" required><option value="">选择合作方</option><option v-for="p in partners" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+<label>合同分成比例（%）<input v-model="linkForm.sharePercent" type="number" min="0" max="100" step="0.01" required></label>
+<label>备注<input v-model="linkForm.notes"></label>
+<button v-if="can('contract:write')&&can('partner:read')" class="primary">保存合作关系</button>
+</div>
+</form></template></FormDialog><p class="pm-note">一个合作方可以关联多份合同；每份合同可记录多个合作方，分成比例合计不得超过 100%。这里只记录约定比例，不登记实际付款。</p>
     <label>附件类型<select v-model="linkForm.fileType"><option value="contract">合同原件</option><option value="maintenance_card">维保公示卡</option><option value="project_material">项目资料</option><option value="other">其他</option></select></label><label v-if="can('contract:write')&&can('file:upload')" class="pm-upload">上传合同/维保资料<input type="file" hidden accept=".pdf,.docx" @change="uploadContractFile"></label></div>
-    <div class="pm-panel"><h3>合同与项目关联</h3><form class="pm-form" @submit.prevent="linkProject">
-      <label>合同<select v-model="projectLink.contractId" @change="openContractDetail(Number(projectLink.contractId))" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
-      <label>项目<select v-model="projectLink.projectId" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
-      <label>关联类型<select v-model="projectLink.relationType"><option value="service">服务合同</option><option value="renewal">年度续签</option><option value="supplement">补充合同</option><option value="other">其他</option></select></label><button v-if="can('contract:write')&&can('project:read')" class="primary">关联项目</button>
-    </form><p class="pm-note">项目可以先建立，后续再关联合同；一份合同可以覆盖多个项目，一个项目也可以保留多份年度合同历史。</p>
+    <div class="pm-panel"><h3>合同与项目关联</h3><FormDialog v-if="(can('contract:write')&&can('project:read'))" title="关联合同项目" :steps="['合同与项目']" :busy="busy" :error="error" @clear-error="error=''" save-label="关联">
+<template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>linkProject())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>合同<select v-model="projectLink.contractId" @change="openContractDetail(Number(projectLink.contractId))" required><option value="">选择合同</option><option v-for="c in contracts" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.title}}</option></select></label>
+<label>项目<select v-model="projectLink.projectId" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
+<label>关联类型<select v-model="projectLink.relationType"><option value="service">服务合同</option><option value="renewal">年度续签</option><option value="supplement">补充合同</option><option value="other">其他</option></select></label>
+<button v-if="can('contract:write')&&can('project:read')" class="primary">关联项目</button>
+</div>
+</form></template></FormDialog><p class="pm-note">项目可以先建立，后续再关联合同；一份合同可以覆盖多个项目，一个项目也可以保留多份年度合同历史。</p>
       <div v-if="contractDetail" class="pm-detail"><h4>{{contractDetail.contract_no}} · 合同关联资料</h4><button class="secondary-button" @click="emit('navigate','business','contracts',contractDetail.id)">返回合同档案</button>
         <div v-if="contractDetail.partners?.length" class="pm-contract"><b>合作方与分成</b><div v-for="p in contractDetail.partners" :key="p.id" class="pm-file"><span>{{p.name}} · {{p.share_percent}}%</span><button v-if="can('contract:write')" type="button" :disabled="busy" @click="unlinkPartner(p.id)">解除关联</button></div></div>
         <div v-if="contractDetail.projects?.length" class="pm-contract"><b>关联合同项目</b><div v-for="p in contractDetail.projects" :key="p.id" class="pm-file"><span>{{p.project_no}} · {{p.name}} · {{p.relation_type}}</span><button v-if="can('project:read')" type="button" @click="emit('navigate','business','projects',p.id)">项目档案</button><button v-if="can('contract:write')&&['draft','pending'].includes(contractDetail.status)" type="button" :disabled="busy" @click="unlinkProject(p.id)">解除关联</button></div></div>
@@ -227,36 +256,48 @@ onMounted(async ()=>{
     </div>
   </div>
 
-  <div v-if="tab==='leadership'" class="pm-panel"><h3>项目负责人及技术负责人</h3><form class="pm-form" @submit.prevent="saveLeadership">
-    <label>项目<select v-model="leadership.projectId" @change="loadLeadership(Number(leadership.projectId))" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
-    <label>项目负责人<select v-model="leadership.managerEmployeeId" required><option value="">选择工程师</option><option v-for="e in engineers" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
-    <label>技术负责人<select v-model="leadership.technicalLeadEmployeeId" required><option value="">选择另一位工程师</option><option v-for="e in engineers.filter(x=>String(x.id)!==String(leadership.managerEmployeeId))" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
-    <button class="primary">保存项目人员</button>
-  </form><p class="pm-note">前端只列出在职且具有有效资格记录的工程师；服务端还会校验两人不同并再次核验资格有效期。</p></div>
+  <div v-if="tab==='leadership'" class="pm-panel"><h3>项目负责人及技术负责人</h3><FormDialog title="分配项目人员" :steps="['负责人']" :busy="busy" :error="error" @clear-error="error=''">
+<template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>saveLeadership())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>项目<select v-model="leadership.projectId" @change="loadLeadership(Number(leadership.projectId))" required><option value="">选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
+<label>项目负责人<select v-model="leadership.managerEmployeeId" required><option value="">选择工程师</option><option v-for="e in engineers" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
+<label>技术负责人<select v-model="leadership.technicalLeadEmployeeId" required><option value="">选择另一位工程师</option><option v-for="e in engineers.filter(x=>String(x.id)!==String(leadership.managerEmployeeId))" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
+<button class="primary">保存项目人员</button>
+</div>
+</form></template></FormDialog><p class="pm-note">前端只列出在职且具有有效资格记录的工程师；服务端还会校验两人不同并再次核验资格有效期。</p></div>
 
   <div v-if="tab==='maintenance'" class="pm-layout">
     <div class="pm-panel"><h3>选择维护保养项目</h3><div class="pm-list"><button v-for="p in maintenanceProjects" :key="p.id" @click="openMaintenance(p.id)" :class="{selected:String(maintenanceForm.projectId)===String(p.id)}"><b>{{p.name}}</b><small>{{p.project_no}} · {{p.customer_name}}</small></button></div></div>
     <div class="pm-panel" v-if="maintenance">
-      <h3>维保项目状态</h3><button class="secondary-button" @click="emit('navigate','business','projects',Number(maintenanceForm.projectId))">返回项目档案</button><form class="pm-form" @submit.prevent="saveMaintenance"><fieldset :disabled="!can('maintenance:write')" class="wide" style="display:contents">
+      <h3>维保项目状态</h3><div class="pm-contract"><b>当前合同：{{maintenance.current_contract_no||'未指定'}}</b><small>合同上传：{{maintenance.honeybee_contract_uploaded?'已完成':'未完成'}} · 小蜜蜂项目：{{maintenance.honeybee_project_created?'已建立':'未建立'}}</small><small>项目资料：{{maintenance.project_materials_completed?'已完成':'未完成'}} · 公示卡：{{({not_started:'未开始',preparing:'制作中',sent:'已寄出',delivered:'已送达'})[maintenance.public_card_status]||'未开始'}}</small><small v-if="maintenance.notes">{{maintenance.notes}}</small></div><button class="secondary-button" @click="emit('navigate','business','projects',Number(maintenanceForm.projectId))">返回项目档案</button><FormDialog v-if="(can('maintenance:write'))" title="编辑维保状态" :steps="['维保状态']" :busy="busy" :error="error" @clear-error="error=''" save-label="保存">
+<template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>saveMaintenance())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<fieldset :disabled="!can('maintenance:write')" class="wide" style="display:contents">
         <label>当前有效维护合同<select v-model="maintenanceForm.currentContractId" @change="selectAnnualState"><option value="">未指定</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}}</option></select></label>
         <label>公示卡状态<select v-model="maintenanceForm.publicCardStatus"><option value="not_started">未开始</option><option value="preparing">制作中</option><option value="sent">已寄出</option><option value="delivered">已送达</option></select></label>
         <label class="check"><input v-model="maintenanceForm.honeybeeContractUploaded" type="checkbox"> 合同已上传小蜜蜂</label>
         <label class="check"><input v-model="maintenanceForm.honeybeeProjectCreated" type="checkbox"> 小蜜蜂项目已建立</label>
         <label class="check"><input v-model="maintenanceForm.projectMaterialsCompleted" type="checkbox"> 项目资料已完成</label>
         <label class="wide">备注<textarea v-model="maintenanceForm.notes"></textarea></label><button v-if="can('maintenance:write')" class="primary">保存维保状态</button></fieldset>
-      </form>
+</div>
+</form></template></FormDialog>
       <div class="pm-divider"></div><h3>年度维保合同续签</h3>
       <p class="pm-note">续签沿用原项目，新合同独立保存合同期限及维保卡附件。新建的是草稿，不会自动替换当前有效合同。</p>
-      <form v-if="maintenance.contractHistory?.length&&can('maintenance:write')&&can('contract:write')" class="pm-form" @submit.prevent="createRenewal">
-        <label>新合同编号<input v-model="renewalForm.contractNo" required></label>
-        <label>合同名称<input v-model="renewalForm.title" required></label>
-        <label>金额<input v-model="renewalForm.amount" type="number" min="0" step="0.01" required></label>
-        <label>签约日期<input v-model="renewalForm.signedOn" type="date"></label>
-        <label>新合同开始日期<input v-model="renewalForm.startsOn" type="date" required></label>
-        <label>新合同结束日期<input v-model="renewalForm.endsOn" type="date" required></label>
-        <label class="wide">备注<input v-model="renewalForm.notes"></label>
-        <button class="primary" :disabled="busy||!can('contract:write')">创建续签合同</button>
-      </form>
+      <FormDialog v-if="maintenance.contractHistory?.length&&can('maintenance:write')&&can('contract:write')" title="新建续签合同" :steps="['合同信息','合同日期与备注']" :busy="busy" :error="error" @clear-error="error=''" save-label="创建续签">
+<template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>createRenewal())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>新合同编号<input v-model="renewalForm.contractNo" required></label>
+<label>合同名称<input v-model="renewalForm.title" required></label>
+<label>金额<input v-model="renewalForm.amount" type="number" min="0" step="0.01" required></label>
+</div>
+<div v-show="step===1" data-wizard-step="1" class="wizard-fields">
+<label>签约日期<input v-model="renewalForm.signedOn" type="date"></label>
+<label>新合同开始日期<input v-model="renewalForm.startsOn" type="date" required></label>
+<label>新合同结束日期<input v-model="renewalForm.endsOn" type="date" required></label>
+<label class="wide">备注<input v-model="renewalForm.notes"></label>
+<button class="primary" :disabled="busy||!can('contract:write')">创建续签合同</button>
+</div>
+</form></template></FormDialog>
       <p v-else-if="!maintenance.contractHistory?.length" class="pm-note">此项目没有维保合同。请先在合同管理创建首份合同，再关联合同和项目。</p>
       <div class="pm-detail"><h4>历年维保合同与对应资料</h4>
         <div v-for="c in maintenance.contractHistory||[]" :key="c.id" class="pm-contract">
@@ -275,12 +316,16 @@ onMounted(async ()=>{
           <p v-if="!renewalHistoryDetail.files?.length" class="pm-note">此合同暂无附件；请在「合同与项目关联」中上传本年度维保卡。</p>
         </div>
       </div>
-      <div class="pm-divider"></div><h3>维护日期与现场人员（按需登记）</h3><form v-if="can('maintenance:write')" class="pm-form" @submit.prevent="addMaintenanceVisit">
-        <label>维护日期<input v-model="visitForm.visitDate" type="date" required></label>
-        <label>对应合同<select v-model="visitForm.contractId"><option value="">当前项目</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}}</option></select></label>
-        <label class="wide">现场人员<select v-model="visitForm.employeeIds" multiple><option v-for="e in employees" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
-        <label class="wide">备注<input v-model="visitForm.notes"></label><button class="primary">登记维护记录</button>
-      </form>
+      <div class="pm-divider"></div><h3>维护日期与现场人员（按需登记）</h3><FormDialog v-if="can('maintenance:write')" title="登记维护记录" :steps="['维护记录']" :busy="busy" :error="error" @clear-error="error=''">
+<template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>addMaintenanceVisit())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>维护日期<input v-model="visitForm.visitDate" type="date" required></label>
+<label>对应合同<select v-model="visitForm.contractId"><option value="">当前项目</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}}</option></select></label>
+<label class="wide">现场人员<select v-model="visitForm.employeeIds" multiple><option v-for="e in employees" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
+<label class="wide">备注<input v-model="visitForm.notes"></label>
+<button class="primary">登记维护记录</button>
+</div>
+</form></template></FormDialog>
       <div class="pm-detail"><h4>维护记录</h4><div v-for="v in maintenance.visits||[]" :key="v.id" class="pm-contract"><b>{{v.visit_date}}</b><small>{{v.staff_names||'未登记现场人员'}} · {{v.notes||'无备注'}}</small></div><p v-if="!maintenance.visits?.length" class="pm-empty">暂无维护日期记录</p></div>
     </div>
     <div v-else class="pm-panel pm-empty">选择一个项目以查看维保状态和合同历史</div>
@@ -289,5 +334,5 @@ onMounted(async ()=>{
 </template>
 
 <style scoped>
-.pm-module{display:grid;gap:16px;color:#293b55}.pm-head{display:flex;justify-content:space-between;align-items:flex-start}.pm-head h2{margin:4px 0;font-size:23px}.pm-head p{font-size:12px;color:#8390a2;margin:0}.pm-kicker{font-size:10px;letter-spacing:.14em;color:#587bb8;font-weight:700}.pm-head button,.pm-tabs button{border:1px solid #dfe6ef;border-radius:8px;padding:8px 12px;background:white;color:#60718a;font-size:12px}.pm-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #e6ebf2;padding-bottom:10px}.pm-tabs button.active{background:#edf3ff;border-color:#c8d7fa;color:#315bb3}.pm-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px}.pm-panel{background:#fff;border:1px solid #e6ebf2;border-radius:12px;padding:17px;display:grid;gap:14px;align-content:start}.pm-panel h3{font-size:15px;margin:0;color:#405675}.pm-form{display:grid;grid-template-columns:1fr 1fr;gap:11px}.pm-form label{display:grid;gap:5px;font-size:11px;color:#75849a}.pm-form .wide{grid-column:1/-1}.pm-form input,.pm-form select,.pm-form textarea{border:1px solid #dfe6ef;border-radius:8px;padding:9px;font:inherit;font-size:12px;color:#34465e;background:white;min-width:0}.pm-form select[multiple]{min-height:80px}.pm-form .check{display:flex;align-items:center;gap:8px}.pm-form .check input{width:auto}.primary{background:#315fca;color:white;border:0;border-radius:8px;padding:10px 14px;font-size:12px}.pm-list{display:grid;gap:7px;max-height:360px;overflow:auto}.pm-list button{display:grid;text-align:left;gap:4px;border:1px solid #e8edf4;background:white;border-radius:9px;padding:11px}.pm-list button.selected{border-color:#8da9e3;background:#f5f8ff}.pm-list b,.pm-contract b{font-size:12px}.pm-list small,.pm-contract small{font-size:10px;color:#8491a3}.pm-file{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#667891}.pm-file button{border:1px solid #dfe6ef;background:#fff;border-radius:6px;padding:5px 8px;color:#4166aa;font-size:10px}.pm-detail{border-top:1px solid #edf0f5;padding-top:12px;display:grid;gap:9px}.pm-detail h4{margin:0;font-size:12px}.pm-contract{display:grid;gap:3px;padding:8px 10px;border:1px solid #edf0f5;border-radius:8px}.pm-note{font-size:11px;color:#8290a3;line-height:1.7}.pm-upload{justify-self:start;background:#eef3fc;color:#4166aa;padding:9px 12px;border-radius:8px;font-size:11px;cursor:pointer}.pm-msg{padding:10px 13px;border-radius:8px;font-size:12px}.pm-msg.error{background:#fff0ed;color:#a33}.pm-msg.success{background:#eaf7ef;color:#287449}.pm-empty{font-size:11px;color:#9aa5b4;text-align:center;padding:18px}.pm-divider{height:1px;background:#edf0f5}.@media(max-width:800px){.pm-layout{grid-template-columns:1fr}}@media(max-width:520px){.pm-form{grid-template-columns:1fr}.pm-form .wide{grid-column:auto}}
+.pm-module{display:grid;gap:16px;color:var(--erp-fg-293b55)}.pm-head{display:flex;justify-content:space-between;align-items:flex-start}.pm-head h2{margin:4px 0;font-size:23px}.pm-head p{font-size:12px;color:var(--erp-fg-8390a2);margin:0}.pm-kicker{font-size:10px;letter-spacing:.14em;color:var(--erp-fg-587bb8);font-weight:700}.pm-head button,.pm-tabs button{border:1px solid var(--erp-border-dfe6ef);border-radius:8px;padding:8px 12px;background:var(--erp-bg-fff);color:var(--erp-fg-60718a);font-size:12px}.pm-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--erp-border-e6ebf2);padding-bottom:10px}.pm-tabs button.active{background:var(--erp-bg-edf3ff);border-color:var(--erp-border-c8d7fa);color:var(--erp-fg-315bb3)}.pm-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px}.pm-panel{background:var(--erp-bg-fff);border:1px solid var(--erp-border-e6ebf2);border-radius:12px;padding:17px;display:grid;gap:14px;align-content:start}.pm-panel h3{font-size:15px;margin:0;color:var(--erp-fg-405675)}.pm-form{display:grid;grid-template-columns:1fr 1fr;gap:11px}.pm-form label{display:grid;gap:5px;font-size:11px;color:var(--erp-fg-75849a)}.pm-form .wide{grid-column:1/-1}.pm-form input,.pm-form select,.pm-form textarea{border:1px solid var(--erp-border-dfe6ef);border-radius:8px;padding:9px;font:inherit;font-size:12px;color:var(--erp-fg-34465e);background:var(--erp-bg-fff);min-width:0}.pm-form select[multiple]{min-height:80px}.pm-form .check{display:flex;align-items:center;gap:8px}.pm-form .check input{width:auto}.primary{background:var(--erp-bg-315fca);color:white;border:0;border-radius:8px;padding:10px 14px;font-size:12px}.pm-list{display:grid;gap:7px;max-height:360px;overflow:auto}.pm-list button{display:grid;text-align:left;gap:4px;border:1px solid var(--erp-border-e8edf4);background:var(--erp-bg-fff);border-radius:9px;padding:11px}.pm-list button.selected{border-color:var(--erp-border-8da9e3);background:var(--erp-bg-f5f8ff)}.pm-list b,.pm-contract b{font-size:12px}.pm-list small,.pm-contract small{font-size:10px;color:var(--erp-fg-8491a3)}.pm-file{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--erp-fg-667891)}.pm-file button{border:1px solid var(--erp-border-dfe6ef);background:var(--erp-bg-fff);border-radius:6px;padding:5px 8px;color:var(--erp-fg-4166aa);font-size:10px}.pm-detail{border-top:1px solid var(--erp-border-edf0f5);padding-top:12px;display:grid;gap:9px}.pm-detail h4{margin:0;font-size:12px}.pm-contract{display:grid;gap:3px;padding:8px 10px;border:1px solid var(--erp-border-edf0f5);border-radius:8px}.pm-note{font-size:11px;color:var(--erp-fg-8290a3);line-height:1.7}.pm-upload{justify-self:start;background:var(--erp-bg-eef3fc);color:var(--erp-fg-4166aa);padding:9px 12px;border-radius:8px;font-size:11px;cursor:pointer}.pm-msg{padding:10px 13px;border-radius:8px;font-size:12px}.pm-msg.error{background:var(--erp-bg-fff0ed);color:var(--erp-fg-a33)}.pm-msg.success{background:var(--erp-bg-eaf7ef);color:var(--erp-fg-287449)}.pm-empty{font-size:11px;color:var(--erp-fg-9aa5b4);text-align:center;padding:18px}.pm-divider{height:1px;background:var(--erp-bg-edf0f5)}.@media(max-width:800px){.pm-layout{grid-template-columns:1fr}}@media(max-width:520px){.pm-form{grid-template-columns:1fr}.pm-form .wide{grid-column:auto}}
 </style>

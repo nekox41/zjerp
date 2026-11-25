@@ -1,4 +1,5 @@
 <script setup>
+import FormDialog from './FormDialog.vue'
 import {ref,onMounted} from 'vue'
 import {api,downloadFile} from './api'
 import FireStandardClauses from './FireStandardClauses.vue'
@@ -17,7 +18,31 @@ onMounted(load)
 <template><section class="std-page"><header><h2>消防规范资料库</h2><p>来源仅限消防资源网及其指引的消防规范网。目录候选须人工核对规范原文、实施/废止日期、修订公告与条文范围后才能选用。历史版本保留，不自动判断法律适用性。</p><a href="https://www.1190119.com/" target="_blank" rel="noopener noreferrer">打开消防资源网</a></header>
 <p v-if="error" role="alert">{{error}}</p><p v-if="notice">{{notice}}</p>
 <div class="std-toolbar"><input v-model="q" placeholder="名称、编号、别名" @keydown.enter.prevent="load()"><select v-model="category" @change="load()"><option value="">全部类别</option><option v-for="c in categories" :key="c">{{c}}</option></select><select v-model="validity" @change="load()"><option value="">全部状态</option><option v-for="(v,k) in statuses" :key="k" :value="k">{{v}}</option></select><label>参考日期 <input type="date" v-model="referenceDate" @change="load()"></label><button :disabled="busy" @click="load()">搜索</button><button v-if="can('report:standard:write')" @click="newForm()">新增规范版本</button></div>
-<form v-if="form" class="std-form" @submit.prevent="save"><label>规范编号<input v-model="form.standardNo" required maxlength="80"></label><label>版次 / 修订版<input v-model="form.edition" maxlength="80"></label><label>名称<input v-model="form.title" required maxlength="240"></label><label>类别<input v-model="form.category" required maxlength="100" list="std-category"><datalist id="std-category"><option v-for="c in categories" :key="c" :value="c"/></datalist></label><label>发布年份<input v-model="form.publicationYear" maxlength="4"></label><label>实施日期<input v-model="form.effectiveOn" type="date"></label><label>废止日期（未知则留空）<input v-model="form.withdrawnOn" type="date"></label><label>规范状态<select v-model="form.validity"><option v-for="(v,k) in statuses" :key="k" :value="k">{{v}}</option></select></label><label class="wide">旧编号 / 别名<input v-model="form.aliases" maxlength="240"></label><label class="wide">消防资源网来源页面<input v-model="form.sourceUrl" required type="url"></label><label class="wide">规范原文入口<input v-model="form.accessUrl" type="url"></label><label class="wide">核验说明 / 条文变化 / 过渡期<textarea v-model="form.notes" rows="3" maxlength="2000"></textarea></label><label v-if="can('file:upload')" class="wide">获准保存的原文 PDF（可选）<input type="file" accept="application/pdf" @change="pdf=$event.target.files?.[0]||null"></label><label class="wide"><span><input v-model="form.verified" type="checkbox">已人工核对该版本原文与来源，确认元数据；不代表适用于任何特定工程。</span></label><button :disabled="busy">保存新修订</button><button type="button" @click="form=null">取消</button></form>
+<FormDialog v-if="form" title="维护消防规范" :steps="['规范基本信息','版次与实施状态','来源与核验']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="form=null" save-label="保存修订">
+<template #default="{step,finish}"><form class="std-form" @submit.prevent="finish(()=>save())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>规范编号<input v-model="form.standardNo" required maxlength="80"></label>
+<label>版次 / 修订版<input v-model="form.edition" maxlength="80"></label>
+<label>名称<input v-model="form.title" required maxlength="240"></label>
+<label>类别<input v-model="form.category" required maxlength="100" list="std-category"><datalist id="std-category"><option v-for="c in categories" :key="c" :value="c"/></datalist></label>
+</div>
+<div v-show="step===1" data-wizard-step="1" class="wizard-fields">
+<label>发布年份<input v-model="form.publicationYear" maxlength="4"></label>
+<label>实施日期<input v-model="form.effectiveOn" type="date"></label>
+<label>废止日期（未知则留空）<input v-model="form.withdrawnOn" type="date"></label>
+<label>规范状态<select v-model="form.validity"><option v-for="(v,k) in statuses" :key="k" :value="k">{{v}}</option></select></label>
+<label class="wide">旧编号 / 别名<input v-model="form.aliases" maxlength="240"></label>
+</div>
+<div v-show="step===2" data-wizard-step="2" class="wizard-fields">
+<label class="wide">消防资源网来源页面<input v-model="form.sourceUrl" required type="url"></label>
+<label class="wide">规范原文入口<input v-model="form.accessUrl" type="url"></label>
+<label class="wide">核验说明 / 条文变化 / 过渡期<textarea v-model="form.notes" rows="3" maxlength="2000"></textarea></label>
+<label v-if="can('file:upload')" class="wide">获准保存的原文 PDF（可选）<input type="file" accept="application/pdf" @change="pdf=$event.target.files?.[0]||null"></label>
+<label class="wide"><span><input v-model="form.verified" type="checkbox">已人工核对该版本原文与来源，确认元数据；不代表适用于任何特定工程。</span></label>
+<button :disabled="busy">保存新修订</button>
+<button type="button" @click="form=null">取消</button>
+</div>
+</form></template></FormDialog>
 <FireStandardClauses v-if="selectedStandard" :key="selectedStandard.id" :standard="selectedStandard" :can-write="can('report:standard:write')"/><button v-if="selectedStandard" @click="selectedStandard=null">关闭条款面板</button>
 <article v-for="s in rows" :key="s.id" class="std-row"><div><b>《{{s.title}}》 {{s.standard_no}} {{s.edition}}</b><small>{{s.category}} · {{s.verified?statuses[s.validity]:'待人工核验'}} · 修订 v{{s.revision_no}} · {{s.active?'启用':'停用'}}</small><small>实施：{{s.effective_on||'待核'}}　废止：{{s.withdrawn_on||'未录入'}} · {{s.notes}}</small><div class="std-toolbar"><button v-if="s.verified||can('report:standard:write')" @click="selectedStandard=s">查看条款</button><a :href="s.source_url" target="_blank" rel="noopener noreferrer">来源页面</a><a v-if="s.access_url" :href="s.access_url" target="_blank" rel="noopener noreferrer">原文入口</a><button v-if="s.file_id&&can('file:read')" @click="download(s)">PDF原件</button></div></div><div v-if="can('report:standard:write')" class="std-toolbar"><button @click="newForm(s)">核验 / 新修订</button><button :disabled="busy" @click="toggle(s)">{{s.active?'停用':'启用'}}</button></div></article><button v-if="more" :disabled="busy" @click="load(false)">加载更多</button></section></template>
-<style scoped>.std-page{display:grid;gap:14px}.std-page h2,.std-page p{margin:0}.std-page p,.std-page small{color:#64748b;font-size:12px;line-height:1.7}.std-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.std-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:16px;background:white;border:1px solid #e2e8f0;border-radius:10px}.std-form label{display:grid;gap:5px;font-size:12px}.std-form .wide{grid-column:1/-1}.std-page input:not([type=checkbox]),.std-page select,.std-page textarea,.std-page button{min-width:0;border:1px solid #dfe6ef;background:white;border-radius:7px;padding:8px;font:inherit;color:inherit}.std-row{display:flex;justify-content:space-between;gap:12px;padding:14px;background:white;border:1px solid #e2e8f0;border-radius:10px}.std-row>div:first-child{display:grid;gap:5px}@media(max-width:700px){.std-form{grid-template-columns:1fr}.std-row{flex-direction:column}}</style>
+<style scoped>.std-page{display:grid;gap:14px}.std-page h2,.std-page p{margin:0}.std-page p,.std-page small{color:var(--erp-fg-64748b);font-size:12px;line-height:1.7}.std-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.std-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:16px;background:var(--erp-bg-fff);border:1px solid var(--erp-border-e2e8f0);border-radius:10px}.std-form label{display:grid;gap:5px;font-size:12px}.std-form .wide{grid-column:1/-1}.std-page input:not([type=checkbox]),.std-page select,.std-page textarea,.std-page button{min-width:0;border:1px solid var(--erp-border-dfe6ef);background:var(--erp-bg-fff);border-radius:7px;padding:8px;font:inherit;color:inherit}.std-row{display:flex;justify-content:space-between;gap:12px;padding:14px;background:var(--erp-bg-fff);border:1px solid var(--erp-border-e2e8f0);border-radius:10px}.std-row>div:first-child{display:grid;gap:5px}@media(max-width:700px){.std-form{grid-template-columns:1fr}.std-row{flex-direction:column}}</style>

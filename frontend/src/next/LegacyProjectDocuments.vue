@@ -18,5 +18,5 @@ onMounted(()=>load(true))
 </section>
 </template>
 <style scoped>
-.legacy-documents{display:grid;gap:9px;margin-top:16px;padding:12px;border:1px solid #e3e9f1;border-radius:8px}.legacy-documents h4,.legacy-documents p{margin:0}.legacy-documents p,.legacy-documents small{font-size:12px;color:#64748b;line-height:1.6}.legacy-documents article{display:grid;gap:6px;border-top:1px solid #edf0f5;padding-top:10px}.legacy-documents button{justify-self:start;padding:7px 10px;background:white;border:1px solid #dfe6ef;border-radius:6px;color:#405675;cursor:pointer;font-size:12px}
+.legacy-documents{display:grid;gap:9px;margin-top:16px;padding:12px;border:1px solid var(--erp-border-e3e9f1);border-radius:8px}.legacy-documents h4,.legacy-documents p{margin:0}.legacy-documents p,.legacy-documents small{font-size:12px;color:var(--erp-fg-64748b);line-height:1.6}.legacy-documents article{display:grid;gap:6px;border-top:1px solid var(--erp-border-edf0f5);padding-top:10px}.legacy-documents button{justify-self:start;padding:7px 10px;background:var(--erp-bg-fff);border:1px solid var(--erp-border-dfe6ef);border-radius:6px;color:var(--erp-fg-405675);cursor:pointer;font-size:12px}
 </style>

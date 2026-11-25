@@ -1,4 +1,5 @@
 <script setup>
+import FormDialog from './FormDialog.vue'
 import { computed,ref,watch } from 'vue'
 import { api } from './api'
 const props=defineProps({customerId:{type:Number,required:true},permissions:{type:Array,default:()=>[]},projects:{type:Array,default:()=>[]},employees:{type:Array,default:()=>[]}})
@@ -70,15 +71,20 @@ const statusLabels={draft:'草稿',pending:'待生效',active:'履行中',comple
     <template v-if="kind==='repairs'">
       <button v-if="writeRepair" class="primary-button" type="button" @click="startRepair">登记维修记录</button>
       <p v-else-if="can('repair:write')" class="muted">登记维修还需要项目、员工和维修记录查看权限。</p>
-      <form v-if="editor" class="create-grid compact" @submit.prevent="saveRepair">
-        <label>项目<select v-model="form.projectId" :disabled="!!editingId" required><option value="">选择本甲方项目</option><option v-for="p in ownProjects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
-        <label>维修日期<input v-model="form.repairDate" type="date" required></label>
-        <label class="ch-wide">维修标题<input v-model="form.title" required maxlength="240"></label>
-        <label class="ch-wide">维修内容<textarea v-model="form.description" required maxlength="10000" rows="3"></textarea></label>
-        <label class="ch-wide">维修结果<textarea v-model="form.resultSummary" maxlength="10000" rows="2"></textarea></label>
-        <label class="ch-wide">维修人员<select multiple v-model="form.employeeIds" required><option v-for="e in employees.filter(x=>x.status==='active'||form.employeeIds.includes(x.id))" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
-        <div class="report-actions"><button class="primary-button" :disabled="busy">保存维修记录</button><button type="button" class="secondary-button" @click="editor=false">取消</button></div>
-      </form>
+      <FormDialog v-if="editor" title="登记 / 编辑维修记录" :steps="['维修基本信息','维修内容与人员']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="editor=false">
+<template #default="{step,finish}"><form class="create-grid compact" @submit.prevent="finish(()=>saveRepair())">
+<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
+<label>项目<select v-model="form.projectId" :disabled="!!editingId" required><option value="">选择本甲方项目</option><option v-for="p in ownProjects" :key="p.id" :value="p.id">{{p.project_no}} · {{p.name}}</option></select></label>
+<label>维修日期<input v-model="form.repairDate" type="date" required></label>
+<label class="ch-wide">维修标题<input v-model="form.title" required maxlength="240"></label>
+</div>
+<div v-show="step===1" data-wizard-step="1" class="wizard-fields">
+<label class="ch-wide">维修内容<textarea v-model="form.description" required maxlength="10000" rows="3"></textarea></label>
+<label class="ch-wide">维修结果<textarea v-model="form.resultSummary" maxlength="10000" rows="2"></textarea></label>
+<label class="ch-wide">维修人员<select multiple v-model="form.employeeIds" required><option v-for="e in employees.filter(x=>x.status==='active'||form.employeeIds.includes(x.id))" :key="e.id" :value="e.id">{{e.full_name}}</option></select></label>
+<div class="report-actions"><button class="primary-button" :disabled="busy">保存维修记录</button><button type="button" class="secondary-button" @click="editor=false">取消</button></div>
+</div>
+</form></template></FormDialog>
     </template>
     <p v-if="loading" class="muted">加载中…</p>
     <p v-else-if="kind&&!rows.length" class="muted">暂无此类记录。</p>
@@ -103,5 +109,5 @@ const statusLabels={draft:'草稿',pending:'待生效',active:'履行中',comple
   </section>
 </template>
 <style scoped>
-.customer-history{display:grid;gap:12px;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px}.ch-tabs,.ch-actions{display:flex;flex-wrap:wrap;gap:7px}.ch-tabs button.active{border-color:#315fca;color:#315fca;background:#eef3ff}.ch-record{display:grid;gap:6px;padding:12px;border:1px solid #e5e7eb;border-radius:8px}.ch-record p{white-space:pre-wrap;margin:0;font-size:13px}.ch-record small{color:#68758a}.ch-row{display:flex;align-items:center;justify-content:space-between;gap:8px}.ch-wide{grid-column:1/-1}.customer-history select[multiple]{min-height:100px}
+.customer-history{display:grid;gap:12px;margin-top:20px;border-top:1px solid var(--erp-border-e5e7eb);padding-top:16px}.ch-tabs,.ch-actions{display:flex;flex-wrap:wrap;gap:7px}.ch-tabs button.active{border-color:var(--erp-border-315fca);color:var(--erp-fg-315fca);background:var(--erp-bg-eef3ff)}.ch-record{display:grid;gap:6px;padding:12px;border:1px solid var(--erp-border-e5e7eb);border-radius:8px}.ch-record p{white-space:pre-wrap;margin:0;font-size:13px}.ch-record small{color:var(--erp-fg-68758a)}.ch-row{display:flex;align-items:center;justify-content:space-between;gap:8px}.ch-wide{grid-column:1/-1}.customer-history select[multiple]{min-height:100px}
 </style>
