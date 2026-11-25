@@ -1,6 +1,6 @@
 # 生产迁移暂缓（原 MySQL 方案存档）
 
-> 注意：ERP Next 目标数据库已经切换 PostgreSQL 17。下方为历史 MySQL → MySQL 试迁移方案，仅作需求与字段映射参考，原命令目前不得执行。完整 V1 开发完成后再设计 MySQL → PostgreSQL 的单次迁移；原生产 server 和附件不动。
+> 注意：ERP Next 员工档案已精简为现场人员资料及证件附件，原旧库员工字段/资质映射也需重新设计。ERP Next 目标数据库已经切换 PostgreSQL 17。下方为历史 MySQL → MySQL 试迁移方案，仅作需求与字段映射参考，原命令目前不得执行。完整 V1 开发完成后再设计 MySQL → PostgreSQL 的单次迁移；原生产 server 和附件不动。
 
 # ERP V1 迁移映射与保全清单（M01/M02）
 

@@ -38,12 +38,23 @@ curl -fsS ${SMOKE_WEB_URL}/next-api/auth/me -H "Authorization: Bearer $TOKEN" | 
 
 ORG=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/organizations -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 业务部"}')
 ORG_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$ORG")
-EMP=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"employeeCode\":\"CI-001\",\"fullName\":\"CI 员工\",\"organizationId\":$ORG_ID,\"employeeType\":\"engineer\"}")
+# Synthetic documents only; no real identity data.
+EMP_TEST_DIR=$(mktemp -d)
+printf '%%PDF-1.4\nCI certificate\n' > "$EMP_TEST_DIR/certificate.pdf"
+printf '%%PDF-1.4\nCI identity test\n' > "$EMP_TEST_DIR/identity.pdf"
+EMP=$(curl -fsS -X POST "$SMOKE_API_URL/api/business/employees" -H "Authorization: Bearer $TOKEN" \
+  --form-string 'profile={"fullName":"CI 员工","employeeType":"engineer","gender":"female","age":35,"idNumber":"TEST-ID-NOT-REAL","phone":"13700000000","certificateNo":"CI-CERT-001","extraFields":[{"key":"学历","value":"本科"}]}' \
+  -F "certificateFiles=@$EMP_TEST_DIR/certificate.pdf;type=application/pdf" -F "identityFiles=@$EMP_TEST_DIR/identity.pdf;type=application/pdf")
 EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$EMP")
-curl -fsS -X POST "${SMOKE_API_URL}/api/business/employees/$EMP_ID/qualifications" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"qualificationName":"CI 项目负责人资格","expiresOn":"2099-12-31"}' >/dev/null
-curl -fsS "${SMOKE_API_URL}/api/business/employees/$EMP_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys;e=json.load(sys.stdin);assert e["employee_code"]=="CI-001" and e["full_name"]=="CI 员工" and e["employee_type"]=="engineer";assert e["created_at"] and e["updated_at"]'
-curl -fsS "${SMOKE_API_URL}/api/business/employees?q=CI-001" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys;rows=json.load(sys.stdin);assert any(e["employee_code"]=="CI-001" and e["has_valid_qualification"] is True for e in rows)'
-curl -fsS "${SMOKE_API_URL}/api/business/employees/$EMP_ID/qualifications" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys;assert any(q["qualification_name"]=="CI 项目负责人资格" for q in json.load(sys.stdin))'
+EMP_DOC=$(python -c 'import json,sys;e=json.load(sys.stdin);assert e["full_name"]=="CI 员工" and e["employee_type"]=="engineer" and e["age"]==35 and e["gender"]=="female";assert e["certificate_no"]=="CI-CERT-001" and e["id_number"]=="TEST-ID-NOT-REAL";assert e["extra_fields"]==[{"key":"学历","value":"本科"}];assert {d["document_type"] for d in e["documents"]}=={"certificate","identity"};print(next(d["id"] for d in e["documents"] if d["document_type"]=="certificate"))' <<< "$EMP")
+curl -fsS "$SMOKE_API_URL/api/business/employees/$EMP_ID/documents/$EMP_DOC/download" -H "Authorization: Bearer $TOKEN" -o "$EMP_TEST_DIR/download.pdf"
+cmp "$EMP_TEST_DIR/certificate.pdf" "$EMP_TEST_DIR/download.pdf"
+curl -fsS "$SMOKE_API_URL/api/business/employees?q=CI-CERT-001" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys;rows=json.load(sys.stdin);assert any(e["certificate_no"]=="CI-CERT-001" and e["has_certificate"] is True for e in rows);assert all("id_number" not in e and "extra_fields" not in e for e in rows)'
+curl -fsS -X PUT "$SMOKE_API_URL/api/business/employees/$EMP_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"age":36,"extraFields":[{"key":"专业","value":"消防"}]}' | python -c 'import json,sys;e=json.load(sys.stdin);assert e["age"]==36 and len(e["documents"])==2 and e["extra_fields"]==[{"key":"专业","value":"消防"}]'
+BAD_EMP=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$SMOKE_API_URL/api/business/employees" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"fullName":"Invalid","employeeType":"general"}')
+test "$BAD_EMP" = 400
+rm -rf -- "$EMP_TEST_DIR"
+export EMP_ID EMP_DOC
 CUSTOMER=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"customerCode\":\"CI-C-001\",\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
 CUSTOMER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CUSTOMER")
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 联系人","phone":"123456"}' >/dev/null

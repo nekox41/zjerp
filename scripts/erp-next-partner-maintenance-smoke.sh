@@ -84,11 +84,8 @@ curl -fsS -X PUT "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID" \
 # Project manager and technical lead must be distinct qualified engineers.
 TECH=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/employees \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"employeeCode\":\"CI-TECH-001\",\"fullName\":\"CI 技术负责人\",\"employeeType\":\"engineer\"}")
+  -d "{\"certificateNo\":\"CI-TECH-001\",\"fullName\":\"CI 技术负责人\",\"employeeType\":\"engineer\"}")
 TECH_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$TECH")
-curl -fsS -X POST "${SMOKE_API_URL}/api/business/employees/$TECH_ID/qualifications" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"qualificationName":"CI 技术负责人资格","expiresOn":"2099-12-31"}' >/dev/null
 curl -fsS -X PUT "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/leadership" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"managerEmployeeId\":$EMP_ID,\"technicalLeadEmployeeId\":$TECH_ID}" | grep -q 'CI 技术负责人'

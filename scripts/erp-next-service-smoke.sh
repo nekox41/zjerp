@@ -5,9 +5,6 @@ curl -fsS -X POST ${SMOKE_API_URL}/api/business/projects \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"projectNo\":\"CI-P-NC\",\"name\":\"CI 无合同项目\",\"customerId\":$CUSTOMER_ID}" | grep -q 'CI 无合同项目'
 
-curl -fsS -X POST "${SMOKE_API_URL}/api/business/employees/$EMP_ID/qualifications" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"qualificationName":"CI 资质","expiresOn":"2099-12-31"}' | grep -q 'CI 资质'
 
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/projects/$PROJECT_ID/issues" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \

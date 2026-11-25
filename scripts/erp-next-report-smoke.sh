@@ -32,6 +32,10 @@ session=call("/auth/login","POST",login,token=None)
 assert "report:write" in session["permissions"] and "report:review" not in session["permissions"] and "identity:write" not in session["permissions"]
 token=session["token"]
 call("/admin/identities",token=token,status=403)
+profile=call("/business/employees/"+os.environ["EMP_ID"],token=token)
+assert profile["full_name"]=="CI 员工" and not ({"id_number","phone","certificate_no","documents","extra_fields"} & profile.keys())
+call("/business/employees/"+os.environ["EMP_ID"]+"/documents/"+os.environ["EMP_DOC"]+"/download",token=token,status=403)
+call("/business/employees/account-links",token=token,status=403)
 call("/business/customers","POST",{"customerCode":"CI-NO-WRITE","name":"Forbidden"},token=token,status=403)
 call("/migration/source-status",token=token,status=403)
 call("/admin/identities/"+str(employee["id"]),"PUT",{"role":"manager"})
@@ -54,10 +58,8 @@ REVIEWER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<
 curl -fsS -X PUT "${SMOKE_API_URL}/api/admin/identities/$REVIEWER_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"displayName\":\"CI Reviewer Updated\",\"status\":\"active\",\"role\":\"manager\"}" | grep -q 'CI Reviewer Updated'
 REVIEWER_EMP=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"employeeCode\":\"CI-REVIEWER\",\"fullName\":\"CI Reviewer\",\"identityId\":$REVIEWER_ID,\"employeeType\":\"engineer\"}")
+  -d "{\"certificateNo\":\"CI-REVIEWER\",\"fullName\":\"CI Reviewer\",\"identityId\":$REVIEWER_ID,\"employeeType\":\"engineer\"}")
 REVIEWER_EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REVIEWER_EMP")
-curl -fsS -X POST "${SMOKE_API_URL}/api/business/employees/$REVIEWER_EMP_ID/qualifications" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"qualificationName":"CI Reviewer Qualification","expiresOn":"2099-12-31"}' >/dev/null
 curl -fsS -X POST ${SMOKE_API_URL}/api/admin/identities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"username\":\"ci-issuer\",\"displayName\":\"CI Issuer\",\"password\":\"ci-issuer-password-123\",\"role\":\"manager\"}" >/dev/null
 

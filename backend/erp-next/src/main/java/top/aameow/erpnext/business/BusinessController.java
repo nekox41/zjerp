@@ -37,9 +37,9 @@ public class BusinessController {
         Map<String,Object> employee=one("SELECT id,employee_type,status FROM erp_employee WHERE id=?",employeeId);
         if(!"active".equals(employee.get("status"))||!"engineer".equals(employee.get("employee_type")))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是有效的工程师员工");
-        Integer qualifications=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee_qualification WHERE employee_id=? AND status='valid' AND (expires_on IS NULL OR expires_on>=CURRENT_DATE)",Integer.class,employeeId);
+        Integer qualifications=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee WHERE id=? AND NULLIF(BTRIM(certificate_no),'') IS NOT NULL",Integer.class,employeeId);
         if(qualifications==null||qualifications==0)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"工程师员工必须有有效资格记录");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"工程师员工必须登记证书编号");
     }
 
     @GetMapping("/organizations") @PreAuthorize("hasAuthority('organization:read')")
@@ -62,51 +62,6 @@ public class BusinessController {
         if(parent!=null) { if(parent==id) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"部门不能设为自身上级"); one("SELECT id FROM erp_organization WHERE id=?",parent); }
         jdbc.update("UPDATE erp_organization SET name=COALESCE(?,name),parent_id=?,status=COALESCE(?,status) WHERE id=?",b.get("name"),parent,b.get("status"),id);
          return one("SELECT * FROM erp_organization WHERE id=?",id);
-    }
-
-    @PutMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
-    public Map<String,Object> updateEmployee(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_employee WHERE id=?",id);
-        Long identity=optionalLong(b,"identityId");
-        if(b.containsKey("identityId")&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("identity:write")))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"仅超级账户可绑定登录账号");
-        if(b.containsKey("identityId")&&identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
-        if(b.containsKey("organizationId")) {
-            Long organization=optionalLong(b,"organizationId");
-            if(organization!=null) one("SELECT id FROM erp_organization WHERE id=?",organization);
-            jdbc.update("UPDATE erp_employee SET organization_id=? WHERE id=?",organization,id);
-        }
-        jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),employee_type=COALESCE(?,employee_type),status=COALESCE(?,status) WHERE id=?",
-          b.get("fullName"),b.get("phone"),b.get("email"),b.get("positionName"),b.get("employeeType"),b.get("status"),id);
-        if(b.containsKey("identityId")) jdbc.update("UPDATE erp_employee SET identity_id=? WHERE id=?",identity,id);
-         return one("SELECT * FROM erp_employee WHERE id=?",id);
-    }
-
-    @GetMapping("/employees") @PreAuthorize("hasAuthority('employee:read')")
-    public List<Map<String,Object>> employees(@RequestParam(defaultValue="") String q) {
-        String term="%"+q.trim()+"%";
-        return jdbc.queryForList("""
-          SELECT e.id,e.employee_code,e.full_name,e.organization_id,o.name organization_name,e.identity_id,
-                 e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on,e.employee_type,e.created_at,e.updated_at,
-                 EXISTS(SELECT 1 FROM erp_employee_qualification q WHERE q.employee_id=e.id AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)) AS has_valid_qualification
-          FROM erp_employee e LEFT JOIN erp_organization o ON o.id=e.organization_id
-          WHERE ?='' OR e.full_name ILIKE ? OR e.employee_code ILIKE ? OR e.phone ILIKE ?
-          ORDER BY e.id DESC LIMIT 500
-          """,q.trim(),term,term,term);
-    }
-    @GetMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:read')")
-    public Map<String,Object> employeeDetail(@PathVariable long id) {
-        return one("SELECT e.*,o.name organization_name FROM erp_employee e LEFT JOIN erp_organization o ON o.id=e.organization_id WHERE e.id=?",id);
-    }
-    @PostMapping("/employees") @PreAuthorize("hasAuthority('employee:write')") @Transactional
-    public Map<String,Object> createEmployee(@RequestBody Map<String,Object>b,Authentication a) {
-        String name=required(b,"fullName"); Long org=optionalLong(b,"organizationId"), identity=optionalLong(b,"identityId");
-        if(identity!=null&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("identity:write")))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"仅超级账户可绑定登录账号");
-        if(org!=null) one("SELECT id FROM erp_organization WHERE id=?",org);
-        if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
-        jdbc.update("INSERT INTO erp_employee(employee_code,full_name,organization_id,identity_id,phone,email,position_name,employee_type,status) VALUES(?,?,?,?,?,?,?,?,'active')",
-            b.get("employeeCode"),name,org,identity,b.get("phone"),b.get("email"),b.get("positionName"),val(b,"employeeType","general"));
-        long id=jdbc.queryForObject("SELECT lastval()",Long.class); 
-        return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
 
     @GetMapping("/customers") @PreAuthorize("hasAuthority('customer:read')")
@@ -406,7 +361,7 @@ public class BusinessController {
     }
     @GetMapping("/projects/{id}/members") @PreAuthorize("hasAuthority('project:read')")
     public List<Map<String,Object>> members(@PathVariable long id) {
-        return jdbc.queryForList("SELECT e.id,e.employee_code,e.full_name,pm.member_role FROM erp_project_member pm JOIN erp_employee e ON e.id=pm.employee_id WHERE pm.project_id=? ORDER BY e.full_name",id);
+        return jdbc.queryForList("SELECT e.id,e.full_name,pm.member_role FROM erp_project_member pm JOIN erp_employee e ON e.id=pm.employee_id WHERE pm.project_id=? ORDER BY e.full_name",id);
     }
     @PostMapping("/projects/{id}/milestones") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> addMilestone(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {

@@ -125,8 +125,8 @@ public class PartnerMaintenanceController {
     private void validateEngineer(long id){
         Map<String,Object> e=one("SELECT id,employee_type,status FROM erp_employee WHERE id=?",id);
         if(!"active".equals(e.get("status"))||!"engineer".equals(e.get("employee_type")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是有效的工程师员工");
-        Integer q=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee_qualification WHERE employee_id=? AND status='valid' AND (expires_on IS NULL OR expires_on>=CURRENT_DATE)",Integer.class,id);
-        if(q==null||q==0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"工程师员工必须有有效资格记录");
+        Integer q=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee WHERE id=? AND NULLIF(BTRIM(certificate_no),'') IS NOT NULL",Integer.class,id);
+        if(q==null||q==0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"工程师员工必须登记证书编号");
     }
 
     @PostMapping("/projects/{id}/maintenance-renewals")

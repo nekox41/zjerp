@@ -45,7 +45,7 @@ async function createRenewal(){
 }
 
 const maintenanceProjects=computed(()=>projects.value.filter(p=>p.service_type==='maintenance'))
-const engineers=computed(()=>employees.value.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_valid_qualification))
+const engineers=computed(()=>employees.value.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_certificate))
 async function load(){
   error.value=''
   try{

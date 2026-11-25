@@ -97,8 +97,8 @@ public class ServiceReportController {
     }
     private Object parse(String s){try{return mapper.readValue(s,Object.class);}catch(Exception e){throw new IllegalStateException("Stored report JSON is invalid",e);}}
     private void requireEngineerReviewer(long identityId){
-        Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e JOIN erp_employee_qualification q ON q.employee_id=e.id WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)",Integer.class,identityId);
-        if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"报告内部审核必须由具有有效工程师资格的员工完成");
+        Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND NULLIF(BTRIM(e.certificate_no),'') IS NOT NULL",Integer.class,identityId);
+        if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"报告内部审核必须由已登记证书编号的工程师员工完成");
     }
     private void checkContent(Map<String,Object> data){
         if(data==null||data.get("summary")==null||data.get("summary").toString().isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"提交前必须填写报告摘要");

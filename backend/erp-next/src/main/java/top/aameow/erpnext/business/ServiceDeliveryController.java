@@ -27,43 +27,6 @@ public class ServiceDeliveryController {
         List<Map<String,Object>> rows=jdbc.queryForList(sql,args); if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"记录不存在"); return rows.get(0);
     }
 
-    @GetMapping("/employees/{id}/qualifications") @PreAuthorize("hasAuthority('employee:read')")
-    public List<Map<String,Object>> qualifications(@PathVariable long id) {
-        one("SELECT id FROM erp_employee WHERE id=?",id);
-        return jdbc.queryForList("SELECT *,CASE WHEN status='revoked' THEN 'revoked' WHEN status='expired' OR expires_on<CURRENT_DATE THEN 'expired' WHEN expires_on<=(CURRENT_DATE + 60) THEN 'expiring' ELSE 'valid' END effective_status FROM erp_employee_qualification WHERE employee_id=? ORDER BY expires_on",id);
-    }
-    private java.time.LocalDate qualificationDate(Object value){
-        if(value==null||value.toString().isBlank())return null;
-        try{return java.time.LocalDate.parse(value.toString());}catch(java.time.format.DateTimeParseException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资质日期格式错误");}
-    }
-    private void validateQualification(Map<String,Object>b){
-        if(req(b,"qualificationName").length()>200)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资质名称过长");
-        var from=qualificationDate(b.get("issuedOn"));var to=qualificationDate(b.get("expiresOn"));
-        if(from!=null&&to!=null&&to.isBefore(from))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"有效期不能早于发证日期");
-        if(!Set.of("valid","expired","revoked").contains(val(b,"status","valid")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"资质状态无效");
-    }
-    @PutMapping("/employees/{id}/qualifications/{qid}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
-    public Map<String,Object> updateQualification(@PathVariable long id,@PathVariable long qid,@RequestBody Map<String,Object>b,Authentication a){
-        one("SELECT id FROM erp_employee_qualification WHERE id=? AND employee_id=? FOR UPDATE",qid,id);
-        validateQualification(b);
-        jdbc.update("UPDATE erp_employee_qualification SET qualification_name=?,certificate_no=?,issuing_authority=?,issued_on=?,expires_on=?,notes=?,status=? WHERE id=? AND employee_id=?",
-            req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),qualificationDate(b.get("issuedOn")),qualificationDate(b.get("expiresOn")),b.get("notes"),val(b,"status","valid"),qid,id);
-        
-        return one("SELECT * FROM erp_employee_qualification WHERE id=?",qid);
-    }
-    @PostMapping("/employees/{id}/qualifications") @PreAuthorize("hasAuthority('employee:write')") @Transactional
-    public Map<String,Object> addQualification(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
-        one("SELECT id FROM erp_employee WHERE id=?",id);validateQualification(b);
-        jdbc.update("INSERT INTO erp_employee_qualification(employee_id,qualification_name,certificate_no,issuing_authority,issued_on,expires_on,notes,status) VALUES(?,?,?,?,?,?,?,?)",id,req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),qualificationDate(b.get("issuedOn")),qualificationDate(b.get("expiresOn")),b.get("notes"),val(b,"status","valid"));
-        long qid=jdbc.queryForObject("SELECT lastval()",Long.class); 
-        return one("SELECT * FROM erp_employee_qualification WHERE id=?",qid);
-    }
-    @GetMapping("/qualifications/expiring") @PreAuthorize("hasAuthority('employee:read')")
-    public List<Map<String,Object>> expiringQualifications(@RequestParam(defaultValue="60") int days) {
-        int bounded=Math.max(0,Math.min(days,365));
-        return jdbc.queryForList("SELECT q.*,e.full_name,e.employee_code FROM erp_employee_qualification q JOIN erp_employee e ON e.id=q.employee_id WHERE q.expires_on IS NOT NULL AND q.expires_on<=(CURRENT_DATE + CAST(? AS integer)) AND q.status='valid' ORDER BY q.expires_on",bounded);
-    }
-
     @PostMapping("/contracts/{id}/amendments") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> addAmendment(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         Map<String,Object> ct=one("SELECT id,amount,status FROM erp_contract WHERE id=?",id);
