@@ -12,7 +12,7 @@ import java.sql.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
-/** Explicitly invoked, administrator-only inventory of an offline legacy copy. No source mutations. */
+/** Administrator-only read-only discovery/inventory. Business migration still requires an offline copy. */
 @RestController
 @RequestMapping("/api/migration")
 @PreAuthorize("hasAuthority('identity:write')")
@@ -38,13 +38,34 @@ public class LegacyInventoryController {
         Integer count=target.queryForObject("SELECT COUNT(*) FROM erp_identity_role ir JOIN erp_role r ON r.id=ir.role_id JOIN erp_identity i ON i.id=ir.identity_id WHERE ir.identity_id=? AND r.code='admin' AND i.status='active'",Integer.class,id);
         if(count==null||count==0)throw bad(HttpStatus.FORBIDDEN,"仅系统管理员可访问迁移控制台");
     }
-    private boolean configured(){return enabled&&!url.isBlank()&&!user.isBlank()&&!password.isBlank()&&schema.matches("server_[A-Za-z0-9_]{1,56}")&&url.startsWith("jdbc:mysql://");}
+    private boolean configured(){return enabled&&!url.isBlank()&&!user.isBlank()&&!password.isBlank()&&schema.matches("server(?:_[A-Za-z0-9_]{1,56})?")&&url.startsWith("jdbc:mysql://");}
     @GetMapping("/config")
     public Map<String,Object> config(Authentication a){
-        admin(a);return Map.of("enabled",enabled,"configured",configured(),"sourceSchema",schema,"targetSchema",Objects.toString(target.queryForObject("SELECT DATABASE()",String.class),""),"mode","offline-copy-read-only","previewLimit",20);
+        admin(a);return Map.of("enabled",enabled,"configured",configured(),"sourceSchema",schema,"targetSchema",Objects.toString(target.queryForObject("SELECT DATABASE()",String.class),""),"mode","server".equals(schema)?"existing-server-read-only":"offline-copy-read-only","previewLimit",20);
+    }
+    @GetMapping("/source-status")
+    public Map<String,Object> sourceStatus(Authentication a){
+        admin(a);
+        if(!configured())return Map.of("state","not_configured","message","未配置旧库连接；可直接使用新版 ERP");
+        // Only probe the explicitly configured host/catalog, never scan the network or guess credentials.
+        try(Connection c=connect();PreparedStatement s=c.prepareStatement(
+                "SELECT COUNT(*),COALESCE(SUM(TABLE_NAME IN ('sys_user','zj_work_project','zj_contract_maintenance','zj_contract_inspection','zj_employee')),0) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_TYPE='BASE TABLE'")){
+            s.setString(1,schema);s.setQueryTimeout(5);
+            try(ResultSet rs=s.executeQuery()){
+                rs.next();long n=rs.getLong(1),known=rs.getLong(2);
+                String state=n==0?"empty":known==0?"unrecognized":"available";
+                String message=n==0?"旧库没有可见的实体表；尚未导入或权限不足":known==0?"旧库存在，但未识别出已知 ERP 业务表；请核查来源":"已发现旧版 ERP 表，可进行只读预检";
+                return Map.of("state",state,"sourceSchema",schema,"baseTables",n,"recognizedTables",known,"message",message);
+            }
+        }catch(SQLException ex){
+            if(ex.getErrorCode()==1049)return Map.of("state","missing","message","未找到配置的旧数据库；可直接使用新版 ERP");
+            return Map.of("state","unavailable","message","旧库服务未启动、连接不可达或授权失败；不影响新版使用");
+        }catch(ResponseStatusException ex){
+            return Map.of("state","unavailable","message","旧库配置与实际连接不符，请核查；不影响新版使用");
+        }
     }
     private Connection connect()throws SQLException{
-        if(!configured())throw bad(HttpStatus.CONFLICT,"请在服务端配置隔离的 server_ 开头数据库副本和仅 SELECT 账户");
+        if(!configured())throw bad(HttpStatus.CONFLICT,"请配置旧 server 或隔离 server_ 副本的只读账户");
         if(!"erp_next".equals(target.queryForObject("SELECT DATABASE()",String.class)))throw bad(HttpStatus.CONFLICT,"目标数据库不是隔离的 erp_next");
         Properties props=new Properties();
         props.setProperty("user",user);props.setProperty("password",password);

@@ -61,3 +61,7 @@ source scripts/erp-next-expense-smoke.sh
 source scripts/erp-next-invoice-smoke.sh
 source scripts/erp-next-dashboard-smoke.sh
 if curl -fsS "${SMOKE_API_URL}/api/business/customers" >/dev/null; then echo 'Unauthenticated business request unexpectedly succeeded'; exit 1; fi
+
+# New installations have no legacy DB configured. Detection must be nonblocking and admin-only.
+curl -fsS "${SMOKE_API_URL}/api/migration/source-status" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; assert json.load(sys.stdin)["state"]=="not_configured"'
+if curl -fsS "${SMOKE_API_URL}/api/migration/source-status" >/dev/null; then echo 'Unauthenticated migration discovery unexpectedly succeeded'; exit 1; fi

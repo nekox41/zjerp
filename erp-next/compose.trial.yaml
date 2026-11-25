@@ -52,10 +52,10 @@ services:
       ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
       ERP_FILES_ROOT: /var/lib/erp-next/files
       ERP_LEGACY_SCAN_ENABLED: "true"
-      ERP_LEGACY_DB_URL: jdbc:mysql://legacy-mysql:3306/server_migration?useSSL=false&allowPublicKeyRetrieval=true
-      ERP_LEGACY_DB_USER: legacy_readonly
-      ERP_LEGACY_DB_PASSWORD: ${ERP_LEGACY_DB_PASSWORD:?Set ERP_LEGACY_DB_PASSWORD}
-      ERP_LEGACY_DB_SCHEMA: server_migration
+      ERP_LEGACY_DB_URL: ${ERP_LEGACY_EFFECTIVE_URL:-jdbc:mysql://legacy-mysql:3306/server_migration?useSSL=false&allowPublicKeyRetrieval=true}
+      ERP_LEGACY_DB_USER: ${ERP_LEGACY_EFFECTIVE_USER-legacy_readonly}
+      ERP_LEGACY_DB_PASSWORD: ${ERP_LEGACY_EFFECTIVE_PASSWORD-${ERP_LEGACY_DB_PASSWORD:?Set ERP_LEGACY_DB_PASSWORD}}
+      ERP_LEGACY_DB_SCHEMA: ${ERP_LEGACY_EFFECTIVE_SCHEMA:-server_migration}
     ports:
       - "127.0.0.1:${ERP_NEXT_API_PORT:-8090}:8090"
     depends_on:
@@ -89,6 +89,7 @@ services:
     restart: unless-stopped
 
   legacy-mysql:
+    profiles: ["legacy"]
     image: ${ERP_IMAGE_PREFIX:-}mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: ${ERP_LEGACY_ROOT_PASSWORD:?Set ERP_LEGACY_ROOT_PASSWORD}

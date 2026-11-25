@@ -23,7 +23,7 @@ bash test.sh
 bash deploy.sh
 ```
 
-访问 http://localhost:8089/next.html，账号 trial-admin，初始密码使用 `cat ~/.local/share/zjerp-trial/admin-password` 在本机查看。勿把密码文件或 .env 发给他人。默认 API/Web 仅绑定回环；MySQL 不映射宿主机端口。状态目录可通过 ERP_TRIAL_DIR 指定（仓库外 Linux 文件系统），首次启动可通过 ERP_NEXT_WEB_PORT、ERP_NEXT_API_PORT 修改端口。以后同一状态目录会复用凭据、数据库卷和附件；stop 不删除数据，start 可继续运行。普通生产部署仍使用 start.sh，两者不能混用。
+访问 http://localhost:8089/next.html，账号 trial-admin，初始密码使用 `cat ~/.local/share/zjerp-trial/admin-password` 在本机查看。勿把密码文件或 .env 发给他人。默认 API/Web 仅绑定回环；MySQL 不映射宿主机端口。状态目录可通过 ERP_TRIAL_DIR 指定（仓库外 Linux 文件系统），首次启动可通过 ERP_NEXT_WEB_PORT、ERP_NEXT_API_PORT 修改端口。以后同一状态目录会复用凭据、数据库卷和附件；stop 不删除数据，start 可继续运行。普通空库快速启动仍使用 start.sh，两者不能混用。默认仅启动新版 MySQL、API、Web；Flyway 仅初始化新版表结构。没有旧库时不创建或等待 legacy-mysql，也不导入或迁移业务数据。曾经显式建立的旧库副本可随服务恢复，但不作为新版健康检查的条件。
 
 ## 4. 导入旧数据副本（只在验收环境）
 
@@ -37,7 +37,16 @@ bash deploy.sh legacy-shell
 cp -a /absolute/path/legacy-uploads/. ~/.local/share/zjerp-trial/legacy-files/
 ```
 
-导入只针对独立 legacy-mysql 的 server_migration，非空时拒绝重复导入。新版“数据迁移”页可直接扫描此旧库，只读账户仅 SELECT/SHOW VIEW。检查冲突后冻结旧库及附件副本，不再写入。
+导入时才创建独立 legacy-mysql 的 server_migration，非空时拒绝重复导入。新版“数据迁移”页自动检查已配置来源，区分未配置、不可达、缺库、空库、不明结构和发现 ERP 表。只读账户仅 SELECT/SHOW VIEW。检查冲突后冻结旧库及附件副本，不再写入。
+
+如果已部署旧版，可选配置现有 server 的只读预检连接。将以下变量设置在验收状态目录的私有 .env（或启动命令环境）中，再运行 deploy.sh：
+```dotenv
+ERP_LEGACY_SOURCE_DB_URL='jdbc:mysql://可从容器访问的主机:3306/server'
+ERP_LEGACY_SOURCE_DB_USER='只读账户'
+ERP_LEGACY_SOURCE_DB_PASSWORD='实际只读密码'
+ERP_LEGACY_SOURCE_DB_SCHEMA='server'
+```
+使用真实、受控且可从 API 容器访问的地址，按环境配置 TLS；不要使用 root 或猜测旧版密码。只读预检不会执行归档迁移；实际迁移仍使用本地离线副本。取消以上可选配置并重新启动 API 可恢复检测本地 server_migration。无连接参数时不能判断任意其他 MySQL 是否有 server；不会扫描主机网络或读取旧配置中的凭据。
 
 ## 5. 迁移
 

@@ -1,19 +1,25 @@
 <script setup>
 import {computed,onMounted,ref} from 'vue'
 import {api} from './api'
-const config=ref(null),scan=ref(null),preview=ref(null),ledger=ref(null),busy=ref(false),error=ref(''),query=ref('')
+const config=ref(null),sourceStatus=ref(null),detecting=ref(false),scan=ref(null),preview=ref(null),ledger=ref(null),busy=ref(false),error=ref(''),query=ref('')
 const tables=computed(()=>{const q=query.value.trim().toLowerCase();return (scan.value?.tables||[]).filter(t=>!q||t.table.toLowerCase().includes(q))})
 const labels={review_mapping:'待业务映射',security_review:'账号权限专项核查',deferred_archive:'暂缓业务原样保全',preserve_raw:'原样保全/人工核查'}
-async function load(){try{[config.value,ledger.value]=await Promise.all([api('/migration/config'),api('/migration/runs')])}catch(e){error.value=e.message}}
+async function detect(){
+ if(detecting.value)return
+ detecting.value=true;sourceStatus.value=null;scan.value=null;preview.value=null
+ try{sourceStatus.value=await api('/migration/source-status')}catch(e){sourceStatus.value={state:'unavailable',message:'检测请求失败：'+e.message}}finally{detecting.value=false}
+}
+async function load(){error.value='';try{[config.value,ledger.value]=await Promise.all([api('/migration/config'),api('/migration/runs')]);await detect()}catch(e){error.value=e.message}}
 async function scanSource(){busy.value=true;error.value='';scan.value=null;preview.value=null;try{scan.value=await api('/migration/scan')}catch(e){error.value=e.message}finally{busy.value=false}}
 async function open(t){busy.value=true;error.value='';preview.value=null;try{preview.value=await api('/migration/tables/'+encodeURIComponent(t.table))}catch(e){error.value=e.message}finally{busy.value=false}}
 onMounted(load)
 </script>
 <template>
 <section class="migration-panel">
- <h2>旧版数据迁移 · 只读预检</h2><p>只连接隔离的旧库副本（server_ 开头），不直接使用生产 server。配置在服务端环境变量中，网页不提交数据库密码。本页不执行业务写入。</p>
+ <h2>旧版数据迁移</h2><p>新版独立运行，旧库不是启动条件。打开本页自动检查已配置来源（原 server 或隔离副本），仅只读检测；实际迁移必须由管理员明确确认，并通过离线归档和预演。</p>
  <div v-if="error" role="alert" class="migration-error">{{error}}</div>
- <div v-if="config" class="migration-card"><h3>迁移来源</h3><div class="migration-meta"><span>来源：{{config.sourceSchema}}</span><span>目标：{{config.targetSchema}}</span><span>{{config.configured?'已配置只读来源':'尚未启用/配置'}}</span></div><p>配置 ERP_LEGACY_SCAN_ENABLED、ERP_LEGACY_DB_URL、ERP_LEGACY_DB_USER、ERP_LEGACY_DB_PASSWORD、ERP_LEGACY_DB_SCHEMA 后重启新版 API。请仅授权 SELECT，且确认连接到离线副本。</p><button :disabled="busy||!config.configured" @click="scanSource">{{busy?'正在读取…':'扫描源库表及冲突'}}</button> <button :disabled="busy" @click="load">刷新配置</button></div>
+ <div v-if="config" class="migration-card"><h3>旧数据库检测</h3><div class="migration-meta"><span>来源：{{config.sourceSchema}}</span><span>目标：{{config.targetSchema}}</span><span>{{detecting?'正在检测…':sourceStatus?.state==='available'?'发现旧版数据':sourceStatus?.state==='empty'?'旧库为空':sourceStatus?.state==='unrecognized'?'待核对来源':sourceStatus?.state==='not_configured'?'未配置':sourceStatus?.state==='missing'?'不存在':'暂不可用'}}</span></div><p v-if="sourceStatus">{{sourceStatus.message}}<template v-if="sourceStatus.baseTables!==undefined">（可见实体表 {{sourceStatus.baseTables}}）</template></p><p v-if="config.mode==='existing-server-read-only'">现有 server 仅供只读预检。实际迁移请先将其 SQL 及附件备份导入隔离副本。</p><button :disabled="busy||detecting||sourceStatus?.state!=='available'" @click="scanSource">{{busy?'正在读取…':'扫描源库表及冲突'}}</button><button :disabled="busy||detecting" @click="load">重新检测</button></div>
+ <div class="migration-card"><h3>导入旧版 SQL（可选）</h3><p>未安装过旧版可直接跳过本页。若有 SQL 备份，在部署主机仓库目录执行以下命令；仅在此时建立独立旧库副本。请使用单 schema 导出，不含 USE server 或全局管理语句。</p><pre>bash deploy.sh legacy-import /path/to/legacy.sql</pre><p>导入后点击重新检测，并复制旧附件。已有旧版服务可配置服务端只读连接；不得在浏览器输入数据库密码，也不自动搜索网络或尝试密码。网页不直接执行任意 SQL。</p><p>迁移需依次归档、审核映射、预演、明确确认和核对，不随部署执行。</p></div>
  <div v-if="ledger" class="migration-card"><h3>隔离试迁移账本</h3><p>通过仓库离线工具 专用试迁移环境及 new-plan / preview / apply / reconcile 执行。网页仅显示已提交批次与映射，不直接写入旧数据库。</p><div v-if="!ledger.runs.length">尚无提交的迁移批次</div><details v-for="r in ledger.runs" :key="r.id"><summary>批次 #{{r.id}} · {{r.source_namespace}} · {{r.created_at}}</summary><p>档案 SHA256：{{r.archive_sha256}}</p><p>审核映射 SHA256：{{r.decision_sha256}}</p><pre>{{typeof r.summary_json==='string'?r.summary_json:JSON.stringify(r.summary_json,null,2)}}</pre></details><div v-if="ledger.mapped.length" class="migration-scroll"><table><thead><tr><th>来源</th><th>旧表</th><th>新版表</th><th>映射数量</th></tr></thead><tbody><tr v-for="m in ledger.mapped" :key="m.source_namespace+'-'+m.source_table+'-'+m.target_table"><td>{{m.source_namespace}}</td><td>{{m.source_table}}</td><td>{{m.target_table}}</td><td>{{m.mapped_count}}</td></tr></tbody></table></div></div>
  <template v-if="scan">
   <div class="migration-card"><h3>扫描结果</h3><div class="migration-meta"><span>实体表 {{scan.baseTables}}</span><span>已计数记录 {{scan.countedRows}}</span><span>计数失败 {{scan.failedCounts}}</span></div><p>无法读取或未纳入自动映射的表不会被视作空表或允许丢弃。视图仅记录结构，不重复迁移其行。</p></div>
