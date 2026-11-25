@@ -15,7 +15,7 @@ sudo apt install -y git python3 curl util-linux
 bash test.sh
 ```
 
-默认执行新版及旧版 Maven verify（容器内），前端生产构建、V1–V22 数据库迁移与 API Smoke（独立随机项目及卷），完整 stdout/stderr 写入 test-results/test-*.log。失败返回非零；发送该日志即可。可用 --static、--new-only、--smoke 缩小范围；测试占用 8089/8090，须先停止同端口服务。无需本机安装 Maven、JDK、Node 或 npm。
+默认执行新版及旧版 Maven verify（容器内），前端生产构建、V1–V22 数据库迁移与 API Smoke（独立随机项目及卷），完整 stdout/stderr 写入 test-results/test-*.log。失败返回非零；发送该日志即可。可用 --static、--new-only、--smoke 缩小范围；本地集成测试由 Docker 分配两个临时回环端口，不占用已有 ERP 的 8089/8090。无需本机安装 Maven、JDK、Node 或 npm。
 
 ## 3. 一键部署
 
@@ -69,3 +69,7 @@ Python MySQL 驱动在专用容器内安装，宿主机不需要 pip。archive �
 先单独运行 `docker pull maven:3.9.9-eclipse-temurin-17`。WSL 内运行 Docker Engine 时请按 https://docs.docker.com/engine/daemon/proxy/ 为 daemon 配置可达的 HTTP(S) 代理；使用 Docker Desktop 时在 Desktop 设置代理。Windows 代理需确认监听地址/端口与 WSL 网络模式，不要假定 127.0.0.1 可达。仅在终端 export HTTP_PROXY 不等于为 daemon 配置代理。重启 daemon 前检查其他容器。
 
 也可以显式设置 `ERP_IMAGE_PREFIX`（以 / 结尾、无 URL scheme）为你信任且具备全部原始仓库路径和标签的镜像仓库前缀；例如内部仓库的 `registry.example.com/mirror/` 下有 maven、eclipse-temurin、node、nginx、mysql、flyway/flyway、python 对应镜像。此为示例占位符，不是可用公共镜像地址。test.sh 与 deploy.sh、Compose 及 Dockerfile 共用该前缀；再次部署需使用同样设置。也可离线 docker save/load 原标签镜像。Maven/npm/apt/pip 的下载网络仍需分别可达。不会自动禁用 TLS 或使用不明第三方镜像。
+
+### 测试端口与依赖缓存
+
+本地 Smoke 使用独立随机 Compose 项目及 Docker 自动分配的两个回环端口，只有从该项目查询到的端口会传给所有 API 测试（含 Python 测试）。既有 ERP 可以保持运行。新版和旧版 Maven 容器使用专用 `zjerp-local-test-maven-repository` Docker 卷缓存依赖；不缓存项目构建产物，不使用部署数据库。首次仍需要下载依赖；后续执行 `bash test.sh --smoke` 可直接复测数据库和 API，不重复 Maven 单测（后端 Docker 构建仍会执行）。

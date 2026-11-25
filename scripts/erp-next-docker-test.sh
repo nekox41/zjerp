@@ -25,13 +25,15 @@ source scripts/erp-next-images.sh
 echo "=== Docker 镜像可用性检查 ==="
 erp_build_images
 if [[ "$mode" != --smoke ]]; then
+ # Keep only downloaded dependencies between runs, not build output or project files.
+ docker volume create zjerp-local-test-maven-repository >/dev/null
  echo "=== Maven 新版后端测试（容器） ==="
- docker run --rm --pull=never --mount "type=bind,src=$ROOT/backend,dst=/source,readonly" \
-   "${ERP_IMAGE_PREFIX}maven:3.9.9-eclipse-temurin-17" bash -ec 'cp -a /source /tmp/backend; mvn -B -f /tmp/backend/erp-next/pom.xml clean verify'
+ docker run --rm --pull=never --mount "type=volume,src=zjerp-local-test-maven-repository,dst=/root/.m2/repository" --mount "type=bind,src=$ROOT/backend,dst=/source,readonly" \
+   "${ERP_IMAGE_PREFIX}maven:3.9.9-eclipse-temurin-17" bash -ec 'cp -a /source /tmp/backend; mvn -B -ntp -f /tmp/backend/erp-next/pom.xml clean verify'
  if [[ "$mode" == --full ]]; then
    echo "=== Maven 旧版 reactor（容器） ==="
-   docker run --rm --pull=never --mount "type=bind,src=$ROOT/backend,dst=/source,readonly" \
-     "${ERP_IMAGE_PREFIX}maven:3.9.9-eclipse-temurin-17" bash -ec 'cp -a /source /tmp/backend; mvn -B -f /tmp/backend/pom.xml clean verify'
+   docker run --rm --pull=never --mount "type=volume,src=zjerp-local-test-maven-repository,dst=/root/.m2/repository" --mount "type=bind,src=$ROOT/backend,dst=/source,readonly" \
+     "${ERP_IMAGE_PREFIX}maven:3.9.9-eclipse-temurin-17" bash -ec 'cp -a /source /tmp/backend; mvn -B -ntp -f /tmp/backend/pom.xml clean verify'
  fi
 fi
 echo "=== Docker 前端生产构建、隔离数据库及 API Smoke ==="

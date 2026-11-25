@@ -4,7 +4,7 @@ set -euo pipefail
 TOKEN="$TOKEN" WORK_ID="$WORK_ID" python - <<'PY'
 import json,os,urllib.request,urllib.error,io,zipfile
 from xml.etree import ElementTree as ET
-base="http://127.0.0.1:8090/api"
+base=os.environ["SMOKE_API_URL"]+"/api"
 token=os.environ["TOKEN"]; work=os.environ["WORK_ID"]
 def call(path,method="GET",body=None,status=200):
     req=urllib.request.Request(base+path,method=method,headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"},data=None if body is None else json.dumps(body,ensure_ascii=False).encode())
