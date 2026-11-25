@@ -116,7 +116,7 @@ public class CustomerHistoryController {
             project,LocalDate.parse(b.repairDate()),b.title().trim(),b.description().trim(),b.resultSummary(),actor);
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         saveStaff(id,b.employeeIds());
-        audit(actor,id,"repair.created","项目="+project+"；"+b.title());
+        
         return detail(customerId,id);
     }
     @GetMapping("/repairs/{id}")
@@ -138,7 +138,7 @@ public class CustomerHistoryController {
         jdbc.update("UPDATE erp_repair_record SET repair_date=?,title=?,description=?,result_summary=? WHERE id=?",
             LocalDate.parse(b.repairDate()),b.title().trim(),b.description().trim(),b.resultSummary(),id);
         saveStaff(id,b.employeeIds());
-        audit(actor,id,"repair.updated","更正维修记录："+b.title());
+        
         return detail(customerId,id);
     }
     private long validate(long customerId,RepairRequest b){
@@ -155,9 +155,5 @@ public class CustomerHistoryController {
     private void saveStaff(long id,List<Long> employees){
         jdbc.update("DELETE FROM erp_repair_staff WHERE repair_id=?",id);
         for(Long emp:new LinkedHashSet<>(employees))jdbc.update("INSERT INTO erp_repair_staff(repair_id,employee_id) VALUES(?,?)",id,emp);
-    }
-    private void audit(long actor,long id,String action,String summary){
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('summary',?))",
-            actor,action,"erp_repair_record",Long.toString(id),UUID.randomUUID().toString(),summary);
     }
 }

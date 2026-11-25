@@ -166,8 +166,6 @@ public class InspectionProfileController {
         var data=withBasis(request,previous);resolveTemplateRecords(data,previous);
         long actor=((CurrentUser)a.getPrincipal()).id();
         jdbc.update("INSERT INTO erp_inspection_profile_version(work_package_id,version_no,content_json,created_by) VALUES(?,?,?,?)",id,latest+1,data.toString(),actor);
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('version',?))",
-            actor,"inspection.profile.saved","erp_service_work_package",Long.toString(id),UUID.randomUUID().toString(),latest+1);
         return read(id,latest+1);
     }
 }

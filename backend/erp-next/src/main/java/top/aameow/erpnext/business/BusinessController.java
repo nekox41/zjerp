@@ -20,10 +20,6 @@ public class BusinessController {
     public BusinessController(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
     private long actor(Authentication a) { return ((CurrentUser)a.getPrincipal()).id(); }
-    private void audit(Authentication a,String action,String type,long id,String summary) {
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('summary',?))",
-            actor(a),action,type,Long.toString(id),UUID.randomUUID().toString(),summary);
-    }
     private String required(Map<String,Object> b,String key) {
         Object v=b.get(key); if(v==null || v.toString().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,key+" 不能为空"); return v.toString().trim();
     }
@@ -55,7 +51,7 @@ public class BusinessController {
         String name=required(b,"name"); Long parent=optionalLong(b,"parentId");
         if(parent!=null) one("SELECT id FROM erp_organization WHERE id=?",parent);
         jdbc.update("INSERT INTO erp_organization(name,parent_id,status) VALUES(?,?,?)",name,parent,"active");
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"organization.created","erp_organization",id,name);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT id,name,parent_id,status FROM erp_organization WHERE id=?",id);
     }
 
@@ -65,7 +61,7 @@ public class BusinessController {
         Long parent=optionalLong(b,"parentId");
         if(parent!=null) { if(parent==id) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"部门不能设为自身上级"); one("SELECT id FROM erp_organization WHERE id=?",parent); }
         jdbc.update("UPDATE erp_organization SET name=COALESCE(?,name),parent_id=?,status=COALESCE(?,status) WHERE id=?",b.get("name"),parent,b.get("status"),id);
-        audit(a,"organization.updated","erp_organization",id,"组织资料更新"); return one("SELECT * FROM erp_organization WHERE id=?",id);
+         return one("SELECT * FROM erp_organization WHERE id=?",id);
     }
 
     @PutMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:write')") @Transactional
@@ -81,7 +77,7 @@ public class BusinessController {
         jdbc.update("UPDATE erp_employee SET full_name=COALESCE(?,full_name),phone=COALESCE(?,phone),email=COALESCE(?,email),position_name=COALESCE(?,position_name),employee_type=COALESCE(?,employee_type),status=COALESCE(?,status) WHERE id=?",
           b.get("fullName"),b.get("phone"),b.get("email"),b.get("positionName"),b.get("employeeType"),b.get("status"),id);
         if(b.containsKey("identityId")) jdbc.update("UPDATE erp_employee SET identity_id=? WHERE id=?",identity,id);
-        audit(a,"employee.updated","erp_employee",id,"员工资料更新"); return one("SELECT * FROM erp_employee WHERE id=?",id);
+         return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
 
     @GetMapping("/employees") @PreAuthorize("hasAuthority('employee:read')")
@@ -103,7 +99,7 @@ public class BusinessController {
         if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
         jdbc.update("INSERT INTO erp_employee(employee_code,full_name,organization_id,identity_id,phone,email,position_name,employee_type,status) VALUES(?,?,?,?,?,?,?,?,'active')",
             b.get("employeeCode"),name,org,identity,b.get("phone"),b.get("email"),b.get("positionName"),val(b,"employeeType","general"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"employee.created","erp_employee",id,name);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
 
@@ -133,7 +129,7 @@ public class BusinessController {
           INSERT INTO erp_customer(customer_code,name,credit_code,customer_type,industry,phone,email,address,status,owner_employee_id,notes)
           VALUES(?,?,?,?,?,?,?,?,?,?,?)
           """,code,name,b.get("creditCode"),val(b,"customerType","enterprise"),b.get("industry"),b.get("phone"),b.get("email"),b.get("address"),val(b,"status","active"),owner,b.get("notes"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"customer.created","erp_customer",id,code+" "+name);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return customer(id);
     }
     @PutMapping("/customers/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
@@ -144,7 +140,7 @@ public class BusinessController {
         jdbc.update("UPDATE erp_customer SET name=COALESCE(?,name),credit_code=COALESCE(?,credit_code),customer_type=COALESCE(?,customer_type),industry=COALESCE(?,industry),phone=COALESCE(?,phone),email=COALESCE(?,email),address=COALESCE(?,address),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE id=?",
             b.get("name"),b.get("creditCode"),b.get("customerType"),b.get("industry"),b.get("phone"),b.get("email"),b.get("address"),b.get("status"),b.get("notes"),id);
         if(b.containsKey("ownerEmployeeId")) jdbc.update("UPDATE erp_customer SET owner_employee_id=? WHERE id=?",owner,id);
-        audit(a,"customer.updated","erp_customer",id,"客户资料更新"); return customer(id);
+         return customer(id);
     }
     private String val(Map<String,Object>b,String k,String d) { Object v=b.get(k); return v==null?d:v.toString(); }
 
@@ -157,7 +153,7 @@ public class BusinessController {
         if(primary) jdbc.update("UPDATE erp_customer_contact SET is_primary=0 WHERE customer_id=?",id);
         jdbc.update("INSERT INTO erp_customer_contact(customer_id,name,position_name,phone,email,is_primary,notes) VALUES(?,?,?,?,?,?,?)",
             id,name,b.get("positionName"),b.get("phone"),b.get("email"),primary,b.get("notes"));
-        long cid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"customer.contact.created","erp_customer_contact",cid,name);
+        long cid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT * FROM erp_customer_contact WHERE id=?",cid);
     }
     @PutMapping("/contacts/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
@@ -170,14 +166,14 @@ public class BusinessController {
             jdbc.update("UPDATE erp_customer_contact SET is_primary=0 WHERE customer_id=?",existing.get("customer_id"));
         jdbc.update("UPDATE erp_customer_contact SET name=COALESCE(?,name),position_name=?,phone=?,email=?,notes=?,is_primary=COALESCE(?,is_primary) WHERE id=?",
             b.get("name"),b.get("positionName"),b.get("phone"),b.get("email"),b.get("notes"),b.get("isPrimary"),id);
-        audit(a,"customer.contact.updated","erp_customer_contact",id,"联系人资料更新");
+        
         return one("SELECT * FROM erp_customer_contact WHERE id=?",id);
     }
 
     @DeleteMapping("/contacts/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
     public void deleteContact(@PathVariable long id,Authentication a) {
         Map<String,Object> c=one("SELECT * FROM erp_customer_contact WHERE id=?",id);
-        jdbc.update("DELETE FROM erp_customer_contact WHERE id=?",id); audit(a,"customer.contact.deleted","erp_customer_contact",id,c.get("name").toString());
+        jdbc.update("DELETE FROM erp_customer_contact WHERE id=?",id); 
     }
 
     @GetMapping("/contracts") @PreAuthorize("hasAuthority('contract:read')")
@@ -230,7 +226,7 @@ public class BusinessController {
           INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,service_type,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
           """,no,title,customer,b.get("contractType"),val(b,"serviceType","other"),amount,val(b,"currency","CNY"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),val(b,"status","draft"),owner,b.get("notes"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"contract.created","erp_contract",id,no+" "+title);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT ct.*,c.name customer_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id WHERE ct.id=?",id);
     }
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
@@ -257,7 +253,7 @@ public class BusinessController {
         jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),contract_type=COALESCE(?,contract_type),service_type=COALESCE(?,service_type),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=COALESCE(?,signed_on),starts_on=COALESCE(?,starts_on),ends_on=COALESCE(?,ends_on),notes=COALESCE(?,notes) WHERE id=?",
             b.get("title"),b.get("contractType"),b.get("serviceType"),b.get("amount"),b.get("currency"),b.get("status"),b.get("signedOn"),b.get("startsOn"),b.get("endsOn"),b.get("notes"),id);
         if(b.containsKey("ownerEmployeeId")) jdbc.update("UPDATE erp_contract SET owner_employee_id=? WHERE id=?",owner,id);
-        audit(a,"contract.updated","erp_contract",id,"合同资料更新"); return one("SELECT * FROM erp_contract WHERE id=?",id);
+         return one("SELECT * FROM erp_contract WHERE id=?",id);
     }
 
     @GetMapping("/projects") @PreAuthorize("hasAuthority('project:read')")
@@ -279,7 +275,7 @@ public class BusinessController {
         Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) requireEngineer(manager);
         jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,progress,status) VALUES(?,?,?,?,?,?,?,?,0,'planned')",
             no,name,contract,customer,b.get("description"),manager,b.get("plannedStart"),b.get("plannedEnd"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contract,id); audit(a,"project.created","erp_project",id,no+" "+name);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contract,id); 
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
@@ -299,7 +295,7 @@ public class BusinessController {
         if(b.containsKey("managerEmployeeId")) jdbc.update("UPDATE erp_project SET manager_employee_id=? WHERE id=?",manager,id);
         if(b.containsKey("plannedStart")) jdbc.update("UPDATE erp_project SET planned_start=? WHERE id=?",b.get("plannedStart"),id);
         if(b.containsKey("plannedEnd")) jdbc.update("UPDATE erp_project SET planned_end=? WHERE id=?",b.get("plannedEnd"),id);
-        audit(a,"project.updated","erp_project",id,"项目资料更新");
+        
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'updated',?)",id,actor(a),val(b,"log","项目资料更新"));
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
@@ -323,26 +319,26 @@ public class BusinessController {
     public void updateMember(@PathVariable long id,@PathVariable long employeeId,@RequestBody Map<String,Object>b,Authentication a) {
         int changed=jdbc.update("UPDATE erp_project_member SET member_role=? WHERE project_id=? AND employee_id=?",b.get("role"),id,employeeId);
         if(changed==0) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"项目成员不存在");
-        audit(a,"project.member.updated","erp_project",id,"更新成员 "+employeeId);
+        
     }
     @DeleteMapping("/projects/{id}/members/{employeeId}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public void removeMember(@PathVariable long id,@PathVariable long employeeId,Authentication a) {
         int changed=jdbc.update("DELETE FROM erp_project_member WHERE project_id=? AND employee_id=?",id,employeeId);
         if(changed==0) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"项目成员不存在");
-        audit(a,"project.member.removed","erp_project",id,"移除成员 "+employeeId);
+        
     }
     @PutMapping("/milestones/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> updateMilestone(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_project_milestone WHERE id=?",id);
         jdbc.update("UPDATE erp_project_milestone SET title=COALESCE(?,title),description=COALESCE(?,description),due_on=COALESCE(?,due_on),sort_order=COALESCE(?,sort_order) WHERE id=?",
             b.get("title"),b.get("description"),b.get("dueOn"),b.get("sortOrder"),id);
-        audit(a,"project.milestone.updated","erp_project_milestone",id,"更新里程碑"); return one("SELECT * FROM erp_project_milestone WHERE id=?",id);
+         return one("SELECT * FROM erp_project_milestone WHERE id=?",id);
     }
     @PutMapping("/milestones/{id}/skip") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> skipMilestone(@PathVariable long id,Authentication a) {
         Map<String,Object> m=one("SELECT * FROM erp_project_milestone WHERE id=?",id);
         jdbc.update("UPDATE erp_project_milestone SET status='skipped' WHERE id=?",id);
-        audit(a,"project.milestone.skipped","erp_project_milestone",id,m.get("title").toString());
+        
         return one("SELECT * FROM erp_project_milestone WHERE id=?",id);
     }
 
@@ -350,7 +346,7 @@ public class BusinessController {
     public void addMember(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_project WHERE id=?",id); long employee=Long.parseLong(required(b,"employeeId")); one("SELECT id FROM erp_employee WHERE id=?",employee);
         jdbc.update("INSERT INTO erp_project_member(project_id,employee_id,member_role) VALUES(?,?,?) ON DUPLICATE KEY UPDATE member_role=VALUES(member_role)",id,employee,b.get("role"));
-        audit(a,"project.member.assigned","erp_project",id,"分配员工 "+employee);
+        
     }
     @GetMapping("/projects/{id}/members") @PreAuthorize("hasAuthority('project:read')")
     public List<Map<String,Object>> members(@PathVariable long id) {
@@ -360,7 +356,7 @@ public class BusinessController {
     public Map<String,Object> addMilestone(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_project WHERE id=?",id); String title=required(b,"title");
         jdbc.update("INSERT INTO erp_project_milestone(project_id,title,description,due_on,sort_order) VALUES(?,?,?,?,?)",id,title,b.get("description"),b.get("dueOn"),b.get("sortOrder")==null?0:Integer.valueOf(b.get("sortOrder").toString()));
-        long mid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.milestone.created","erp_project_milestone",mid,title);
+        long mid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT * FROM erp_project_milestone WHERE id=?",mid);
     }
     @GetMapping("/projects/{id}/milestones") @PreAuthorize("hasAuthority('project:read')")
@@ -369,7 +365,7 @@ public class BusinessController {
     public Map<String,Object> completeMilestone(@PathVariable long id,Authentication a) {
         Map<String,Object> m=one("SELECT * FROM erp_project_milestone WHERE id=?",id);
         jdbc.update("UPDATE erp_project_milestone SET status='completed',completed_at=CURRENT_TIMESTAMP(3) WHERE id=?",id);
-        audit(a,"project.milestone.completed","erp_project_milestone",id,m.get("title").toString());
+        
         return one("SELECT * FROM erp_project_milestone WHERE id=?",id);
     }
     @GetMapping("/projects/{id}/logs") @PreAuthorize("hasAuthority('project:read')")

@@ -23,7 +23,6 @@ public class InspectionTemplateController {
     private Map<String,Object> one(String sql,Object...args){var rows=jdbc.queryForList(sql,args);if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"模板或文件不存在");return rows.get(0);}
     private String required(Map<String,Object>b,String key,int max){String s=Objects.toString(b.get(key),"").trim();if(s.isEmpty()||s.length()>max)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,key+" 无效");return s;}
     private long fileId(Object raw){try{long id=Long.parseLong(raw.toString());if(id>0)return id;}catch(RuntimeException ignored){}throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"文件ID无效");}
-    private void audit(Authentication a,long id,String action){jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('templateId',?))",actor(a),action,"erp_inspection_template",Long.toString(id),UUID.randomUUID().toString(),id);}
     @GetMapping
     @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:template:write')")
     public List<Map<String,Object>> list(Authentication a,@RequestParam(defaultValue="false") boolean includeInactive){
@@ -73,7 +72,7 @@ public class InspectionTemplateController {
                 jdbc.update("INSERT INTO erp_inspection_template_standard(template_id,standard_id) VALUES(?,?)",id,sid);
             }
         }
-        audit(a,id,"inspection.template.created");
+        
         return Map.of("id",id,"revisionNo",next,"tables",info.tables(),"rows",info.rows());
     }
     @GetMapping("/{id}/items") @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:template:write')")
@@ -109,7 +108,7 @@ public class InspectionTemplateController {
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         for(long sid:standards)jdbc.update("INSERT INTO erp_inspection_template_standard(template_id,standard_id) VALUES(?,?)",id,sid);
         int order=0;for(var item:items)jdbc.update("INSERT INTO erp_inspection_template_item(template_id,sort_order,item_name,clause_id) VALUES(?,?,?,?)",id,++order,item.get("item"),item.get("clauseId"));
-        audit(a,id,"inspection.template.structured.created");return Map.of("id",id,"revisionNo",next,"itemCount",items.size());
+        return Map.of("id",id,"revisionNo",next,"itemCount",items.size());
     }
     @PostMapping("/starter")
     @PreAuthorize("hasAuthority('report:template:write') and hasAuthority('file:upload')") @Transactional(rollbackFor=Exception.class)
@@ -130,14 +129,14 @@ public class InspectionTemplateController {
         long file=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         jdbc.update("INSERT INTO erp_inspection_template(template_kind,system_name,template_name,revision_no,file_id,sha256,notes,created_by) VALUES('base','',?,?,?,?,?,?)",name,next,file,stored.sha256(),notes,actor(a));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-        audit(a,id,"inspection.template.starter.created");return Map.of("id",id,"revisionNo",next,"tables",info.tables(),"rows",info.rows());
+        return Map.of("id",id,"revisionNo",next,"tables",info.tables(),"rows",info.rows());
     }
     @PutMapping("/{id}/active")
     @PreAuthorize("hasAuthority('report:template:write')") @Transactional
     public Map<String,Object> active(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         one("SELECT id FROM erp_inspection_template WHERE id=? FOR UPDATE",id);
         if(!(b.get("active") instanceof Boolean value))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"active 必须为布尔值");
-        jdbc.update("UPDATE erp_inspection_template SET active=? WHERE id=?",value,id);audit(a,id,value?"inspection.template.enabled":"inspection.template.disabled");
+        jdbc.update("UPDATE erp_inspection_template SET active=? WHERE id=?",value,id);
         return Map.of("id",id,"active",value);
     }
 }

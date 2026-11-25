@@ -43,9 +43,6 @@ public class FireStandardController {
         if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"消防规范版本不存在");
         return rows.get(0);
     }
-    private void audit(Authentication a,long id,String action){
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('standardId',?))",actor(a),action,"erp_fire_standard",Long.toString(id),UUID.randomUUID().toString(),id);
-    }
     @GetMapping @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:standard:write')")
     public Map<String,Object> list(Authentication a,@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String category,@RequestParam(defaultValue="") String validity,@RequestParam(defaultValue="") String referenceDate,@RequestParam(defaultValue="false") boolean includeInactive,@RequestParam(defaultValue="0") int offset,@RequestParam(defaultValue="50") int limit){
         if(q.length()>200||category.length()>100||offset<0||limit<1||limit>100||(!validity.isEmpty()&&!Set.of("unknown","current","partial","historical","withdrawn").contains(validity)))throw bad("无效查询");
@@ -85,12 +82,12 @@ public class FireStandardController {
         jdbc.queryForObject("SELECT id FROM erp_permission WHERE code='report:standard:write' FOR UPDATE",Long.class);
         int next=jdbc.queryForObject("SELECT COALESCE(MAX(revision_no),0)+1 FROM erp_fire_standard WHERE REPLACE(standard_no,' ','')=? AND edition=?",Integer.class,compactNo,edition);
         jdbc.update("INSERT INTO erp_fire_standard(standard_no,edition,title,category,publication_year,effective_on,withdrawn_on,validity,aliases,source_url,access_url,notes,verified,revision_no,file_id,verified_by,verified_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,IF(?=1,CURRENT_TIMESTAMP(3),NULL))",no,edition,title,category,year,effective,withdrawn,validity,aliases,source,access.isBlank()?null:access,notes,verified,next,file,verified?actor(a):null,verified?1:0);
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);audit(a,id,"fire.standard.created");
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         return one(id);
     }
     @PutMapping("/{id}/active") @PreAuthorize("hasAuthority('report:standard:write')") @Transactional
     public Map<String,Object> active(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         if(!(b.get("active") instanceof Boolean state))throw bad("active 无效");one(id);
-        jdbc.update("UPDATE erp_fire_standard SET active=? WHERE id=?",state,id);audit(a,id,state?"fire.standard.enabled":"fire.standard.disabled");return one(id);
+        jdbc.update("UPDATE erp_fire_standard SET active=? WHERE id=?",state,id);return one(id);
     }
 }

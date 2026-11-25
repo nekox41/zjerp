@@ -30,10 +30,6 @@ public class MaintenanceDocumentController {
     private Map<String,Object> one(String sql,Object...args){
         return jdbc.queryForList(sql,args).stream().findFirst().orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"记录不存在"));
     }
-    private void audit(Authentication a,String action,long id,String detail){
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('summary',?))",
-            actor(a),action,"maintenance_document",Long.toString(id),UUID.randomUUID().toString(),detail);
-    }
     private String field(Map<String,Object>b,String key,int max,boolean required){
         String s=Objects.toString(b.get(key),"").trim();
         if((required&&s.isBlank())||s.length()>max)throw bad(key+" 不能为空或超出长度限制");
@@ -105,7 +101,7 @@ public class MaintenanceDocumentController {
             project,contract,file,no,card.name(),card.company(),card.leader(),card.phone(),card.system1(),v.start(),v.end(),actor(a));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(?,?,?,?,?)",contract,file,"maintenance_card","维保公示卡 "+no,actor(a));
-        audit(a,"maintenance.card.created",id,no);
+        
         return one("SELECT * FROM erp_maintenance_card WHERE id=?",id);
     }
     @PutMapping("/cards/{id}/status")
@@ -115,7 +111,7 @@ public class MaintenanceDocumentController {
         one("SELECT id FROM erp_maintenance_card WHERE id=? FOR UPDATE",id);
         for(String key:List.of("printed","sent"))if(b.containsKey(key)&&!(b.get(key) instanceof Boolean))throw bad("状态必须为布尔值");
         jdbc.update("UPDATE erp_maintenance_card SET printed=COALESCE(?,printed),sent=COALESCE(?,sent) WHERE id=?",b.get("printed"),b.get("sent"),id);
-        audit(a,"maintenance.card.status",id,b.toString());
+        
         return one("SELECT * FROM erp_maintenance_card WHERE id=?",id);
     }
     @GetMapping("/contacts") @PreAuthorize("hasAuthority('maintenance:read')")
@@ -123,7 +119,7 @@ public class MaintenanceDocumentController {
     @PostMapping("/contacts") @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
     public Map<String,Object> addContact(@RequestBody Map<String,Object>b,Authentication a){
         jdbc.update("INSERT INTO erp_maintenance_contact(name,phone) VALUES(?,?)",field(b,"name",100,true),field(b,"phone",50,true));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);audit(a,"maintenance.contact.created",id,"");
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         return one("SELECT * FROM erp_maintenance_contact WHERE id=?",id);
     }
     @PutMapping("/contacts/{id}") @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
@@ -131,7 +127,7 @@ public class MaintenanceDocumentController {
         one("SELECT id FROM erp_maintenance_contact WHERE id=? FOR UPDATE",id);
         if(b.containsKey("active")&&!(b.get("active") instanceof Boolean))throw bad("状态无效");
         jdbc.update("UPDATE erp_maintenance_contact SET name=?,phone=?,active=COALESCE(?,active) WHERE id=?",field(b,"name",100,true),field(b,"phone",50,true),b.get("active"),id);
-        audit(a,"maintenance.contact.updated",id,"");return one("SELECT * FROM erp_maintenance_contact WHERE id=?",id);
+        return one("SELECT * FROM erp_maintenance_contact WHERE id=?",id);
     }
     @GetMapping("/materials") @PreAuthorize("hasAuthority('maintenance:read')")
     public List<Map<String,Object>> materials(){return jdbc.queryForList("SELECT m.*,f.original_name,f.sha256 FROM erp_maintenance_material m JOIN erp_file_object f ON f.id=m.file_id ORDER BY m.active DESC,m.id DESC");}
@@ -145,7 +141,7 @@ public class MaintenanceDocumentController {
             if(pdf.isEncrypted()||pdf.getNumberOfPages()<1||pdf.getNumberOfPages()>300)throw bad("仅支持未加密的 1 至 300 页 PDF");
         }catch(IOException e){throw bad("无效或加密的 PDF 文件");}
         jdbc.update("INSERT INTO erp_maintenance_material(name,file_id,notes,created_by) VALUES(?,?,?,?)",name,file,field(b,"notes",2000,false),actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);audit(a,"maintenance.material.created",id,name);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         return one("SELECT * FROM erp_maintenance_material WHERE id=?",id);
     }
     @PutMapping("/materials/{id}") @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
@@ -153,7 +149,7 @@ public class MaintenanceDocumentController {
         one("SELECT id FROM erp_maintenance_material WHERE id=? FOR UPDATE",id);
         if(b.containsKey("active")&&!(b.get("active") instanceof Boolean))throw bad("状态无效");
         jdbc.update("UPDATE erp_maintenance_material SET name=?,notes=?,active=COALESCE(?,active) WHERE id=?",field(b,"name",200,true),field(b,"notes",2000,false),b.get("active"),id);
-        audit(a,"maintenance.material.updated",id,"");return one("SELECT * FROM erp_maintenance_material WHERE id=?",id);
+        return one("SELECT * FROM erp_maintenance_material WHERE id=?",id);
     }
     @PostMapping("/projects/{project}/contracts/{contract}/materials")
     @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
@@ -165,7 +161,7 @@ public class MaintenanceDocumentController {
         jdbc.update("INSERT INTO erp_maintenance_material_archive(contract_id,project_id,material_id,file_id,title,created_by) VALUES(?,?,?,?,?,?)",contract,project,material,m.get("file_id"),m.get("name"),actor(a));
         long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         jdbc.update("INSERT IGNORE INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(?,?,?,?,?)",contract,m.get("file_id"),"project_material",m.get("name"),actor(a));
-        audit(a,"maintenance.material.archived",id,"contract="+contract+",project="+project);
+        
         return one("SELECT * FROM erp_maintenance_material_archive WHERE id=?",id);
     }
 }

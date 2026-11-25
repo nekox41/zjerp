@@ -22,7 +22,6 @@ public class FireStandardClauseController {
     }
     private static long id(Object value){try{long n=Long.parseLong(value.toString());if(n>0)return n;}catch(RuntimeException ignored){}throw bad("无效ID");}
     private long actor(Authentication a){return ((CurrentUser)a.getPrincipal()).id();}
-    private void audit(Authentication a,long id,String action){jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('clauseId',?))",actor(a),action,"erp_fire_standard_clause",Long.toString(id),UUID.randomUUID().toString(),id);}
     @GetMapping @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:standard:write') or hasAuthority('report:template:write')")
     public Map<String,Object> list(Authentication a,@RequestParam(required=false) Long standardId,@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="false") boolean includeInactive,@RequestParam(defaultValue="0") int offset,@RequestParam(defaultValue="50") int limit){
         if(q.length()>200||offset<0||limit<1||limit>100)throw bad("查询参数无效");
@@ -39,7 +38,7 @@ public class FireStandardClauseController {
         if(jdbc.queryForList("SELECT id FROM erp_fire_standard WHERE id=? AND verified=1 AND active=1 FOR UPDATE",sid).isEmpty())throw bad("只能为已核验且启用的规范版本建立条款");
         int revision=jdbc.queryForObject("SELECT COALESCE(MAX(revision_no),0)+1 FROM erp_fire_standard_clause WHERE standard_id=? AND clause_no=?",Integer.class,sid,no);
         jdbc.update("INSERT INTO erp_fire_standard_clause(standard_id,clause_no,requirement_summary,source_locator,revision_no,created_by) VALUES(?,?,?,?,?,?)",sid,no,summary,locator,revision,actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);audit(a,id,"fire.clause.created");
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         return Map.of("id",id,"revisionNo",revision);
     }
     @PutMapping("/{id}/active") @PreAuthorize("hasAuthority('report:standard:write')") @Transactional
@@ -47,6 +46,6 @@ public class FireStandardClauseController {
         if(!(b.get("active") instanceof Boolean active))throw bad("状态无效");
         if(jdbc.queryForList("SELECT id FROM erp_fire_standard_clause WHERE id=? FOR UPDATE",id).isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"条款不存在");
         jdbc.update("UPDATE erp_fire_standard_clause SET active=? WHERE id=?",active,id);
-        audit(a,id,active?"fire.clause.enabled":"fire.clause.disabled");return Map.of("id",id,"active",active);
+        return Map.of("id",id,"active",active);
     }
 }
