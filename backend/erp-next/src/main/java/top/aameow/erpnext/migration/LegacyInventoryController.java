@@ -30,7 +30,13 @@ public class LegacyInventoryController {
         @Value("${ERP_LEGACY_DB_USER:}") String user,
         @Value("${ERP_LEGACY_DB_PASSWORD:}") String password,
         @Value("${ERP_LEGACY_DB_SCHEMA:server_migration}") String schema){
-        this.target=target;this.enabled=false; // Legacy MySQL reader is dormant until the production migration is redesigned.this.url=url;this.user=user;this.password=password;this.schema=schema;
+        this.target = target;
+        // Legacy MySQL reader is dormant until the production migration is redesigned.
+        this.enabled = false;
+        this.url = url;
+        this.user = user;
+        this.password = password;
+        this.schema = schema;
     }
     private ResponseStatusException bad(HttpStatus status,String message){return new ResponseStatusException(status,message);}
     private void admin(Authentication a){
