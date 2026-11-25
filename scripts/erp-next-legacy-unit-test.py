@@ -17,6 +17,13 @@ exporter=load("archive_test","erp-next-legacy-export.py")
 importer=load("import_test","erp-next-legacy-import.py")
 
 class MigrationValidationTest(unittest.TestCase):
+    def test_legacy_bcrypt_and_status(self):
+        bcrypt="$2a$10$"+"A"*53
+        for status,deleted,expected in [("0","0","active"),("1","0","disabled"),("0","2","disabled"),(None,"0","disabled")]:
+            self.assertEqual(importer.legacy_account_credentials({"password":bcrypt,"status":status,"del_flag":deleted}),(bcrypt,expected))
+        password,status=importer.legacy_account_credentials({"password":"unsupported","status":"0","del_flag":"0"})
+        self.assertTrue(password.startswith("!legacy-reset-required-"))
+        self.assertEqual(status,"disabled")
     def test_money_and_ids(self):
         self.assertEqual(importer.money({"$type":"decimal","value":"10.5000"}),decimal.Decimal("10.50"))
         for value in (None,True,"0.001","NaN","-1","10000000000000000"):

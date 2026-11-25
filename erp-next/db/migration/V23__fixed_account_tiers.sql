@@ -11,6 +11,7 @@ DROP TEMPORARY TABLE tmp_admin_guard;
 SET @has_named_admin=(SELECT COUNT(*) FROM erp_identity WHERE username='admin');
 UPDATE erp_identity i JOIN erp_identity_role ir ON ir.identity_id=i.id JOIN erp_role r ON r.id=ir.role_id
  SET i.username='admin' WHERE @has_named_admin=0 AND r.code='admin' AND i.status='active';
+UPDATE erp_identity SET username='admin' WHERE username='admin';
 INSERT INTO erp_role(code,name) VALUES('manager','管理人员') ON DUPLICATE KEY UPDATE name=VALUES(name);
 UPDATE erp_role SET name='超级账户' WHERE code='admin';
 UPDATE erp_role SET name='普通员工' WHERE code='employee';
@@ -18,7 +19,7 @@ CREATE TEMPORARY TABLE tmp_fixed_roles AS
  SELECT i.id,CASE WHEN i.username='admin' THEN 'admin'
  WHEN MAX(CASE WHEN r.code IN ('admin','project_manager','finance','manager') THEN 1 ELSE 0 END)=1 THEN 'manager'
  ELSE 'employee' END AS role_code,
- MAX(CASE WHEN r.code IS NULL OR r.code NOT IN ('admin','project_manager','finance','manager','employee') THEN 1 ELSE 0 END) AS needs_review
+ MAX(CASE WHEN r.code IS NULL OR r.code NOT IN ('admin','manager','employee') THEN 1 ELSE 0 END) AS needs_review
  FROM erp_identity i LEFT JOIN erp_identity_role ir ON ir.identity_id=i.id LEFT JOIN erp_role r ON r.id=ir.role_id GROUP BY i.id,i.username;
 UPDATE erp_identity i JOIN tmp_fixed_roles f ON f.id=i.id SET i.status='disabled' WHERE f.needs_review=1 AND f.role_code<>'admin';
 DELETE FROM erp_identity_role;

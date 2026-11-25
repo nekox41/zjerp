@@ -128,6 +128,13 @@ def read_plan(path,archive_hash):
             raise ValueError("Invalid section "+section)
     return p
 
+def legacy_account_credentials(row):
+    old_hash=row.get("password")
+    compatible=isinstance(old_hash,str) and re.fullmatch(r"\$2[aby]\$(?:0[4-9]|1[0-6])\$[./A-Za-z0-9]{53}",old_hash)
+    source_active=str(row.get("status"))=="0" and str(row.get("del_flag"))=="0"
+    return (old_hash if compatible else "!legacy-reset-required-"+uuid.uuid4().hex,
+            "active" if compatible and source_active else "disabled")
+
 class Migration:
     def __init__(self,connection,root,manifest,archive_hash,plan,storage,apply):
         self.conn=connection
@@ -326,17 +333,12 @@ class Migration:
                     if existing["username"]!=username:
                         raise ValueError("Existing account username does not match explicit decision")
                     return existing["id"]
-                if username.casefold()=="admin":
+                if username.casefold()=="admin" or str(row.get("user_name","")).casefold()=="admin":
                     raise ValueError("Legacy admin must be explicitly linked to existing admin, never created or overwritten")
                 role=enum(d.get("role","employee"),{"employee","manager"})
                 if role=="manager" and d.get("managerConfirmed") is not True:
                     raise ValueError("Management privileges require explicit confirmation")
-                old_hash=row.get("password")
-                compatible=isinstance(old_hash,str) and re.fullmatch(r"\$2[aby]\$(?:0[4-9]|1[0-6])\$[./A-Za-z0-9]{53}",old_hash)
-                source_active=str(row.get("status"))=="0" and str(row.get("del_flag"))=="0"
-                # Preserve compatible BCrypt hashes. Incompatible/deleted/disabled accounts cannot log in.
-                password_hash=old_hash if compatible else "!legacy-reset-required-"+uuid.uuid4().hex
-                status="active" if compatible and source_active else "disabled"
+                password_hash,status=legacy_account_credentials(row)
                 n=self.execute("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(%s,%s,%s,%s)",(username,password_hash,display,status))
                 self.execute("INSERT INTO erp_identity_role(identity_id,role_id) SELECT %s,id FROM erp_role WHERE code=%s",(n,role))
                 return n

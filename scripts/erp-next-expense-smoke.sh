@@ -1,7 +1,5 @@
 set -euo pipefail
-ROLES=$(curl -fsS ${SMOKE_API_URL}/api/admin/roles -H "Authorization: Bearer $TOKEN")
-FIN_ROLE=$(python -c 'import json,sys;print(next(x["id"] for x in json.load(sys.stdin) if x["code"]=="finance"))' <<< "$ROLES")
-curl -fsS -X POST ${SMOKE_API_URL}/api/admin/identities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"username\":\"ci-finance\",\"displayName\":\"CI Finance\",\"password\":\"ci-finance-password-123\",\"roleIds\":[$FIN_ROLE]}" >/dev/null
+curl -fsS -X POST ${SMOKE_API_URL}/api/admin/identities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"username\":\"ci-finance\",\"displayName\":\"CI Finance\",\"password\":\"ci-finance-password-123\",\"role\":\"manager\"}" >/dev/null
 FIN_LOGIN=$(curl -fsS -X POST ${SMOKE_API_URL}/api/auth/login -H 'Content-Type: application/json' -d '{"username":"ci-finance","password":"ci-finance-password-123"}')
 FIN_TOKEN=$(python -c 'import json,sys;print(json.load(sys.stdin)["token"])' <<< "$FIN_LOGIN")
 

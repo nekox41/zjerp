@@ -68,6 +68,7 @@ public class BusinessController {
     public Map<String,Object> updateEmployee(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_employee WHERE id=?",id);
         Long identity=optionalLong(b,"identityId");
+        if(b.containsKey("identityId")&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("identity:write")))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"仅超级账户可绑定登录账号");
         if(b.containsKey("identityId")&&identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
         if(b.containsKey("organizationId")) {
             Long organization=optionalLong(b,"organizationId");
@@ -95,6 +96,7 @@ public class BusinessController {
     @PostMapping("/employees") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> createEmployee(@RequestBody Map<String,Object>b,Authentication a) {
         String name=required(b,"fullName"); Long org=optionalLong(b,"organizationId"), identity=optionalLong(b,"identityId");
+        if(identity!=null&&a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("identity:write")))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"仅超级账户可绑定登录账号");
         if(org!=null) one("SELECT id FROM erp_organization WHERE id=?",org);
         if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
         jdbc.update("INSERT INTO erp_employee(employee_code,full_name,organization_id,identity_id,phone,email,position_name,employee_type,status) VALUES(?,?,?,?,?,?,?,?,'active')",
