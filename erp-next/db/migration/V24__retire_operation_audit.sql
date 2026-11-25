@@ -11,7 +11,10 @@ CREATE TABLE erp_photo_review_event (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 INSERT INTO erp_photo_review_event(batch_id,actor_identity_id,action,summary_json,occurred_at)
  SELECT b.id,a.actor_identity_id,a.action,a.summary_json,a.occurred_at
- FROM erp_audit_event a JOIN erp_report_photo_batch b ON a.resource_id=CAST(b.id AS CHAR)
+ -- Match canonical decimal identifiers with explicit character set and collation,
+ -- independent of the Flyway connection's collation; avoid numeric coercion of non-ID text.
+ FROM erp_audit_event a JOIN erp_report_photo_batch b
+ ON a.resource_id COLLATE utf8mb4_0900_ai_ci = CAST(b.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_ai_ci
  WHERE a.resource_type='erp_report_photo_batch'
  AND a.action IN ('report.photo_batch.submitted','report.photo_batch.reviewed','report.photo_batch.returned') ORDER BY a.id;
 -- Preserve existing records; no live code reads or writes the retired audit store.
