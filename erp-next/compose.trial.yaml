@@ -1,7 +1,7 @@
 # Persistent local acceptance/trial only. Never use production data volumes.
 services:
   erp-next-mysql:
-    image: mysql:8.4
+    image: ${ERP_IMAGE_PREFIX:-}mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: ${ERP_NEXT_DB_ROOT_PASSWORD:?Set ERP_NEXT_DB_ROOT_PASSWORD}
       MYSQL_DATABASE: erp_next
@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   erp-next-schema:
-    image: flyway/flyway:10.20.1
+    image: ${ERP_IMAGE_PREFIX:-}flyway/flyway:10.20.1
     depends_on:
       erp-next-mysql:
         condition: service_healthy
@@ -42,6 +42,8 @@ services:
     build:
       context: ../backend/erp-next
       dockerfile: Dockerfile
+      args:
+        ERP_IMAGE_PREFIX: ${ERP_IMAGE_PREFIX:-}
     environment:
       ERP_NEXT_PORT: "8090"
       ERP_NEXT_DB_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
@@ -76,6 +78,8 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile.erp-next
+      args:
+        ERP_IMAGE_PREFIX: ${ERP_IMAGE_PREFIX:-}
     ports:
       - "127.0.0.1:${ERP_NEXT_WEB_PORT:-8089}:80"
     depends_on:
@@ -85,7 +89,7 @@ services:
     restart: unless-stopped
 
   legacy-mysql:
-    image: mysql:8.4
+    image: ${ERP_IMAGE_PREFIX:-}mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: ${ERP_LEGACY_ROOT_PASSWORD:?Set ERP_LEGACY_ROOT_PASSWORD}
       MYSQL_DATABASE: server_migration

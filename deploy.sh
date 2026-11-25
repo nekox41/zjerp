@@ -27,6 +27,7 @@ case "$action" in legacy-import|apply) [[ $# == 1 ]] || { usage >&2; exit 2; };;
 for cmd in docker python3 flock curl; do command -v "$cmd" >/dev/null || { echo "缺少 $cmd" >&2; exit 1; }; done
 docker compose version >/dev/null
 docker info >/dev/null
+source "$ROOT/scripts/erp-next-images.sh"
 STATE="$(python3 -c 'from pathlib import Path;import sys; print(Path(sys.argv[1]).expanduser().resolve())' "${ERP_TRIAL_DIR:-$HOME/.local/share/zjerp-trial}")"
 # State must not be stored in the Git checkout or a Windows-mounted filesystem.
 case "$STATE/" in "$ROOT/"*|/mnt/[a-zA-Z]/*) echo "请在 WSL Linux 文件系统的仓库外设置 ERP_TRIAL_DIR" >&2; exit 1;; esac
@@ -119,7 +120,8 @@ if p.is_symlink() or json.loads(p.read_text())!={"format":"erp-next-trial-v1","t
 PY
 }
 migration_image(){
- docker build -q -t zjerp-trial-migration:local -f "$ROOT/scripts/Dockerfile.erp-next-migration" "$ROOT/scripts" >/dev/null
+ erp_image_check python:3.11-slim
+ docker build --build-arg "ERP_IMAGE_PREFIX=$ERP_IMAGE_PREFIX" -q -t zjerp-trial-migration:local -f "$ROOT/scripts/Dockerfile.erp-next-migration" "$ROOT/scripts" >/dev/null
 }
 pytrial(){
  migration_image
@@ -154,6 +156,7 @@ migration(){
 }
 case "$action" in
  start)
+   erp_build_images
    ensure_databases
    dc up -d --build erp-next-api erp-next-web
    ready=false

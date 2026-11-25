@@ -31,6 +31,8 @@ command -v python >/dev/null
 command -v curl >/dev/null
 command -v flock >/dev/null
 docker compose version >/dev/null
+source scripts/erp-next-images.sh
+erp_build_images
 exec 9>/tmp/erp-next-local-smoke.lock
 flock -n 9 || { echo "Another local ERP smoke is running"; exit 1; }
 python - <<'PY'

@@ -61,3 +61,11 @@ Python MySQL 驱动在专用容器内安装，宿主机不需要 pip。archive �
 `bash deploy.sh backup` 可单独创建成对备份（停止 Web/API），`apply` 每次写入前亦自动创建。备份位于状态目录 backups/，只有 COMPLETE 标识存在且 SHA256SUMS 检查通过才视作完整备份；恢复仍需另行隔离演练。请勿将试迁移环境直接升格为正式生产。
 
 再次启动时会停止新版应用写入再运行 Flyway；若 Git 提交相较上次成功启动有变化，会先保存成对备份。请在仓库根目录执行所有命令。旧版 SQL 如含 `USE server` 或 `CREATE DATABASE`，请从离线备份重新导出单 schema SQL（`mysqldump ... server`，不要使用 `--databases`）；不要直接修改真实生产数据。
+
+## Docker Hub 拉取超时
+
+若日志在 Maven 容器启动前出现 registry-1.docker.io:443 i/o timeout、exit 125，属于 Docker 镜像网络故障，而不是 Java 测试失败。test.sh 与 deploy.sh 会先检查本地镜像，缺失时最多尝试两次拉取并明确报错，不自动修改 Docker daemon 或切换到陌生镜像站。已缓存镜像可复用。
+
+先单独运行 `docker pull maven:3.9.9-eclipse-temurin-17`。WSL 内运行 Docker Engine 时请按 https://docs.docker.com/engine/daemon/proxy/ 为 daemon 配置可达的 HTTP(S) 代理；使用 Docker Desktop 时在 Desktop 设置代理。Windows 代理需确认监听地址/端口与 WSL 网络模式，不要假定 127.0.0.1 可达。仅在终端 export HTTP_PROXY 不等于为 daemon 配置代理。重启 daemon 前检查其他容器。
+
+也可以显式设置 `ERP_IMAGE_PREFIX`（以 / 结尾、无 URL scheme）为你信任且具备全部原始仓库路径和标签的镜像仓库前缀；例如内部仓库的 `registry.example.com/mirror/` 下有 maven、eclipse-temurin、node、nginx、mysql、flyway/flyway、python 对应镜像。此为示例占位符，不是可用公共镜像地址。test.sh 与 deploy.sh、Compose 及 Dockerfile 共用该前缀；再次部署需使用同样设置。也可离线 docker save/load 原标签镜像。Maven/npm/apt/pip 的下载网络仍需分别可达。不会自动禁用 TLS 或使用不明第三方镜像。
