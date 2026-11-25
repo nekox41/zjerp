@@ -396,7 +396,7 @@ onMounted(async ()=>{
 <template #default="{step,finish}"><form class="create-grid compact" @submit.prevent="finish(()=>saveProject())">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
 <label>项目名称<input v-model="projectEditForm.name" required></label>
-<label>项目负责人<select v-model="projectEditForm.managerEmployeeId"><option value="">未分配</option><option v-for="x in employees.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_valid_qualification)" :value="x.id">{{x.full_name}}</option></select></label>
+<label>项目负责人<select v-model="projectEditForm.managerEmployeeId"><option value="">未分配</option><option v-for="x in employees.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_certificate)" :value="x.id">{{x.full_name}}</option></select></label>
 </div>
 <div v-show="step===1" data-wizard-step="1" class="wizard-fields">
 <label>计划开始<input v-model="projectEditForm.plannedStart" type="date" :disabled="!!selectedProject.auto_from_contract"></label>
