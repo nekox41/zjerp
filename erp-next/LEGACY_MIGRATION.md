@@ -106,3 +106,7 @@ unset ERP_NEXT_DB_PASSWORD ERP_NEXT_DB_ROOT_PASSWORD ERP_BOOTSTRAP_TOKEN
 ## WSL2 持久化验收部署
 
 推荐 `bash deploy.sh` 创建可直接在迁移后打开新版 UI 的独立试迁移环境；旧库在同一验收项目的另一 MySQL 实例，绝不连接正式旧库。详见 [WSL_ACCEPTANCE.md](WSL_ACCEPTANCE.md)。原专用试迁移脚本仍可用于命令行独立试验。
+
+## 共享 MySQL 部署入口更新
+
+`bash deploy.sh` 优先复用旧版 Compose 项目 zjerp 的 mysql 容器；同一实例内 erp_next 与 server 分开授权。默认不创建 server、不导入、不转换数据。旧 server 归档需确认旧应用已停止写入及附件备份一致（`ERP_LEGACY_SOURCE_FROZEN=yes bash deploy.sh archive`）；只读归档允许 server 名称，原隔离 server_* CLI 仍兼容。正式转换仍需审核映射、预演及备份后明确确认，网页当前只读检测/扫描，尚无完整一键迁移执行器。见 [WSL_ACCEPTANCE.md](WSL_ACCEPTANCE.md)。

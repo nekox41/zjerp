@@ -141,12 +141,16 @@ prepare_mysql(){
  local exists
  exists="$(root_sql <<< "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='erp_next';")"
  if [[ "$exists" == 1 && "$db_mode" == shared && ! -f "$STATE/files/.erp-next-trial.json" ]]; then
-  echo "共享实例已有 erp_next，但没有本部署标识；拒绝自动接管，请核对备份和状态目录"; exit 1
+  echo "共享实例已有 erp_next，但没有本部署标识（也可能是首次初始化中断）；拒绝自动接管或清库，请核对备份和状态目录"; exit 1
  fi
  if [[ -f "$STATE/files/.erp-next-trial.json" ]]; then verify_marker; fi
  # Scoped users, no changes to old account credentials or old tables. CREATE USER
  # fails safely on unexpected pre-existing names rather than resetting passwords.
  if [[ ! -f "$STATE/mysql-users-ready" ]]; then
+  # Before creating the schema, check dedicated account names to avoid partial provisioning.
+  local conflicts
+  conflicts="$(root_sql <<< "SELECT COUNT(*) FROM mysql.user WHERE User='erp_legacy_readonly' OR (User='erp_next' AND '$db_mode'='shared');")"
+  [[ "$conflicts" == 0 ]] || { echo "已有专用数据库账号同名，拒绝覆盖或重置；请人工核对"; exit 1; }
   if [[ "$db_mode" == shared ]]; then
    root_sql <<SQL
 CREATE DATABASE erp_next CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;

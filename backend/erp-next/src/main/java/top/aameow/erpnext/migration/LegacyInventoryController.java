@@ -53,9 +53,21 @@ public class LegacyInventoryController {
             s.setString(1,schema);s.setQueryTimeout(5);
             try(ResultSet rs=s.executeQuery()){
                 rs.next();long n=rs.getLong(1),known=rs.getLong(2);
-                String state=n==0?"empty":known==0?"unrecognized":"available";
-                String message=n==0?"旧库没有可见的实体表；尚未导入或权限不足":known==0?"旧库存在，但未识别出已知 ERP 业务表；请核查来源":"已发现旧版 ERP 表，可进行只读预检";
-                return Map.of("state",state,"sourceSchema",schema,"baseTables",n,"recognizedTables",known,"message",message);
+                // Table existence alone is not evidence of historical business data.
+                List<String> populated=new ArrayList<>();
+                for(var row:tables(c)){
+                    String table=row.get("table").toString();
+                    if(!"BASE TABLE".equals(row.get("type"))||!SAFE_PREVIEW.contains(table))continue;
+                    if(count(c,"SELECT EXISTS(SELECT 1 FROM "+name(table)+" LIMIT 1)")!=0)populated.add(table);
+                }
+                String state=n==0?"empty":known==0?"unrecognized":populated.isEmpty()?"no_business_rows":"available";
+                String message=switch(state){
+                    case "empty"->"旧库没有可见的实体表；尚未导入或权限不足";
+                    case "unrecognized"->"旧库存在，但未识别出已知 ERP 表；请核查来源";
+                    case "no_business_rows"->"旧版结构存在，但已识别业务表中未发现记录；仍可扫描其他表或账号资料";
+                    default->"已发现旧版业务记录，可进行只读预检";
+                };
+                return Map.of("state",state,"sourceSchema",schema,"baseTables",n,"recognizedTables",known,"populatedBusinessTables",populated,"message",message);
             }
         }catch(SQLException ex){
             if(ex.getErrorCode()==1049)return Map.of("state","missing","message","未找到配置的旧数据库；可直接使用新版 ERP");
