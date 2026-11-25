@@ -96,10 +96,7 @@ public class ServiceReportController {
         return r;
     }
     private Object parse(String s){try{return mapper.readValue(s,Object.class);}catch(Exception e){throw new IllegalStateException("Stored report JSON is invalid",e);}}
-    private void requireEngineerReviewer(long identityId){
-        Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND NULLIF(BTRIM(e.certificate_no),'') IS NOT NULL",Integer.class,identityId);
-        if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"报告内部审核必须由已登记证书编号的工程师员工完成");
-    }
+
     private void checkContent(Map<String,Object> data){
         if(data==null||data.get("summary")==null||data.get("summary").toString().isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"提交前必须填写报告摘要");
         if(data.get("conclusion")==null||data.get("conclusion").toString().isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"提交前必须填写服务结论");
@@ -202,7 +199,7 @@ public class ServiceReportController {
     @PostMapping("/reports/{id}/start-review") @PreAuthorize("hasAuthority('report:review') and hasAuthority('report:read')") @Transactional
     public Map<String,Object> startReview(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!"submitted".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已提交报告可以开始审核");
-        requireEngineerReviewer(actor(a));
+        
         requireNotContributor(id,r,actor(a));
         jdbc.update("UPDATE erp_service_report SET status='reviewing',reviewer_id=? WHERE id=?",actor(a),id);event(id,"submitted","reviewing",actor(a),"开始审核");return detail(id);
     }
@@ -222,7 +219,7 @@ public class ServiceReportController {
     public Map<String,Object> approve(@PathVariable long id,@RequestBody(required=false) Map<String,Object>b,Authentication a){
         Map<String,Object> r=report(id);checkActionVersion(b,r);if(!"reviewing".equals(r.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有审核中的报告可以通过");
         if(((Number)r.get("reviewer_id")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只有当前审核人可以审核");
-        requireEngineerReviewer(actor(a));requireNotContributor(id,r,actor(a));
+        requireNotContributor(id,r,actor(a));
         boolean layout=requiresLayoutReview(content(id,r).get("submitted_artifact_id"));
         if(layout&&(b==null||!Boolean.TRUE.equals(b.get("layoutReviewed"))))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"审核人须人工核对固定送审文件目录、分页及照片");
         jdbc.update("UPDATE erp_service_report_version SET reviewed_by=? WHERE report_id=? AND version_no=?",actor(a),id,r.get("current_version_no"));

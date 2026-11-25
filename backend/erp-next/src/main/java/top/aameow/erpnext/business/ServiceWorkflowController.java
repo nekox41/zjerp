@@ -220,8 +220,6 @@ public class ServiceWorkflowController {
     }
     private void requirePhotoReviewer(Map<String,Object> b,long identity){
         if(((Number)b.get("created_by")).longValue()==identity)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片整理人不能审核自己的批次");
-        Integer qualified=jdbc.queryForObject("SELECT COUNT(*) FROM erp_employee e WHERE e.identity_id=? AND e.employee_type='engineer' AND e.status='active' AND NULLIF(BTRIM(e.certificate_no),'') IS NOT NULL",Integer.class,identity);
-        if(qualified==null||qualified==0)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"照片批次审核必须由已登记证书编号的工程师员工完成");
     }
     @PostMapping("/photo-batches/{id}/review") @PreAuthorize("hasAuthority('report:review') and hasAuthority('report:photo:read')") @Transactional
     public Map<String,Object> reviewBatch(@PathVariable long id,Authentication a){

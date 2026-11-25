@@ -7,7 +7,6 @@ import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -33,18 +32,17 @@ public class EmployeeArchiveController {
     private Map<String,Object> one(String sql,Object...args){
         return jdbc.queryForList(sql,args).stream().findFirst().orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"员工或附件不存在"));
     }
-    private boolean allowed(Authentication a,String permission){return a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals(permission));}
     private void privateResponse(HttpServletResponse r){r.setHeader(HttpHeaders.CACHE_CONTROL,"private, no-store");}
     private static final String BASIC="id,full_name,gender,age,employee_type,status,(NULLIF(BTRIM(certificate_no),'') IS NOT NULL) AS has_certificate";
     @GetMapping @PreAuthorize("hasAuthority('employee:read')")
-    public List<Map<String,Object>> list(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String type,Authentication a,HttpServletResponse response){
+    public List<Map<String,Object>> list(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String type,HttpServletResponse response){
         privateResponse(response);
         if(!type.isBlank()&&!Set.of("operator","engineer").contains(type))throw bad("员工类型无效");
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("SELECT "+BASIC+",phone,certificate_no FROM erp_employee WHERE (?='' OR employee_type=?) AND (full_name ILIKE ? OR phone ILIKE ? OR certificate_no ILIKE ?) ORDER BY id DESC LIMIT 500",type,type,term,term,term);
     }
     @GetMapping("/{id}") @PreAuthorize("hasAuthority('employee:read')")
-    public Map<String,Object> detail(@PathVariable long id,Authentication a,HttpServletResponse response){
+    public Map<String,Object> detail(@PathVariable long id,HttpServletResponse response){
         privateResponse(response);return loadDetail(id);
     }
     private Map<String,Object> loadDetail(long id){
@@ -82,14 +80,14 @@ public class EmployeeArchiveController {
         try{return mapper.readValue(json,new TypeReference<Map<String,Object>>(){});}catch(Exception e){throw bad("员工档案格式无效");}
     }
     @PostMapping(consumes=MediaType.APPLICATION_JSON_VALUE) @PreAuthorize("hasAuthority('employee:write')") @Transactional
-    public Map<String,Object> create(@RequestBody Map<String,Object>b,Authentication a){return save(null,b,null,null,a);}
+    public Map<String,Object> create(@RequestBody Map<String,Object>b){return save(null,b,null,null);}
     @PutMapping(value="/{id}",consumes=MediaType.APPLICATION_JSON_VALUE) @PreAuthorize("hasAuthority('employee:write')") @Transactional
-    public Map<String,Object> update(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){return save(id,b,null,null,a);}
+    public Map<String,Object> update(@PathVariable long id,@RequestBody Map<String,Object>b){return save(id,b,null,null);}
     @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE) @PreAuthorize("hasAuthority('employee:write')") @Transactional
-    public Map<String,Object> createWithFiles(@RequestPart("profile") String profile,@RequestPart(value="certificateFiles",required=false) List<MultipartFile> certificates,@RequestPart(value="identityFiles",required=false) List<MultipartFile> identity,Authentication a){return save(null,parse(profile),certificates,identity,a);}
+    public Map<String,Object> createWithFiles(@RequestPart("profile") String profile,@RequestPart(value="certificateFiles",required=false) List<MultipartFile> certificates,@RequestPart(value="identityFiles",required=false) List<MultipartFile> identity){return save(null,parse(profile),certificates,identity);}
     @PutMapping(value="/{id}",consumes=MediaType.MULTIPART_FORM_DATA_VALUE) @PreAuthorize("hasAuthority('employee:write')") @Transactional
-    public Map<String,Object> updateWithFiles(@PathVariable long id,@RequestPart("profile") String profile,@RequestPart(value="certificateFiles",required=false) List<MultipartFile> certificates,@RequestPart(value="identityFiles",required=false) List<MultipartFile> identity,Authentication a){return save(id,parse(profile),certificates,identity,a);}
-    private Map<String,Object> save(Long id,Map<String,Object>b,List<MultipartFile> certificates,List<MultipartFile> identity,Authentication a){
+    public Map<String,Object> updateWithFiles(@PathVariable long id,@RequestPart("profile") String profile,@RequestPart(value="certificateFiles",required=false) List<MultipartFile> certificates,@RequestPart(value="identityFiles",required=false) List<MultipartFile> identity){return save(id,parse(profile),certificates,identity);}
+    private Map<String,Object> save(Long id,Map<String,Object>b,List<MultipartFile> certificates,List<MultipartFile> identity){
         Map<String,Object> old=id==null?Map.of():one("SELECT * FROM erp_employee WHERE id=? FOR UPDATE",id);
         String name=str(field(b,old,"fullName","full_name"),200,true,"姓名");
         String type=str(field(b,old,"employeeType","employee_type"),24,true,"类型");
@@ -103,13 +101,6 @@ public class EmployeeArchiveController {
         String extras=extra(field(b,old,"extraFields","extra_fields"));
         if(id==null)id=jdbc.queryForObject("INSERT INTO erp_employee(full_name,employee_type,gender,age,id_number,phone,certificate_no,extra_fields) VALUES(?,?,?,?,?,?,?,?) RETURNING id",Long.class,name,type,gender,age,idNumber,phone,certificate,extras);
         else jdbc.update("UPDATE erp_employee SET full_name=?,employee_type=?,gender=?,age=?,id_number=?,phone=?,certificate_no=?,extra_fields=? WHERE id=?",name,type,gender,age,idNumber,phone,certificate,extras,id);
-        // Internal account relation is only available to the super account, never part of the archive form.
-        if(b.containsKey("identityId")){
-            if(!allowed(a,"identity:write"))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"仅超级账户可关联审核账号");
-            Object raw=b.get("identityId");Long account=raw==null?null:positive(raw);
-            if(account!=null){one("SELECT id FROM erp_identity WHERE id=? FOR UPDATE",account);bind(id,account);}
-            else jdbc.update("UPDATE erp_employee SET identity_id=NULL WHERE id=?",id);
-        }
         if(b.containsKey("keepDocumentIds")){
             if(!(b.get("keepDocumentIds") instanceof List<?> list))throw bad("附件清单无效");
             Set<Long> keep=new HashSet<>();for(Object x:list)keep.add(positive(x));
@@ -146,20 +137,5 @@ public class EmployeeArchiveController {
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(doc.get("media_type").toString())).contentLength(size)
             .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(doc.get("original_name").toString(),StandardCharsets.UTF_8).build().toString())
             .header(HttpHeaders.CACHE_CONTROL,"private, no-store").header("X-Content-Type-Options","nosniff").body(new InputStreamResource(Files.newInputStream(path)));
-    }
-    @GetMapping("/account-links") @PreAuthorize("hasAuthority('identity:write')")
-    public List<Map<String,Object>> accountLinks(){return jdbc.queryForList("SELECT id,full_name,employee_type,identity_id FROM erp_employee ORDER BY full_name,id");}
-    private void bind(long employee,long account){
-        Map<String,Object> e=one("SELECT identity_id FROM erp_employee WHERE id=? FOR UPDATE",employee);
-        if(e.get("identity_id")!=null&&((Number)e.get("identity_id")).longValue()!=account)throw bad("此员工已关联其他账户，请先解除关联");
-        jdbc.update("UPDATE erp_employee SET identity_id=NULL WHERE identity_id=? AND id<>?",account,employee);
-        jdbc.update("UPDATE erp_employee SET identity_id=? WHERE id=?",account,employee);
-    }
-    @PutMapping("/account-links/{account}") @PreAuthorize("hasAuthority('identity:write')") @Transactional
-    public void linkAccount(@PathVariable long account,@RequestBody Map<String,Object>b){
-        one("SELECT id FROM erp_identity WHERE id=? FOR UPDATE",account);
-        Object raw=b.get("employeeId");
-        if(raw==null)jdbc.update("UPDATE erp_employee SET identity_id=NULL WHERE identity_id=?",account);
-        else bind(positive(raw),account);
     }
 }

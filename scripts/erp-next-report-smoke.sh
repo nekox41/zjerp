@@ -44,9 +44,13 @@ for doc in profile["documents"]:
     with urllib.request.urlopen(req,timeout=30) as r:
         assert r.status==200 and r.headers["Cache-Control"]=="private, no-store"
         assert r.read().startswith(b"%PDF-1.4")
-call("/business/employees","POST",{"fullName":"Forbidden","employeeType":"operator"},token=token,status=403)
-call("/business/employees/"+os.environ["EMP_ID"],"PUT",{"fullName":"Forbidden"},token=token,status=403)
-call("/business/employees/account-links",token=token,status=403)
+assert "employee:write" in session["permissions"]
+new_profile=call("/business/employees","POST",{"fullName":"CI Ordinary Operator","employeeType":"operator","extraFields":[{"key":"专业","value":"消防"}]},token=token)
+assert new_profile["employee_type"]=="operator"
+updated=call("/business/employees/"+str(new_profile["id"]),"PUT",{"fullName":"CI Ordinary Operator Updated","age":30},token=token)
+assert updated["full_name"]=="CI Ordinary Operator Updated" and updated["age"]==30
+assert updated["extra_fields"]==[{"key":"专业","value":"消防"}]
+# Archive maintenance is independent of account administration.
 call("/business/customers","POST",{"customerCode":"CI-NO-WRITE","name":"Forbidden"},token=token,status=403)
 call("/migration/source-status",token=token,status=403)
 call("/admin/identities/"+str(employee["id"]),"PUT",{"role":"manager"})
@@ -68,9 +72,6 @@ REVIEWER=$(curl -fsS -X POST ${SMOKE_API_URL}/api/admin/identities -H "Authoriza
 REVIEWER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REVIEWER")
 curl -fsS -X PUT "${SMOKE_API_URL}/api/admin/identities/$REVIEWER_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"displayName\":\"CI Reviewer Updated\",\"status\":\"active\",\"role\":\"manager\"}" | grep -q 'CI Reviewer Updated'
-REVIEWER_EMP=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/employees -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"certificateNo\":\"CI-REVIEWER\",\"fullName\":\"CI Reviewer\",\"identityId\":$REVIEWER_ID,\"employeeType\":\"engineer\"}")
-REVIEWER_EMP_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$REVIEWER_EMP")
 curl -fsS -X POST ${SMOKE_API_URL}/api/admin/identities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"username\":\"ci-issuer\",\"displayName\":\"CI Issuer\",\"password\":\"ci-issuer-password-123\",\"role\":\"manager\"}" >/dev/null
 
@@ -161,7 +162,7 @@ test "$BAD_STATUS" = "409"
 # A returned batch is editable again; preserve the reason, then resubmit.
 curl -fsS -X POST "${SMOKE_API_URL}/api/service-workflow/photo-batches/$PHOTO_BATCH_ID/return" -H "Authorization: Bearer $REVIEW_TOKEN" -H 'Content-Type: application/json' -d '{"reason":"CI 核查分类"}' | python -c 'import json,sys; b=json.load(sys.stdin); assert b["status"]=="collecting" and any(h["action"]=="report.photo_batch.returned" for h in b["reviewHistory"])'
 curl -fsS -X POST "${SMOKE_API_URL}/api/service-workflow/photo-batches/$PHOTO_BATCH_ID/submit" -H "Authorization: Bearer $TOKEN" | grep -q '"status":"submitted"'
-# Review the real persisted photo batch using a different qualified employee.
+# Review the real persisted photo batch using a different account with review permission.
 curl -fsS -X POST "${SMOKE_API_URL}/api/service-workflow/photo-batches/$PHOTO_BATCH_ID/review" -H "Authorization: Bearer $REVIEW_TOKEN" | grep -q '"status":"reviewed"'
 GEN_BODY=$(python -c 'import json,sys; b=json.loads(sys.argv[1]); b["batchIds"]=[int(sys.argv[2])]; print(json.dumps(b))' "$GEN_BODY" "$PHOTO_BATCH_ID")
 GENERATED=$(curl -fsS -X POST "$DOCX_API/generate-docx" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$GEN_BODY")

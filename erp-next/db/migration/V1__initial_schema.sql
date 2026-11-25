@@ -59,7 +59,6 @@ CREATE TABLE erp_employee (
   phone VARCHAR(40),
   certificate_no VARCHAR(120),
   extra_fields TEXT NOT NULL DEFAULT '[]' CHECK(extra_fields IS JSON ARRAY),
-  identity_id BIGINT UNIQUE REFERENCES erp_identity(id),
   status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')),
   created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
@@ -1109,7 +1108,7 @@ INSERT INTO erp_role_permission(role_id,permission_id) SELECT r.id,p.id FROM erp
 
 INSERT INTO erp_role_permission(role_id,permission_id) SELECT r.id,p.id FROM erp_role r CROSS JOIN erp_permission p WHERE r.code='manager' AND p.code NOT LIKE 'identity:%' AND p.code NOT LIKE 'organization:write';
 
-INSERT INTO erp_role_permission(role_id,permission_id) SELECT r.id,p.id FROM erp_role r JOIN erp_permission p ON p.code IN ('workspace:read','project:read','service:read','service:visit:read','service:visit:write','report:read','report:write','report:photo:read','report:photo:write','file:read','file:upload','expense:read','expense:write','maintenance:read','maintenance:write','employee:read') WHERE r.code='employee';
+INSERT INTO erp_role_permission(role_id,permission_id) SELECT r.id,p.id FROM erp_role r JOIN erp_permission p ON p.code IN ('workspace:read','project:read','service:read','service:visit:read','service:visit:write','report:read','report:write','report:photo:read','report:photo:write','file:read','file:upload','expense:read','expense:write','maintenance:read','maintenance:write','employee:read','employee:write') WHERE r.code='employee';
 
 INSERT INTO erp_maintenance_card_sequence VALUES (1,0);
 
