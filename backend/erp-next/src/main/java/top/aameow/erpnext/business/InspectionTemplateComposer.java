@@ -121,7 +121,7 @@ final class InspectionTemplateComposer {
     private static void attr(Element e,String key,String value){e.setAttributeNS(W,"w:"+key,value);}
     private static Element p(Document d,String value,boolean bold,boolean breakBefore){
         Element p=w(d,"p");
-        if(breakBefore||bold){Element pr=w(d,"pPr");p.appendChild(pr);if(breakBefore)pr.appendChild(w(d,"pageBreakBefore"));
+        if(breakBefore||bold){Element pr=w(d,"pPr");p.appendChild(pr);if(breakBefore){Element pageBreak=w(d,"pageBreakBefore");attr(pageBreak,"val","true");pr.appendChild(pageBreak);}
             if(bold){Element jc=w(d,"jc");attr(jc,"val","center");pr.appendChild(jc);}}
         Element r=w(d,"r");p.appendChild(r);
         if(bold){Element pr=w(d,"rPr");r.appendChild(pr);pr.appendChild(w(d,"b"));Element sz=w(d,"sz");attr(sz,"val","28");pr.appendChild(sz);}
