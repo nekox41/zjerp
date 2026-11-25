@@ -76,7 +76,7 @@ trap cleanup EXIT
 dc up -d erp-next-mysql
 dc run --rm erp-next-schema
 dc run --rm erp-next-schema
-dc exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql mysql -u erp_next -D erp_next -N -e 'SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL' | grep -qx 23
+dc exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql mysql -u erp_next -D erp_next -N -e 'SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL' | grep -qx 24
 dc up -d --build
 # Query only our randomly named Compose project's bindings, never probe a
 # known production port or fall back to a default if Docker did not publish.

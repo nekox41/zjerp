@@ -326,9 +326,20 @@ class Migration:
                     if existing["username"]!=username:
                         raise ValueError("Existing account username does not match explicit decision")
                     return existing["id"]
-                # A deliberately unmatchable hash: disabled until admin sets password and permissions.
-                return self.execute("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(%s,%s,%s,'disabled')",
-                    (username,"!legacy-reset-required-"+uuid.uuid4().hex,display))
+                if username.casefold()=="admin":
+                    raise ValueError("Legacy admin must be explicitly linked to existing admin, never created or overwritten")
+                role=enum(d.get("role","employee"),{"employee","manager"})
+                if role=="manager" and d.get("managerConfirmed") is not True:
+                    raise ValueError("Management privileges require explicit confirmation")
+                old_hash=row.get("password")
+                compatible=isinstance(old_hash,str) and re.fullmatch(r"\$2[aby]\$(?:0[4-9]|1[0-6])\$[./A-Za-z0-9]{53}",old_hash)
+                source_active=str(row.get("status"))=="0" and str(row.get("del_flag"))=="0"
+                # Preserve compatible BCrypt hashes. Incompatible/deleted/disabled accounts cannot log in.
+                password_hash=old_hash if compatible else "!legacy-reset-required-"+uuid.uuid4().hex
+                status="active" if compatible and source_active else "disabled"
+                n=self.execute("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(%s,%s,%s,%s)",(username,password_hash,display,status))
+                self.execute("INSERT INTO erp_identity_role(identity_id,role_id) SELECT %s,id FROM erp_role WHERE code=%s",(n,role))
+                return n
             self.map("sys_user",sid,row,d,"erp_identity",create_account)
         for d in self.plan.get("employees",[]):
             sid=ident(d["sourceId"]); row=self.legacy("zj_employee",sid)
