@@ -19,7 +19,6 @@ public class PartnerMaintenanceController {
     private String req(Map<String,Object>b,String k){Object v=b.get(k);if(v==null||v.toString().isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,k+" 不能为空");return v.toString().trim();}
     private Map<String,Object> one(String sql,Object...args){List<Map<String,Object>> r=jdbc.queryForList(sql,args);if(r.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"记录不存在");return r.get(0);}
     private Long opt(Map<String,Object>b,String k){Object v=b.get(k);return v==null||v.toString().isBlank()?null:Long.valueOf(v.toString());}
-    private void audit(long who,String action,String type,long id,String summary){jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('summary',?))",who,action,type,Long.toString(id),UUID.randomUUID().toString(),summary);}
 
     @GetMapping("/partners") @PreAuthorize("hasAuthority('partner:read')")
     public List<Map<String,Object>> partners(){return jdbc.queryForList("SELECT p.*,(SELECT COUNT(*) FROM erp_contract_partner cp WHERE cp.partner_id=p.id) contract_count FROM erp_partner p ORDER BY p.name");}
@@ -33,14 +32,14 @@ public class PartnerMaintenanceController {
     public Map<String,Object> createPartner(@RequestBody Map<String,Object>b,Authentication a){
         String code=req(b,"partnerCode"),name=req(b,"name"),type=b.get("partnerType")==null?"introducer":b.get("partnerType").toString();
         jdbc.update("INSERT INTO erp_partner(partner_code,name,partner_type,contact_name,phone,email,address,notes) VALUES(?,?,?,?,?,?,?,?)",code,name,type,b.get("contactName"),b.get("phone"),b.get("email"),b.get("address"),b.get("notes"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);audit(actor(a),"partner.created","erp_partner",id,name);return one("SELECT * FROM erp_partner WHERE id=?",id);
+        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);return one("SELECT * FROM erp_partner WHERE id=?",id);
     }
     @PutMapping("/partners/{id}") @PreAuthorize("hasAuthority('partner:write')") @Transactional
     public Map<String,Object> updatePartner(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
         one("SELECT id FROM erp_partner WHERE id=?",id);
         jdbc.update("UPDATE erp_partner SET name=COALESCE(?,name),partner_type=COALESCE(?,partner_type),contact_name=COALESCE(?,contact_name),phone=COALESCE(?,phone),email=COALESCE(?,email),address=COALESCE(?,address),notes=COALESCE(?,notes),status=COALESCE(?,status) WHERE id=?",
             b.get("name"),b.get("partnerType"),b.get("contactName"),b.get("phone"),b.get("email"),b.get("address"),b.get("notes"),b.get("status"),id);
-        audit(actor(a),"partner.updated","erp_partner",id,Objects.toString(b.get("name"),""));return partner(id);
+        return partner(id);
     }
     @PostMapping("/contracts/{id}/partners") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> linkPartner(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
@@ -51,7 +50,7 @@ public class PartnerMaintenanceController {
         if(existing.add(share).compareTo(java.math.BigDecimal.valueOf(100))>0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"该合同合作方分成比例合计不能超过 100%");
         jdbc.update("INSERT INTO erp_contract_partner(contract_id,partner_id,share_percent,notes) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE share_percent=VALUES(share_percent),notes=VALUES(notes)",id,partner,share,b.get("notes"));
         jdbc.update("UPDATE erp_contract SET signing_source='partner',partner_share_percent=(SELECT COALESCE(SUM(share_percent),0) FROM erp_contract_partner WHERE contract_id=?) WHERE id=?",id,id);
-        audit(actor(a),"contract.partner.linked","erp_contract",id,"partner="+partner+",share="+share);
+        
         return one("SELECT * FROM erp_contract_partner WHERE contract_id=? AND partner_id=?",id,partner);
     }
     @DeleteMapping("/contracts/{id}/partners/{partnerId}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
@@ -65,7 +64,7 @@ public class PartnerMaintenanceController {
         Integer count=jdbc.queryForObject("SELECT COUNT(*) FROM erp_contract_partner WHERE contract_id=?",Integer.class,id);
         jdbc.update("UPDATE erp_contract SET signing_source=?,partner_share_percent=? WHERE id=?",
             count!=null&&count>0?"partner":"direct",remaining,id);
-        audit(actor(a),"contract.partner.unlinked","erp_contract",id,"partner="+partnerId);
+        
         return one("SELECT id,signing_source,partner_share_percent FROM erp_contract WHERE id=?",id);
     }
 
@@ -82,7 +81,7 @@ public class PartnerMaintenanceController {
         if(!Set.of("service","renewal","supplement","other").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效合同项目关系");
         jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,?) ON DUPLICATE KEY UPDATE relation_type=VALUES(relation_type)",id,project,type);
         if(p.get("contract_id")==null)jdbc.update("UPDATE erp_project SET contract_id=? WHERE id=?",id,project);
-        audit(actor(a),"contract.project.linked","erp_contract",id,"project="+project);
+        
         return one("SELECT * FROM erp_contract_project WHERE contract_id=? AND project_id=?",id,project);
     }
     @DeleteMapping("/contracts/{id}/projects/{projectId}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
@@ -105,7 +104,7 @@ public class PartnerMaintenanceController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"合同项目关系不存在");
         Long replacement=jdbc.queryForObject("SELECT MIN(contract_id) FROM erp_contract_project WHERE project_id=?",Long.class,projectId);
         jdbc.update("UPDATE erp_project SET contract_id=? WHERE id=? AND contract_id=?",replacement,projectId,id);
-        audit(actor(a),"contract.project.unlinked","erp_contract",id,"project="+projectId);
+        
         return Map.of("removed",true);
     }
 
@@ -120,7 +119,7 @@ public class PartnerMaintenanceController {
         if(manager==technical)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目负责人和技术负责人必须是不同人员");
         validateEngineer(manager);validateEngineer(technical);
         jdbc.update("UPDATE erp_project SET manager_employee_id=?,technical_lead_employee_id=? WHERE id=?",manager,technical,id);
-        audit(actor(a),"project.leadership.updated","erp_project",id,"manager="+manager+",technicalLead="+technical);
+        
         return one("SELECT p.*,m.full_name manager_name,t.full_name technical_lead_name FROM erp_project p LEFT JOIN erp_employee m ON m.id=p.manager_employee_id LEFT JOIN erp_employee t ON t.id=p.technical_lead_employee_id WHERE p.id=?",id);
     }
     private void validateEngineer(long id){
@@ -167,7 +166,7 @@ public class PartnerMaintenanceController {
             signedOn==null||signedOn.toString().isBlank()?null:signedOn,start,end,b.get("notes"));
         long contractId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'renewal')",contractId,id);
-        audit(actor(a),"maintenance.contract.renewed","erp_contract",contractId,"project="+id);
+        
         return one("SELECT * FROM erp_contract WHERE id=?",contractId);
     }
 
@@ -227,7 +226,7 @@ public class PartnerMaintenanceController {
             """,current,id,uploaded,created,materials,card,notes,actor(a));
         jdbc.update("INSERT INTO erp_maintenance_project(project_id,honeybee_contract_uploaded,honeybee_project_created,project_materials_completed,public_card_status,current_contract_id,notes,updated_by) VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE honeybee_contract_uploaded=VALUES(honeybee_contract_uploaded),honeybee_project_created=VALUES(honeybee_project_created),project_materials_completed=VALUES(project_materials_completed),public_card_status=VALUES(public_card_status),current_contract_id=VALUES(current_contract_id),notes=VALUES(notes),updated_by=VALUES(updated_by)",
             id,uploaded,created,materials,card,current,notes,actor(a));
-        audit(actor(a),"maintenance.project.updated","erp_maintenance_project",id,card);
+        
         return maintenance(id);
     }
     @PostMapping("/projects/{id}/maintenance-visits") @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
@@ -238,7 +237,7 @@ public class PartnerMaintenanceController {
         long visit=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         Object staff=b.get("employeeIds");
         if(staff instanceof List<?> ids)for(Object value:ids){long employee=Long.parseLong(value.toString());one("SELECT id FROM erp_employee WHERE id=?",employee);jdbc.update("INSERT INTO erp_maintenance_visit_staff(visit_id,employee_id) VALUES(?,?)",visit,employee);}
-        audit(actor(a),"maintenance.visit.created","erp_maintenance_visit",visit,"project="+id);
+        
         return one("SELECT * FROM erp_maintenance_visit WHERE id=?",visit);
     }
     @PostMapping("/contracts/{id}/files") @PreAuthorize("hasAuthority('contract:write')") @Transactional
@@ -249,7 +248,7 @@ public class PartnerMaintenanceController {
         String type=b.get("fileType")==null?"contract":b.get("fileType").toString();
         if(!Set.of("contract","maintenance_card","project_material","other").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效合同文件类型");
         jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(?,?,?,?,?)",id,file,type,b.get("title"),actor(a));
-        long record=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);audit(actor(a),"contract.file.added","erp_contract",id,type);
+        long record=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         return one("SELECT cf.*,f.original_name FROM erp_contract_file cf JOIN erp_file_object f ON f.id=cf.file_id WHERE cf.id=?",record);
     }
 }

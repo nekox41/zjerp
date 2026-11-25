@@ -26,7 +26,6 @@ public class InvoiceController {
     private Map<String,Object> one(String sql,Object... args){List<Map<String,Object>> rows=jdbc.queryForList(sql,args);if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"记录不存在");return rows.get(0);}
     private void event(long id,Authentication a,String action,String detail){
         jdbc.update("INSERT INTO erp_invoice_event(invoice_id,action,actor_identity_id,details) VALUES(?,?,?,?)",id,action,actor(a),detail);
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('detail',?))",actor(a),"invoice."+action,"erp_invoice",Long.toString(id),UUID.randomUUID().toString(),detail);
     }
     private void status(Map<String,Object>r,String... allowed){if(!Arrays.asList(allowed).contains(r.get("status").toString()))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前发票状态不允许此操作");}
     private void links(Long customer,Long contract,Long project){

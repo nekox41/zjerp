@@ -39,9 +39,8 @@ public class ServiceWorkflowController {
     private Long opt(Map<String,Object>b,String key){Object v=b.get(key);return v==null||v.toString().isBlank()?null:Long.valueOf(v.toString());}
     private String json(Object v){try{return mapper.writeValueAsString(v);}catch(Exception e){throw new IllegalStateException(e);}}
     private String sha(byte[] bytes){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));}catch(Exception e){throw new IllegalStateException(e);}}
-    private void audit(long who,String action,String type,long id,String summary){
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('summary',?))",
-            who,action,type,Long.toString(id),UUID.randomUUID().toString(),summary);
+    private void photoReviewEvent(long who,String action,long id,String summary){
+        jdbc.update("INSERT INTO erp_photo_review_event(batch_id,actor_identity_id,action,summary_json) VALUES(?,?,?,JSON_OBJECT('summary',?))",id,who,action,summary);
     }
     private void eventDelivery(long id,String from,String to,long who,String notes){
         jdbc.update("INSERT INTO erp_service_delivery_event(delivery_id,from_status,to_status,actor_identity_id,notes) VALUES(?,?,?,?,?)",id,from,to,who,notes);
@@ -81,7 +80,7 @@ public class ServiceWorkflowController {
             if(!Set.of("field_operator","engineer","team_lead","observer").contains(role))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效现场人员角色");
             jdbc.update("INSERT INTO erp_service_visit_staff(visit_id,employee_id,staff_role) VALUES(?,?,?)",visitId,employee,role);
         }
-        audit(actor(a),"service.visit.created","erp_service_visit",visitId,title);
+        
         return one("SELECT * FROM erp_service_visit WHERE id=?",visitId);
     }
     @PostMapping("/visits/{id}/issues") @PreAuthorize("hasAuthority('service:visit:write')") @Transactional
@@ -94,7 +93,7 @@ public class ServiceWorkflowController {
         String relation=b.get("relationType")==null?"found":b.get("relationType").toString();
         if(!Set.of("found","reviewed","resolved").contains(relation))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效问题关联类型");
         jdbc.update("INSERT INTO erp_service_visit_issue(visit_id,issue_id,relation_type,notes) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE relation_type=VALUES(relation_type),notes=VALUES(notes)",id,issueId,relation,b.get("notes"));
-        audit(actor(a),"service.visit.issue.linked","erp_service_visit",id,"issue="+issueId);
+        
         return one("SELECT * FROM erp_service_visit_issue WHERE visit_id=? AND issue_id=?",id,issueId);
     }
 
@@ -117,14 +116,14 @@ public class ServiceWorkflowController {
         String title=req(b,"title"),date=req(b,"visitDate");
         jdbc.update("INSERT INTO erp_report_photo_batch(work_package_id,visit_id,title,visit_date,created_by) VALUES(?,?,?,?,?)",id,visitId,title,date,actor(a));
         long batchId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-        audit(actor(a),"report.photo_batch.created","erp_report_photo_batch",batchId,title);
+        
         return batchDetail(batchId);
     }
     @GetMapping("/photo-batches/{id}") @PreAuthorize("hasAuthority('report:photo:read')")
     public Map<String,Object> getBatch(@PathVariable long id){return batchDetail(id);}
     private Map<String,Object> batchDetail(long id){
         Map<String,Object> batch=new LinkedHashMap<>(one("SELECT b.*,i.display_name creator_name,r.report_no FROM erp_report_photo_batch b JOIN erp_identity i ON i.id=b.created_by LEFT JOIN erp_service_report r ON r.id=b.report_id WHERE b.id=?",id));
-        batch.put("reviewHistory",jdbc.queryForList("SELECT a.action,a.summary_json,a.occurred_at,i.display_name actor_name FROM erp_audit_event a LEFT JOIN erp_identity i ON i.id=a.actor_identity_id WHERE a.resource_type='erp_report_photo_batch' AND a.resource_id=? AND a.action IN ('report.photo_batch.submitted','report.photo_batch.reviewed','report.photo_batch.returned') ORDER BY a.id",Long.toString(id)));
+        batch.put("reviewHistory",jdbc.queryForList("SELECT a.action,a.summary_json,a.occurred_at,i.display_name actor_name FROM erp_photo_review_event a LEFT JOIN erp_identity i ON i.id=a.actor_identity_id WHERE a.batch_id=? AND a.action IN ('report.photo_batch.submitted','report.photo_batch.reviewed','report.photo_batch.returned') ORDER BY a.id",id));
         batch.put("photos",jdbc.queryForList("SELECT p.id,p.file_id,p.system_code,p.taken_on,p.caption,p.sort_order,p.confirmation_status,p.confirmed_by,p.confirmed_at,f.original_name,f.media_type,f.byte_size file_size,f.sha256 FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.batch_id=? ORDER BY p.sort_order,p.id",id));
         return batch;
     }
@@ -143,7 +142,7 @@ public class ServiceWorkflowController {
         Integer order=jdbc.queryForObject("SELECT COALESCE(MAX(sort_order),-1)+1 FROM erp_report_photo WHERE batch_id=?",Integer.class,id);
         jdbc.update("INSERT INTO erp_report_photo(batch_id,file_id,taken_on,caption,sort_order) VALUES(?,?,?,?,?)",id,fileId,b.get("takenOn"),b.get("caption"),order);
         long photoId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-        audit(actor(a),"report.photo.added","erp_report_photo",photoId,"batch="+id);
+        
         return one("SELECT p.*,f.original_name,f.media_type,f.byte_size file_size FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.id=?",photoId);
     }
     // One transaction, one batch lock, and no implicit confirmation after changing a system.
@@ -168,7 +167,7 @@ public class ServiceWorkflowController {
         String status=confirmed?"confirmed":"pending";
         jdbc.batchUpdate("UPDATE erp_report_photo SET system_code=?,confirmation_status=?,confirmed_by=?,confirmed_at=CASE WHEN ? THEN CURRENT_TIMESTAMP(3) ELSE NULL END WHERE id=? AND batch_id=?",
             ids.stream().map(photoId->new Object[]{system,status,confirmed?actor(a):null,confirmed,photoId,id}).toList());
-        audit(actor(a),"report.photo.batch_classified","erp_report_photo_batch",id,"count="+ids.size()+",system="+system+",confirmed="+confirmed);
+        
         return batchDetail(id);
     }
 
@@ -188,14 +187,14 @@ public class ServiceWorkflowController {
         jdbc.update("UPDATE erp_report_photo SET system_code=?,taken_on=?,caption=?,sort_order=COALESCE(?,sort_order),confirmation_status=COALESCE(?,confirmation_status),confirmed_by=CASE WHEN ?='confirmed' THEN ? WHEN ?='pending' THEN NULL ELSE confirmed_by END,confirmed_at=CASE WHEN ?='confirmed' THEN CURRENT_TIMESTAMP(3) WHEN ?='pending' THEN NULL ELSE confirmed_at END WHERE id=?",
             system,takenOn,b.containsKey("caption")?b.get("caption"):p.get("caption"),
             opt(b,"sortOrder"),confirmation,confirmation,actor(a),confirmation,confirmation,confirmation,id);
-        audit(actor(a),"report.photo.updated","erp_report_photo",id,system);
+        
         return one("SELECT * FROM erp_report_photo WHERE id=?",id);
     }
     @DeleteMapping("/photos/{id}") @PreAuthorize("hasAuthority('report:photo:write')") @Transactional
     public Map<String,Object> deletePhoto(@PathVariable long id,Authentication a){
         Map<String,Object> p=one("SELECT p.*,b.status batch_status FROM erp_report_photo p JOIN erp_report_photo_batch b ON b.id=p.batch_id WHERE p.id=? FOR UPDATE",id);
         if(!"collecting".equals(p.get("batch_status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前批次已提交，照片不可删除");
-        jdbc.update("DELETE FROM erp_report_photo WHERE id=?",id);audit(actor(a),"report.photo.deleted","erp_report_photo",id,"batch="+p.get("batch_id"));
+        jdbc.update("DELETE FROM erp_report_photo WHERE id=?",id);
         return Map.of("success",true);
     }
     @PostMapping("/photo-batches/{id}/submit") @PreAuthorize("hasAuthority('report:photo:write')") @Transactional
@@ -206,7 +205,7 @@ public class ServiceWorkflowController {
         Integer ready=jdbc.queryForObject("SELECT COUNT(*) FROM erp_report_photo WHERE batch_id=? AND confirmation_status='confirmed' AND system_code IS NOT NULL AND taken_on IS NOT NULL",Integer.class,id);
         if(total==null||total==0||!total.equals(ready))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"所有照片必须完成系统分类、拍摄日期填写和人工确认后才能提交");
         jdbc.update("UPDATE erp_report_photo_batch SET status='submitted' WHERE id=?",id);
-        audit(actor(a),"report.photo_batch.submitted","erp_report_photo_batch",id,"photos="+total);
+        photoReviewEvent(actor(a),"report.photo_batch.submitted",id,"photos="+total);
         return batchDetail(id);
     }
     @PostMapping("/photo-batches/{id}/return") @PreAuthorize("hasAuthority('report:review') and hasAuthority('report:photo:read')") @Transactional
@@ -216,7 +215,7 @@ public class ServiceWorkflowController {
         requirePhotoReviewer(batch,actor(a));
         String reason=req(request,"reason");if(reason.length()>1000)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"退回原因过长");
         jdbc.update("UPDATE erp_report_photo_batch SET status='collecting',reviewed_by=NULL,reviewed_at=NULL WHERE id=?",id);
-        audit(actor(a),"report.photo_batch.returned","erp_report_photo_batch",id,reason);
+        photoReviewEvent(actor(a),"report.photo_batch.returned",id,reason);
         return batchDetail(id);
     }
     private void requirePhotoReviewer(Map<String,Object> b,long identity){
@@ -230,7 +229,7 @@ public class ServiceWorkflowController {
         if(!"submitted".equals(b.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"只有已提交的照片批次可以审核");
         requirePhotoReviewer(b,actor(a));
         jdbc.update("UPDATE erp_report_photo_batch SET status='reviewed',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP(3) WHERE id=?",actor(a),id);
-        audit(actor(a),"report.photo_batch.reviewed","erp_report_photo_batch",id,"reviewed");
+        photoReviewEvent(actor(a),"report.photo_batch.reviewed",id,"reviewed");
         return batchDetail(id);
     }
 
@@ -393,7 +392,7 @@ public class ServiceWorkflowController {
         long artifactId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         if(jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment WHERE report_id=? AND version_no=? AND file_id=?",Integer.class,id,version,fileId)==0)
             jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
-        audit(actor(a),"report.docx.registered","erp_service_report",id,"version="+version+",artifact="+artifactId);
+        
         return Map.of("reportId",id,"versionNo",version,"artifactId",artifactId,"fileId",fileId,"filename",f.get("original_name"));
     }
     @PostMapping("/reports/{id}/generate-docx") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read') and hasAuthority('file:upload')") @Transactional(rollbackFor=Exception.class)
@@ -496,7 +495,7 @@ public class ServiceWorkflowController {
             jdbc.update("INSERT INTO erp_service_report_artifact(report_id,version_no,file_id,artifact_type,artifact_revision_no,sha256,created_by,generation_manifest) VALUES(?,?,?,'docx',?,?,?,?)",id,version,fileId,artifactRevision,stored.sha256(),actor(a),json(manifest));
             jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
             for(Long batchId:batchIds)jdbc.update("UPDATE erp_report_photo_batch SET report_id=?,status='locked',locked_at=CURRENT_TIMESTAMP(3) WHERE id=?",id,batchId);
-            audit(actor(a),"report.docx.generated","erp_service_report",id,"version="+version+",photos="+photos.size());
+            
             Map<String,Object> result=new LinkedHashMap<>();result.put("reportId",id);result.put("versionNo",version);result.put("artifactRevisionNo",artifactRevision);result.put("fileId",fileId);result.put("filename",filename);result.put("sha256",stored.sha256());result.put("photoCount",photos.size());result.put("photoMode",photoMode);result.put("bodyFilled",fillBody);result.put("fileBytes",stored.size());result.put("sourcePhotoBytes",totalPhotoBytes);result.put("embeddedPhotoBytes",embeddedBytes);result.put("lowDpiCount",photoEvidence.stream().filter(p->((Number)p.get("effectiveDpi")).intValue()<200).count());return result;
         } catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }
@@ -522,7 +521,7 @@ public class ServiceWorkflowController {
             id,version,artifact,method,req(b,"recipientName"),b.get("recipientPhone"),b.get("recipientOrganization"),req(b,"recipientAddress"),b.get("courierName"),b.get("trackingNo"),b.get("notes"),actor(a));
         long deliveryId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         eventDelivery(deliveryId,null,"prepared",actor(a),"创建交付登记");
-        audit(actor(a),"report.delivery.created","erp_service_delivery",deliveryId,method);
+        
         return one("SELECT * FROM erp_service_delivery WHERE id=?",deliveryId);
     }
     @PostMapping("/deliveries/{id}/status") @PreAuthorize("hasAuthority('delivery:write')") @Transactional
@@ -541,7 +540,7 @@ public class ServiceWorkflowController {
         else if("delivered".equals(next))jdbc.update("UPDATE erp_service_delivery SET status=?,delivered_at=CURRENT_TIMESTAMP(3) WHERE id=?",next,id);
         else jdbc.update("UPDATE erp_service_delivery SET status=? WHERE id=?",next,id);
         eventDelivery(id,old,next,actor(a),Objects.toString(b.get("notes"),""));
-        audit(actor(a),"report.delivery."+next,"erp_service_delivery",id,next);
+        
         return one("SELECT * FROM erp_service_delivery WHERE id=?",id);
     }
 }

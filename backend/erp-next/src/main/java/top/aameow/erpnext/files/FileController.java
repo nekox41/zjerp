@@ -80,8 +80,6 @@ public class FileController {
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",
                 stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
             long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-            jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('name',?,'size',?,'sha256',?))",
-                actor(a),"file.uploaded","erp_file_object",Long.toString(id),UUID.randomUUID().toString(),stored.originalName(),stored.size(),stored.sha256());
             Map<String,Object> result=one(id);result.remove("storage_key");return result;
         }catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }

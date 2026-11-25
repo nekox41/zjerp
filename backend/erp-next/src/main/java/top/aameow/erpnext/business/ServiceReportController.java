@@ -30,7 +30,6 @@ public class ServiceReportController {
     private Map<String,Object> content(long id,Map<String,Object> report){return one("SELECT * FROM erp_service_report_version WHERE report_id=? AND version_no=?",id,report.get("current_version_no"));}
     private void event(long id,String from,String to,long who,String reason){
         jdbc.update("INSERT INTO erp_service_report_event(report_id,from_status,to_status,actor_identity_id,reason) VALUES(?,?,?,?,?)",id,from,to,who,reason);
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('from',?,'to',?,'reason',?))",who,"report.status."+to,"erp_service_report",Long.toString(id),UUID.randomUUID().toString(),from,to,reason);
     }
     private void assertDraft(Map<String,Object> r){
         String s=r.get("status").toString();
@@ -156,7 +155,6 @@ public class ServiceReportController {
         jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) SELECT a.report_id,?,a.file_id,? FROM erp_service_report_attachment a WHERE a.report_id=? AND a.version_no=? AND NOT EXISTS(SELECT 1 FROM erp_service_report_artifact x WHERE x.report_id=a.report_id AND x.file_id=a.file_id)",next,actor(a),id,old);
         if(Set.of("returned","withdrawn").contains(r.get("status"))){jdbc.update("UPDATE erp_service_report SET status='draft',current_version_no=?,return_reason=NULL,reviewer_id=NULL WHERE id=?",next,id);event(id,r.get("status").toString(),"draft",actor(a),"重新编制报告");}
         else jdbc.update("UPDATE erp_service_report SET current_version_no=? WHERE id=?",next,id);
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('version',?))",actor(a),"report.version.updated","erp_service_report",Long.toString(id),UUID.randomUUID().toString(),next);
         return detail(id);
     }
     @PostMapping("/reports/{id}/attachments") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')") @Transactional
@@ -166,7 +164,6 @@ public class ServiceReportController {
         if(!(f.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能关联自己上传的文件");
         int v=((Number)r.get("current_version_no")).intValue();
         jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,v,fileId,actor(a));
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('fileId',?))",actor(a),"report.attachment.added","erp_service_report",Long.toString(id),UUID.randomUUID().toString(),fileId);
         return detail(id);
     }
     @PostMapping("/reports/{id}/submit") @PreAuthorize("hasAuthority('report:write') and hasAuthority('report:read')") @Transactional

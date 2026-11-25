@@ -26,9 +26,6 @@ public class ServiceDeliveryController {
     private Map<String,Object> one(String sql,Object...args) {
         List<Map<String,Object>> rows=jdbc.queryForList(sql,args); if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"记录不存在"); return rows.get(0);
     }
-    private void audit(Authentication a,String action,String type,long id,String summary) {
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('summary',?))",actor(a),action,type,Long.toString(id),UUID.randomUUID().toString(),summary);
-    }
 
     @GetMapping("/employees/{id}/qualifications") @PreAuthorize("hasAuthority('employee:read')")
     public List<Map<String,Object>> qualifications(@PathVariable long id) {
@@ -51,14 +48,14 @@ public class ServiceDeliveryController {
         validateQualification(b);
         jdbc.update("UPDATE erp_employee_qualification SET qualification_name=?,certificate_no=?,issuing_authority=?,issued_on=?,expires_on=?,notes=?,status=? WHERE id=? AND employee_id=?",
             req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),qualificationDate(b.get("issuedOn")),qualificationDate(b.get("expiresOn")),b.get("notes"),val(b,"status","valid"),qid,id);
-        audit(a,"employee.qualification.updated","erp_employee_qualification",qid,"资质资料及状态更正");
+        
         return one("SELECT * FROM erp_employee_qualification WHERE id=?",qid);
     }
     @PostMapping("/employees/{id}/qualifications") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> addQualification(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_employee WHERE id=?",id);validateQualification(b);
         jdbc.update("INSERT INTO erp_employee_qualification(employee_id,qualification_name,certificate_no,issuing_authority,issued_on,expires_on,notes,status) VALUES(?,?,?,?,?,?,?,?)",id,req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),qualificationDate(b.get("issuedOn")),qualificationDate(b.get("expiresOn")),b.get("notes"),val(b,"status","valid"));
-        long qid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"employee.qualification.created","erp_employee_qualification",qid,req(b,"qualificationName"));
+        long qid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT * FROM erp_employee_qualification WHERE id=?",qid);
     }
     @GetMapping("/qualifications/expiring") @PreAuthorize("hasAuthority('employee:read')")
@@ -75,7 +72,7 @@ public class ServiceDeliveryController {
         if(revised.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"变更金额不能为负数");
         String no=req(b,"amendmentNo"),title=req(b,"title"),summary=req(b,"changeSummary");
         jdbc.update("INSERT INTO erp_contract_amendment(contract_id,amendment_no,title,change_summary,previous_amount,revised_amount,effective_on,created_by) VALUES(?,?,?,?,?,?,?,?)",id,no,title,summary,previous,revised,b.get("effectiveOn"),actor(a));
-        long aid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"contract.amendment.created","erp_contract_amendment",aid,no);
+        long aid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT * FROM erp_contract_amendment WHERE id=?",aid);
     }
     @GetMapping("/contracts/{id}/amendments") @PreAuthorize("hasAuthority('contract:read')")
@@ -90,7 +87,7 @@ public class ServiceDeliveryController {
         if(!Set.of("active","completed").contains(current.get("status").toString()) || ((BigDecimal)current.get("amount")).compareTo((BigDecimal)x.get("previous_amount"))!=0) throw new ResponseStatusException(HttpStatus.CONFLICT,"合同已变化，请重新登记变更");
         jdbc.update("UPDATE erp_contract_amendment SET status='approved' WHERE id=?",id);
         jdbc.update("UPDATE erp_contract SET amount=? WHERE id=?",x.get("revised_amount"),x.get("contract_id"));
-        audit(a,"contract.amendment.approved","erp_contract_amendment",id,x.get("amendment_no").toString());
+        
         return one("SELECT * FROM erp_contract_amendment WHERE id=?",id);
     }
 
@@ -105,7 +102,7 @@ public class ServiceDeliveryController {
         String title=req(b,"title"),severity=val(b,"severity","medium");
         if(!Set.of("low","medium","high","critical").contains(severity)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效严重级别");
         jdbc.update("INSERT INTO erp_project_issue(project_id,title,description,severity,owner_employee_id,due_on) VALUES(?,?,?,?,?,?)",id,title,b.get("description"),severity,owner,b.get("dueOn"));
-        long issueId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"project.issue.created","erp_project_issue",issueId,title);
+        long issueId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT * FROM erp_project_issue WHERE id=?",issueId);
     }
     @PutMapping("/issues/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
@@ -114,7 +111,7 @@ public class ServiceDeliveryController {
         if(status!=null&&!Set.of("open","in_progress","resolved","closed").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效整改状态");
         if(status!=null&&Set.of("resolved","closed").contains(status)&&(b.get("resolution")==null||b.get("resolution").toString().isBlank())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"关闭整改项必须填写处理结果");
         jdbc.update("UPDATE erp_project_issue SET title=COALESCE(?,title),description=COALESCE(?,description),severity=COALESCE(?,severity),owner_employee_id=COALESCE(?,owner_employee_id),due_on=COALESCE(?,due_on),status=COALESCE(?,status),resolution=COALESCE(?,resolution),closed_at=CASE WHEN COALESCE(?,status) IN ('resolved','closed') THEN COALESCE(closed_at,CURRENT_TIMESTAMP(3)) WHEN ? IS NOT NULL THEN NULL ELSE closed_at END WHERE id=?",b.get("title"),b.get("description"),b.get("severity"),opt(b,"ownerEmployeeId"),b.get("dueOn"),status,b.get("resolution"),status,status,id);
-        audit(a,"project.issue.updated","erp_project_issue",id,status); return one("SELECT * FROM erp_project_issue WHERE id=?",id);
+         return one("SELECT * FROM erp_project_issue WHERE id=?",id);
     }
 
     @GetMapping("/projects/{id}/work-packages") @PreAuthorize("hasAuthority('service:read')")
@@ -127,7 +124,7 @@ public class ServiceDeliveryController {
         one("SELECT id FROM erp_project WHERE id=?",id); Long assignee=opt(b,"assigneeEmployeeId"); if(assignee!=null) one("SELECT id FROM erp_employee WHERE id=?",assignee);
         String no=req(b,"packageNo"),title=req(b,"title");
         jdbc.update("INSERT INTO erp_service_work_package(project_id,package_no,title,description,assignee_employee_id,planned_start,planned_end) VALUES(?,?,?,?,?,?,?)",id,no,title,b.get("description"),assignee,b.get("plannedStart"),b.get("plannedEnd"));
-        long wid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"service.work_package.created","erp_service_work_package",wid,no+" "+title);
+        long wid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT * FROM erp_service_work_package WHERE id=?",wid);
     }
     @PutMapping("/work-packages/{id}") @PreAuthorize("hasAuthority('service:write')") @Transactional
@@ -137,7 +134,7 @@ public class ServiceDeliveryController {
         BigDecimal progress=b.get("progress")==null?null:new BigDecimal(b.get("progress").toString());
         if(progress!=null&&(progress.signum()<0||progress.compareTo(BigDecimal.valueOf(100))>0)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"进度必须在 0 到 100 之间");
         jdbc.update("UPDATE erp_service_work_package SET title=COALESCE(?,title),description=COALESCE(?,description),assignee_employee_id=COALESCE(?,assignee_employee_id),planned_start=COALESCE(?,planned_start),planned_end=COALESCE(?,planned_end),status=COALESCE(?,status),progress=COALESCE(?,progress) WHERE id=?",b.get("title"),b.get("description"),opt(b,"assigneeEmployeeId"),b.get("plannedStart"),b.get("plannedEnd"),status,progress,id);
-        audit(a,"service.work_package.updated","erp_service_work_package",id,status); return one("SELECT * FROM erp_service_work_package WHERE id=?",id);
+         return one("SELECT * FROM erp_service_work_package WHERE id=?",id);
     }
     @GetMapping("/work-packages/{id}/records") @PreAuthorize("hasAuthority('service:read')")
     public List<Map<String,Object>> records(@PathVariable long id) {
@@ -148,7 +145,7 @@ public class ServiceDeliveryController {
     public Map<String,Object> addRecord(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_service_work_package WHERE id=?",id); String title=req(b,"title"),content=req(b,"content");
         jdbc.update("INSERT INTO erp_service_record(work_package_id,record_type,title,content,performed_on,recorded_by) VALUES(?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP(3)),?)",id,val(b,"recordType","field"),title,content,b.get("performedOn"),actor(a));
-        long rid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); audit(a,"service.record.created","erp_service_record",rid,title);
+        long rid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
         return one("SELECT * FROM erp_service_record WHERE id=?",rid);
     }
 }
