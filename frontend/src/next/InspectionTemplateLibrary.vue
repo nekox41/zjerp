@@ -1,5 +1,6 @@
 <script setup>
 import FormDialog from './FormDialog.vue'
+import FileDropzone from './FileDropzone.vue'
 import {computed,onMounted,ref,nextTick} from 'vue'
 import {api,downloadFile} from './api'
 import StructuredInspectionEditor from './StructuredInspectionEditor.vue'
@@ -26,7 +27,7 @@ function removeStandard(id){form.value.standardIds=form.value.standardIds.filter
 const systems=computed(()=>[...new Set(['火灾自动报警系统','消防给水系统','消火栓系统','自动喷水灭火系统','防烟排烟系统','消防应急照明和疏散指示系统','防火分隔设施','电气火灾监控系统','消防电源监控系统','火灾警报和消防应急广播系统','消防专用电话系统','消防电梯','消防供配电设施','建筑灭火器',...rows.value.map(x=>x.system_name).filter(Boolean)])])
 const filtered=computed(()=>rows.value.filter(x=>(x.template_name+' '+x.system_name+' '+x.original_name).includes(query.value.trim())))
 async function load(){try{rows.value=await api('/inspection-templates?includeInactive=true')}catch(e){error.value=e.message}}
-function choose(e){file.value=e.target.files?.[0]||null;form.value.cleanConfirmed=false}
+function choose(files){file.value=files[0]||null;form.value.cleanConfirmed=false}
 async function save(){
  if(!file.value||!form.value.cleanConfirmed||busy.value)return
  busy.value=true;error.value='';notice.value=''
@@ -75,7 +76,7 @@ onMounted(async()=>{await load();if(can('report:read'))await searchStandards()})
 <label>模板类型<select v-model="form.kind"><option value="base">基础报告</option><option value="system">系统章节</option></select></label>
 <label v-if="form.kind==='system'">消防系统（可新增）<input v-model="form.system" list="tpl-system-list" required maxlength="80"><datalist id="tpl-system-list"><option v-for="s in systems" :key="s" :value="s"/></datalist></label>
 <label>模板名称<input v-model="form.name" required maxlength="150" placeholder="例如：2026 版标准检测表"></label>
-<label>Word 文件<input type="file" accept=".docx" @change="choose" :disabled="busy"></label>
+<FileDropzone class="wide" label="Word 文件" :model-value="file?[file]:[]" accept=".docx" hint="DOCX · 单文件最大 100 MB" :max-bytes="100*1024*1024" :disabled="busy" @update:model-value="choose"/>
 <label class="wide">版本备注<textarea v-model="form.notes" maxlength="1000" rows="2"></textarea></label>
 </div>
 <div v-show="step===1" data-wizard-step="1" class="wizard-fields">

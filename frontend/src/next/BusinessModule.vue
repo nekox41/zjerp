@@ -1,5 +1,6 @@
 <script setup>
 import FormDialog from './FormDialog.vue'
+import FileDropzone from './FileDropzone.vue'
 import EmployeeDirectory from './EmployeeDirectory.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { api, downloadFile } from './api'
@@ -13,7 +14,7 @@ const section = ref(props.destination?.section||'customers')
 const serviceType=computed(()=>props.destination?.serviceType||'other')
 const typeTitles={maintenance:'维保项目',fire_inspection:'检测项目',fire_assessment:'评定项目',fire_evaluation:'评估项目',other:'其他技术服务'}
 const contractFile=ref(null), uploadedFileId=ref(null), fileKey=ref(0)
-function chooseContractFile(event){contractFile.value=event.target.files?.[0]||null;uploadedFileId.value=null}
+function chooseContractFile(files){contractFile.value=files[0]||null;uploadedFileId.value=null}
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -332,7 +333,7 @@ onMounted(async ()=>{
 <div v-show="step===2" data-wizard-step="2" class="wizard-fields">
 <label>负责人<select v-model="forms.contract.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label>
 <label v-if="can('project:read')">对应项目<select v-model="forms.contract.value.existingProjectId"><option value="">自动创建新项目</option><option v-for="p in projects.filter(p=>String(p.customer_id)===String(forms.contract.value.customerId)&&p.service_type===forms.contract.value.serviceType)" :key="p.id" :value="p.id">{{p.name}} · {{p.project_no}}</option></select></label>
-<label v-if="can('file:upload')">合同原件<input :key="fileKey" type="file" accept=".pdf,.doc,.docx" @change="chooseContractFile"></label>
+<FileDropzone v-if="can('file:upload')" class="wide" :key="fileKey" label="合同原件" :model-value="contractFile?[contractFile]:[]" accept=".pdf,.doc,.docx" hint="PDF / DOC / DOCX · DOCX 最大100 MB，其余25 MB" :max-bytes="100*1024*1024" :file-limit="file=>file.name.toLowerCase().endsWith('.docx')?100*1024*1024:25*1024*1024" :disabled="busy" @update:model-value="chooseContractFile"/>
 <p class="muted">默认按合同名称、服务类型及日期自动创建项目；已有项目可直接关联，维保年度续签请从原项目办理。</p>
 <button class="primary-button" :disabled="busy">{{busy?'正在保存…':'保存合同并建立项目'}}</button>
 </div>

@@ -5,6 +5,7 @@ const emit=defineEmits(['close'])
 const dialog=ref(null),panel=ref(null),closing=ref(false)
 let previous,timer
 const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches
+// Handle only the dialog's own cancel event (Escape), not a file input's bubbling cancel.
 function close(){
  if(props.busy||closing.value)return
  if(reduced()){emit('close');return}
@@ -26,7 +27,7 @@ onBeforeUnmount(()=>{clearTimeout(timer);if(dialog.value?.open)dialog.value.clos
 </script>
 <template>
  <Teleport to="body">
-  <dialog ref="dialog" class="erp-dialog" :class="{wide,closing}" :aria-label="title" @cancel.prevent="close" @click.self="close">
+  <dialog ref="dialog" class="erp-dialog" :class="{wide,closing}" :aria-label="title" @cancel.self.prevent="close" @click.self="close">
    <div class="erp-dialog-layout" @click.self="close">
     <section ref="panel" class="erp-dialog-panel">
      <header class="erp-dialog-header"><div><h2>{{title}}</h2><p v-if="description">{{description}}</p></div><button type="button" class="erp-dialog-close" aria-label="关闭" :disabled="busy" @click="close">×</button></header>

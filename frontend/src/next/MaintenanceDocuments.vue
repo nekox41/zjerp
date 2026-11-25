@@ -1,5 +1,6 @@
 <script setup>
 import FormDialog from './FormDialog.vue'
+import FileDropzone from './FileDropzone.vue'
 import { computed, onMounted, onBeforeUnmount, ref, nextTick } from 'vue'
 import { api, fetchPdf, downloadFile } from './api'
 import { systemOptions } from '../utils/wbcard'
@@ -94,7 +95,7 @@ async function download(id,name){await run(()=>downloadFile(id,name))}
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
 <label>资料名称<input v-model="material.name" maxlength="200" required></label>
 <label>备注<input v-model="material.notes" maxlength="2000"></label>
-<label v-if="!material.id">PDF 原件<input type="file" accept="application/pdf,.pdf" required @change="materialFile=$event.target.files?.[0]"></label>
+<FileDropzone v-if="!material.id" class="wide" label="PDF 原件" :model-value="materialFile?[materialFile]:[]" accept="application/pdf,.pdf" hint="PDF · 单文件最大 25 MB" :disabled="busy" @update:model-value="files=>materialFile=files[0]||null"/>
 <label v-else><input v-model="material.active" type="checkbox">启用</label>
 <div class="md-actions"><button class="primary-button" :disabled="busy">{{material.id?'保存资料信息':'上传并登记资料'}}</button><button type="button" class="secondary-button" @click="resetMaterial">清空</button></div>
 </div>

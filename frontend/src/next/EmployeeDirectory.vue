@@ -3,6 +3,7 @@ import {computed,onMounted,ref} from 'vue'
 import {api,downloadEmployeeDocument} from './api'
 import FormDialog from './FormDialog.vue'
 import ModalDialog from './ModalDialog.vue'
+import FileDropzone from './FileDropzone.vue'
 const props=defineProps({permissions:{type:Array,default:()=>[]},destination:Object})
 const canEdit=computed(()=>props.permissions.includes('employee:write'))
 const rows=ref([]),q=ref(''),type=ref(''),loading=ref(false),busy=ref(false),error=ref(''),notice=ref('')
@@ -26,11 +27,6 @@ function edit(record=null){
 }
 function close(){if(!busy.value){editor.value=null;form.value=blank()}}
 function addExtra(){if(form.value.extraFields.length<50)form.value.extraFields.push({key:'',value:''})}
-function selectFiles(e,key){
- const incoming=Array.from(e.target.files||[])
- form.value[key].push(...incoming)
- e.target.value=''
-}
 function existing(kind){return form.value.documents.filter(d=>d.document_type===kind)}
 function removeExisting(id){form.value.documents=form.value.documents.filter(d=>d.id!==id)}
 async function save(){
@@ -100,9 +96,8 @@ onMounted(async()=>{await load();if(props.destination?.id)await show(props.desti
  <div v-show="step===1" class="wizard-fields" data-wizard-step="1">
   <label class="wide">证书编号<input v-model.trim="form.certificateNo" maxlength="120"></label>
   <section v-for="[kind,key,title] in [['certificate','certificateFiles','证书附件'],['identity','identityFiles','身份证附件']]" :key="kind" class="employee-upload">
-   <label>{{title}}<input type="file" accept="application/pdf,image/jpeg,image/png" multiple @change="selectFiles($event,key)"></label>
+   <FileDropzone v-model="form[key]" :label="title" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hint="PDF / JPG / PNG · 单文件最大 25 MB" multiple :max-files="10" :existing-count="existing(kind).length" :disabled="busy"/>
    <div v-for="doc in existing(kind)" :key="doc.id" class="employee-document"><span>{{doc.original_name}}</span><button type="button" class="secondary-button" @click="removeExisting(doc.id)">移除</button></div>
-   <div v-for="(file,i) in form[key]" :key="i" class="employee-document"><span>{{file.name}} · 待上传</span><button type="button" class="secondary-button" @click="form[key].splice(i,1)">移除</button></div>
   </section><p class="muted">支持 PDF、JPG、PNG，单文件最大 25 MB；可上传身份证正反面及多个证书文件。</p>
  </div>
  <div v-show="step===2" class="wizard-fields" data-wizard-step="2">
