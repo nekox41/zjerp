@@ -1,5 +1,6 @@
 <script setup>
 import FormDialog from './FormDialog.vue'
+import ModalDialog from './ModalDialog.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { api, downloadFile } from './api'
 import CustomerHistory from './CustomerHistory.vue'
@@ -28,6 +29,10 @@ async function saveQualification(){
  try{const q=qualificationEdit.value;await api('/business/employees/'+selectedEmployee.value.id+'/qualifications/'+q.id,{method:'PUT',body:JSON.stringify(q)});qualificationEdit.value=null;await openEmployee(selectedEmployee.value.id);await load()}catch(e){error.value=e.message}
 }
 const selectedEmployee = ref(null)
+const employeeDetailOpen=ref(false)
+const employeeTypes={general:'普通员工',operator:'操作员',engineer:'工程师',manager:'管理人员'}
+const employeeFields=computed(()=>{const r=selectedEmployee.value||{};return [['员工编号',r.employee_code],['姓名',r.full_name],['员工类型',employeeTypes[r.employee_type]||r.employee_type],['岗位',r.position_name],['电话',r.phone||'—'],['邮箱',r.email||'—'],['所属组织',r.organization_name||'—'],['关联登录账号',identities.value.find(x=>String(x.id)===String(r.identity_id))?.username||(r.identity_id?'已关联':'未关联')],['状态',r.status==='active'?'在职':'离职 / 停用'],['创建时间',r.created_at],['最后更新',r.updated_at]]})
+async function showEmployee(id){error.value='';await openEmployee(id);if(!error.value&&selectedEmployee.value)employeeDetailOpen.value=true}
 const customers = ref([])
 const contracts = ref([])
 const projects = ref([])
@@ -114,6 +119,7 @@ async function submit(kind) {
     if(!endpoint) throw new Error('请先选择对应的客户、员工或合同记录')
     const required={employee:'employee:write',customer:'customer:write',contact:'customer:write',contract:'contract:write',amendment:'contract:write',project:'project:write',qualification:'employee:write'}[kind]
     if(!required||!can(required))throw new Error('当前账号没有此项修改权限')
+    if(kind==='project'&&section.value!=='projects')throw new Error('请在对应项目页面新建项目')
     if(kind==='project')data.serviceType=serviceType.value
     if(kind==='contract'){
       data.createProject=true
@@ -170,7 +176,7 @@ const projectEditForm=ref({name:'',description:'',managerEmployeeId:'',plannedSt
 async function openEmployee(id) {
   try {
     qualificationEdit.value=null
-    selectedEmployee.value=employees.value.find(x=>x.id===id)
+    selectedEmployee.value=employees.value.find(x=>String(x.id)===String(id))
     if(!selectedEmployee.value) throw new Error('员工记录不存在，请刷新列表')
     employeeEditForm.value={
       fullName:selectedEmployee.value.full_name||'',employeeType:selectedEmployee.value.employee_type||'general',
@@ -254,28 +260,15 @@ onMounted(async ()=>{
   if(section.value==='projects')await openProject(target.id)
   else if(section.value==='contracts')await openContract(target.id)
   else if(section.value==='customers')await openCustomer(target.id)
-  else if(section.value==='employees')await openEmployee(target.id)
+  else if(section.value==='employees')await showEmployee(target.id)
 })
 </script>
 
 <template>
 <section class="business-module">
   <p v-if="error" class="message error">{{error}}</p><p v-if="notice" class="message success">{{notice}}</p>
-  <div class="business-layout">
-    <div class="business-list panel">
-      <div class="business-list-head"><div><h3>{{section==='projects'?typeTitles[serviceType]:config[section]?.title||'业务管理'}}</h3><p>统一维护业务主数据与关联记录</p></div><input v-model="q" placeholder="搜索名称或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
-      <div class="business-records">
-        <button v-for="r in rows" :key="r.id" class="business-record" @click="section==='customers'?openCustomer(r.id):section==='projects'?openProject(r.id):section==='contracts'?openContract(r.id):section==='employees'?openEmployee(r.id):null">
-          <b>{{r.name||r.full_name||r.title}}</b><small>{{r.customer_code||r.employee_code||r.contract_no||r.project_no||r.status||r.position_name}}</small>
-          <span>{{r.customer_name||r.organization_name||r.owner_name||''}}</span>
-          <small v-if="section==='contracts'&&r.days_until_expiry!=null&&r.days_until_expiry<=30" :style="{color:r.days_until_expiry<0?'#b42318':'#916118'}">{{r.days_until_expiry<0?'已到期 '+Math.abs(r.days_until_expiry)+' 天':r.days_until_expiry===0?'今日到期':'距到期 '+r.days_until_expiry+' 天'}}</small>
-        </button>
-        <p v-if="!rows.length" class="empty">暂无记录，使用下方表单创建第一条数据。</p>
-      </div>
-    </div>
-    <div class="business-forms panel">
-      <template v-if="section==='employees'">
-        <h3 v-if="can('employee:write')">新增员工档案</h3><FormDialog v-if="can('employee:write')" title="新建员工" :steps="['基本档案','联系方式与账号']" :busy="busy" :error="error" @clear-error="error=''">
+  <section v-if="section==='employees'" class="panel employee-page">
+ <div class="employee-toolbar"><div><h3>员工列表 <span>{{rows.length}} 人</span></h3><p>维护员工基本资料、关联账号及专业资质。</p></div><div class="employee-actions"><input v-model="q" aria-label="搜索员工" placeholder="搜索姓名或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button><FormDialog v-if="can('employee:write')" title="新建员工" :steps="['基本档案','联系方式与账号']" :busy="busy" :error="error" @clear-error="error=''">
 <template #default="{step,finish}"><form class="create-grid" @submit.prevent="finish(()=>submit('employee'))">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
 <label>员工编号<input v-model="forms.employee.value.employeeCode"></label>
@@ -289,10 +282,10 @@ onMounted(async ()=>{
 <label v-if="can('identity:write')">关联登录账号<select v-model="forms.employee.value.identityId"><option value="">暂不关联</option><option v-for="x in identities" :value="x.id">{{x.username}} · {{x.display_name}}</option></select></label>
 <button class="primary-button">创建员工</button>
 </div>
-</form></template></FormDialog>
-      </template>
-        <div v-if="selectedEmployee" class="related-card">
-          <div class="section-heading"><h4>{{selectedEmployee.full_name}} · 员工档案</h4><button v-if="can('employee:write')" class="secondary-button" @click="employeeEditOpen=!employeeEditOpen">{{employeeEditOpen?'收起编辑':'编辑档案'}}</button></div>
+</form></template></FormDialog></div></div>
+ <div class="table-wrap"><table class="employee-table"><thead><tr><th>员工编号</th><th>姓名</th><th>员工类型</th><th>岗位</th><th>联系电话</th><th>邮箱</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="r in rows" :key="r.id"><td>{{r.employee_code||'—'}}</td><td><div class="employee-name"><span class="employee-avatar">{{(r.full_name||'?').slice(0,1)}}</span><b>{{r.full_name}}</b></div></td><td>{{employeeTypes[r.employee_type]||r.employee_type||'—'}}</td><td>{{r.position_name||'—'}}</td><td>{{r.phone||'—'}}</td><td>{{r.email||'—'}}</td><td><span class="employee-status" :class="{inactive:r.status!=='active'}">{{r.status==='active'?'在职':'离职 / 停用'}}</span></td><td><button class="secondary-button" @click="showEmployee(r.id)">查看详情</button></td></tr></tbody></table><div v-if="!rows.length" class="employee-empty"><b>暂无员工记录</b><p>点击右上角「新建员工」添加第一份档案。</p></div></div>
+ <ModalDialog v-if="employeeDetailOpen&&selectedEmployee" :title="selectedEmployee.full_name+' · 员工档案'" description="完整员工资料与资质证书" wide :busy="busy" @close="employeeDetailOpen=false"><div class="employee-detail">
+          <div class="section-heading"><h4>基本资料</h4><button v-if="can('employee:write')" class="secondary-button" @click="employeeEditOpen=!employeeEditOpen">{{employeeEditOpen?'收起编辑':'编辑档案'}}</button></div>
           <FormDialog v-if="employeeEditOpen" title="编辑员工" :steps="['基本档案','联系方式与状态']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="employeeEditOpen=false">
 <template #default="{step,finish}"><form class="create-grid compact" @submit.prevent="finish(()=>saveEmployee())">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
@@ -308,7 +301,7 @@ onMounted(async ()=>{
 <button class="primary-button" :disabled="busy">保存员工档案</button>
 </div>
 </form></template></FormDialog>
-          <h4>资质证书</h4><p v-for="x in qualifications" :key="x.id" class="log-line">{{x.qualification_name}} · {{x.certificate_no||'无编号'}} · {{x.expires_on||'长期有效'}} · {{x.effective_status}} <button v-if="can('employee:write')" class="secondary-button" @click="editQualification(x)">更正资质</button></p><FormDialog v-if="qualificationEdit&&can('employee:write')" title="更正资质" :steps="['证书信息','有效期与状态']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="qualificationEdit=null">
+          <dl class="employee-fields"><div v-for="[label,value] in employeeFields" :key="label"><dt>{{label}}</dt><dd>{{value??'—'}}</dd></div></dl><h4>资质证书</h4><p v-if="!qualifications.length" class="empty">暂无资质记录</p><article v-for="x in qualifications" :key="x.id" class="employee-cert"><div class="section-heading"><b>{{x.qualification_name}}</b><button v-if="can('employee:write')" class="secondary-button" @click="editQualification(x)">更正资质</button></div><dl class="employee-fields"><div><dt>证书编号</dt><dd>{{x.certificate_no||'—'}}</dd></div><div><dt>发证机构</dt><dd>{{x.issuing_authority||'—'}}</dd></div><div><dt>发证日期</dt><dd>{{x.issued_on||'—'}}</dd></div><div><dt>有效期至</dt><dd>{{x.expires_on||'长期有效'}}</dd></div><div><dt>状态</dt><dd>{{({valid:'有效',expired:'失效',revoked:'撤销'})[x.effective_status||x.status]||x.effective_status||x.status}}</dd></div><div><dt>备注</dt><dd>{{x.notes||'—'}}</dd></div></dl></article><FormDialog v-if="qualificationEdit&&can('employee:write')" title="更正资质" :steps="['证书信息','有效期与状态']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="qualificationEdit=null">
 <template #default="{step,finish}"><form class="create-grid compact" @submit.prevent="finish(()=>saveQualification())">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
 <label>资质名称<input v-model="qualificationEdit.qualificationName" required></label>
@@ -335,8 +328,22 @@ onMounted(async ()=>{
 <label>有效期至<input v-model="forms.qualification.value.expiresOn" type="date"></label>
 <button class="primary-button">添加资质</button>
 </div>
-</form></template></FormDialog></div>
-      <template v-else-if="section==='customers'">
+</form></template></FormDialog></div></ModalDialog>
+</section>
+  <div v-else class="business-layout">
+    <div class="business-list panel">
+      <div class="business-list-head"><div><h3>{{section==='projects'?typeTitles[serviceType]:config[section]?.title||'业务管理'}}</h3><p>统一维护业务主数据与关联记录</p></div><input v-model="q" placeholder="搜索名称或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
+      <div class="business-records">
+        <button v-for="r in rows" :key="r.id" class="business-record" @click="section==='customers'?openCustomer(r.id):section==='projects'?openProject(r.id):section==='contracts'?openContract(r.id):section==='employees'?openEmployee(r.id):null">
+          <b>{{r.name||r.full_name||r.title}}</b><small>{{r.customer_code||r.employee_code||r.contract_no||r.project_no||r.status||r.position_name}}</small>
+          <span>{{r.customer_name||r.organization_name||r.owner_name||''}}</span>
+          <small v-if="section==='contracts'&&r.days_until_expiry!=null&&r.days_until_expiry<=30" :style="{color:r.days_until_expiry<0?'#b42318':'#916118'}">{{r.days_until_expiry<0?'已到期 '+Math.abs(r.days_until_expiry)+' 天':r.days_until_expiry===0?'今日到期':'距到期 '+r.days_until_expiry+' 天'}}</small>
+        </button>
+        <p v-if="!rows.length" class="empty">暂无记录，使用下方表单创建第一条数据。</p>
+      </div>
+    </div>
+    <div class="business-forms panel">
+      <template v-if="section==='customers'">
         <h3 v-if="can('customer:write')">新增甲方</h3><FormDialog v-if="can('customer:write')" title="新建甲方" :steps="['主体资料','联系与负责人']" :busy="busy" :error="error" @clear-error="error=''">
 <template #default="{step,finish}"><form class="create-grid" @submit.prevent="finish(()=>submit('customer'))">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
@@ -470,7 +477,7 @@ onMounted(async ()=>{
 </div>
 </form></template></FormDialog></div>
       </template>
-      <template v-else>
+      <template v-else-if="section==='projects'">
         <h3 v-if="can('project:write')">新增项目</h3>
         <FormDialog v-if="can('project:write')" title="新建项目" :steps="['项目基本信息','人员与计划日期']" :busy="busy" :error="error" @clear-error="error=''">
 <template #default="{step,finish}"><form class="create-grid" @submit.prevent="finish(()=>submit('project'))">
@@ -527,3 +534,13 @@ onMounted(async ()=>{
   </div>
 </section>
 </template>
+
+<style scoped>
+.employee-page{min-height:calc(100dvh - 142px);padding:24px;display:flex;flex-direction:column;gap:22px}
+.employee-toolbar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.employee-toolbar h3{font-size:19px;margin:0 0 6px}.employee-toolbar p{font-size:12px;color:var(--erp-muted);margin:0}
+.employee-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.employee-actions input{border:1px solid var(--erp-border);padding:11px 13px;border-radius:10px;min-width:210px}.employee-actions :deep(.wizard-trigger){margin:0}
+.employee-table th,.employee-table td{padding:16px 12px;text-align:left}.employee-table tbody tr{transition:background .18s}.employee-table tbody tr:hover{background:var(--erp-subtle)}.employee-name{display:flex;align-items:center;gap:10px}.employee-avatar{width:34px;height:34px;display:grid;place-items:center;background:var(--erp-accent-soft);color:var(--erp-accent);border-radius:12px;font-weight:700}
+.employee-status{color:var(--erp-accent);font-size:12px}.employee-status.inactive{color:var(--erp-muted)}.employee-empty{text-align:center;padding:70px 12px;color:var(--erp-muted)}.employee-empty p{font-size:13px}
+.employee-detail{padding:20px 26px}.employee-detail .section-heading{margin:0 0 12px}.employee-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0 0 24px}.employee-fields dt{color:var(--erp-muted);font-size:12px;margin-bottom:5px}.employee-fields dd{margin:0;overflow-wrap:anywhere;font-size:14px}.employee-cert{padding:15px;border:1px solid var(--erp-border);border-radius:14px;margin:0 0 12px}.employee-cert .employee-fields{margin-bottom:0}.employee-detail h4{margin:14px 0}
+@media(max-width:700px){.employee-page{padding:16px;min-height:65dvh}.employee-fields{grid-template-columns:1fr}.employee-actions input{min-width:120px;max-width:100%}}
+</style>
