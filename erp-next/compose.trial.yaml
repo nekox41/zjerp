@@ -1,6 +1,7 @@
-# Persistent local acceptance/trial only. Never use production data volumes.
+# Persistent ERP acceptance: either existing MySQL or a single managed MySQL.
 services:
   erp-next-mysql:
+    profiles: ["managed-db"]
     image: ${ERP_IMAGE_PREFIX:-}mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: ${ERP_NEXT_DB_ROOT_PASSWORD:?Set ERP_NEXT_DB_ROOT_PASSWORD}
@@ -20,9 +21,6 @@ services:
 
   erp-next-schema:
     image: ${ERP_IMAGE_PREFIX:-}flyway/flyway:10.20.1
-    depends_on:
-      erp-next-mysql:
-        condition: service_healthy
     environment:
       FLYWAY_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useSSL=false&allowPublicKeyRetrieval=true
       FLYWAY_USER: erp_next
@@ -52,10 +50,10 @@ services:
       ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
       ERP_FILES_ROOT: /var/lib/erp-next/files
       ERP_LEGACY_SCAN_ENABLED: "true"
-      ERP_LEGACY_DB_URL: ${ERP_LEGACY_EFFECTIVE_URL:-jdbc:mysql://legacy-mysql:3306/server_migration?useSSL=false&allowPublicKeyRetrieval=true}
-      ERP_LEGACY_DB_USER: ${ERP_LEGACY_EFFECTIVE_USER-legacy_readonly}
-      ERP_LEGACY_DB_PASSWORD: ${ERP_LEGACY_EFFECTIVE_PASSWORD-${ERP_LEGACY_DB_PASSWORD:?Set ERP_LEGACY_DB_PASSWORD}}
-      ERP_LEGACY_DB_SCHEMA: ${ERP_LEGACY_EFFECTIVE_SCHEMA:-server_migration}
+      ERP_LEGACY_DB_URL: jdbc:mysql://erp-next-mysql:3306/server?useSSL=false&allowPublicKeyRetrieval=true
+      ERP_LEGACY_DB_USER: erp_legacy_readonly
+      ERP_LEGACY_DB_PASSWORD: ${ERP_LEGACY_DB_PASSWORD:?Set ERP_LEGACY_DB_PASSWORD}
+      ERP_LEGACY_DB_SCHEMA: server
     ports:
       - "127.0.0.1:${ERP_NEXT_API_PORT:-8090}:8090"
     depends_on:
@@ -88,26 +86,9 @@ services:
     networks: [erp-next-internal, erp-next-published]
     restart: unless-stopped
 
-  legacy-mysql:
-    profiles: ["legacy"]
-    image: ${ERP_IMAGE_PREFIX:-}mysql:8.4
-    environment:
-      MYSQL_ROOT_PASSWORD: ${ERP_LEGACY_ROOT_PASSWORD:?Set ERP_LEGACY_ROOT_PASSWORD}
-      MYSQL_DATABASE: server_migration
-    volumes:
-      - trial_legacy:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -u root --silent"]
-      interval: 5s
-      timeout: 5s
-      retries: 40
-      start_period: 15s
-    networks: [erp-next-internal]
-    restart: unless-stopped
 
 volumes:
   trial_mysql: {}
-  trial_legacy: {}
 
 networks:
   erp-next-internal:

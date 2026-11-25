@@ -1,84 +1,39 @@
-# WSL2 一键测试、部署与旧数据迁移
+# WSL2 本地部署与迁移
 
-## 1. 环境
+在仓库根目录运行 `bash test.sh`（完整测试，日志 test-results/）或 `bash test.sh --smoke`。测试仍使用隔离临时 MySQL，不连接业务数据库。
 
-Ubuntu 22.04 / WSL2，Docker Engine 或 Docker Desktop WSL 集成，Compose v2。建议克隆到 ~/zjerp 而不是 /mnt/c。当前用户须能直接运行 docker info，不要 sudo 执行脚本。缺少基础工具时：
-
-```bash
-sudo apt update
-sudo apt install -y git python3 curl util-linux
-```
-
-## 2. 一键测试
-
-```bash
-bash test.sh
-```
-
-默认执行新版及旧版 Maven verify（容器内），前端生产构建、V1–V22 数据库迁移与 API Smoke（独立随机项目及卷），完整 stdout/stderr 写入 test-results/test-*.log。失败返回非零；发送该日志即可。可用 --static、--new-only、--smoke 缩小范围；本地集成测试由 Docker 分配两个临时回环端口，不占用已有 ERP 的 8089/8090。无需本机安装 Maven、JDK、Node 或 npm。
-
-## 3. 一键部署
+## 部署
 
 ```bash
 bash deploy.sh
 ```
 
-访问 http://localhost:8089/next.html，账号 trial-admin，初始密码使用 `cat ~/.local/share/zjerp-trial/admin-password` 在本机查看。勿把密码文件或 .env 发给他人。默认 API/Web 仅绑定回环；MySQL 不映射宿主机端口。状态目录可通过 ERP_TRIAL_DIR 指定（仓库外 Linux 文件系统），首次启动可通过 ERP_NEXT_WEB_PORT、ERP_NEXT_API_PORT 修改端口。以后同一状态目录会复用凭据、数据库卷和附件；stop 不删除数据，start 可继续运行。普通空库快速启动仍使用 start.sh，两者不能混用。默认仅启动新版 MySQL、API、Web；Flyway 仅初始化新版表结构。没有旧库时不创建或等待 legacy-mysql，也不导入或迁移业务数据。曾经显式建立的旧库副本可随服务恢复，但不作为新版健康检查的条件。
+首次部署识别旧版 Compose 项目 zjerp 的 mysql 服务；也可在首次部署前设置 `ERP_MYSQL_CONTAINER=实际容器名 bash deploy.sh`。无旧版容器则创建一个 MySQL 8.4。旧版 MySQL 8.0 不自动升级、不停止、不重建、不改旧账号密码。复用要求原容器运行、容器内 MYSQL_ROOT_PASSWORD 有效，专用用户名未冲突；脚本只初始化 erp_next 和专用最小范围账号。已绑定实例不自动切换；已有 erp_next 却没有本地标识时停止，请人工核对。之前版本建立过独立旧库容器时保留数据，需先备份并人工安排迁移。
 
-## 4. 导入旧数据副本（只在验收环境）
+打开 http://localhost:8089/next.html，用户名 trial-admin，初始密码文件 ~/.local/share/zjerp-trial/admin-password。状态目录可通过 ERP_TRIAL_DIR 指定，首次端口 ERP_NEXT_WEB_PORT / ERP_NEXT_API_PORT。stop 只停止新版服务及自管 MySQL，不停止共享实例。原 start.sh 快速启动是独立旧入口，不用于共享实例部署；不要同时占用端口。
 
-先在旧系统安全获取 SQL 备份及完整上传目录副本，保留原始备份。SQL 应为单 schema 导出，不含 CREATE DATABASE、USE server、账户授权等全局管理语句；不要把旧生产连接地址提供给本脚本。不自动改写 SQL，导入失败时需核对兼容性与部分导入状态。
+## 迁移
 
-```bash
-bash deploy.sh legacy-import /absolute/path/legacy.sql
-# 或使用隔离旧库的交互式 MySQL：
-bash deploy.sh legacy-shell
-# 复制旧版上传目录内容，保持相对路径
-cp -a /absolute/path/legacy-uploads/. ~/.local/share/zjerp-trial/legacy-files/
-```
-
-导入时才创建独立 legacy-mysql 的 server_migration，非空时拒绝重复导入。新版“数据迁移”页自动检查已配置来源，区分未配置、不可达、缺库、空库、不明结构和发现 ERP 表。只读账户仅 SELECT/SHOW VIEW。检查冲突后冻结旧库及附件副本，不再写入。
-
-如果已部署旧版，可选配置现有 server 的只读预检连接。将以下变量设置在验收状态目录的私有 .env（或启动命令环境）中，再运行 deploy.sh：
-```dotenv
-ERP_LEGACY_SOURCE_DB_URL='jdbc:mysql://可从容器访问的主机:3306/server'
-ERP_LEGACY_SOURCE_DB_USER='只读账户'
-ERP_LEGACY_SOURCE_DB_PASSWORD='实际只读密码'
-ERP_LEGACY_SOURCE_DB_SCHEMA='server'
-```
-使用真实、受控且可从 API 容器访问的地址，按环境配置 TLS；不要使用 root 或猜测旧版密码。只读预检不会执行归档迁移；实际迁移仍使用本地离线副本。取消以上可选配置并重新启动 API 可恢复检测本地 server_migration。无连接参数时不能判断任意其他 MySQL 是否有 server；不会扫描主机网络或读取旧配置中的凭据。
-
-## 5. 迁移
+打开数据迁移页自动检测同一 MySQL 的 server：不存在或空库可跳过。已有旧库只读扫描；迁移前停止旧应用写入、完整备份 SQL 和附件。对于全新自管实例，可使用单 schema SQL：
 
 ```bash
-bash deploy.sh archive
+bash deploy.sh legacy-import ~/legacy.sql
+cp -a ~/legacy-uploads/. ~/.local/share/zjerp-trial/legacy-files/
+```
+
+SQL 不含 CREATE DATABASE、账户授权或其他 schema 操作。共享旧版实例禁止 SQL 导入及 legacy-shell，避免覆盖真实 server。导入后页面重新检测。原始文件须人工复制，保留相对路径。
+
+```bash
+# 共享实例须确认旧应用已停止写入，附件已备份
+ERP_LEGACY_SOURCE_FROZEN=yes bash deploy.sh archive
 bash deploy.sh plan
-# 编辑 ~/.local/share/zjerp-trial/review.json，按 LEGACY_MIGRATION.md 逐项确认
+# 人工确认 review.json，参见 LEGACY_MIGRATION.md
 bash deploy.sh preview
-# 核查预演输出；apply 自动创建成对备份，替换为 preview 输出的完整 planSha256
-bash deploy.sh apply PLAN_SHA256
+bash deploy.sh apply 完整计划SHA256
 bash deploy.sh reconcile
 bash deploy.sh
 ```
 
-Python MySQL 驱动在专用容器内安装，宿主机不需要 pip。archive 与 plan 不覆盖旧档案；preview 自动停止新版 Web/API，事务回滚；apply 要求准确计划哈希及同一隔离目标凭据；reconcile 逐项验证映射和附件。迁移失败保留现状供核查，不自动删除、重置或重新启动业务。迁移工具不会自行推断甲方、合同归属、员工角色或签发状态。实际数据核对与备份恢复仍需人工完成。
+archive 使用专用只读账号和一致性事务；未映射的行保留在归档。apply 之前自动备份 erp_next 及私有附件，禁止自动改动 server。网页目前支持检测、扫描、冲突清单，不支持直接执行 SQL 或无审核一键转换。不能将不明确的甲方、合同归属、权限、签发状态自动猜测。共享实例的正式数据迁移需要维护窗口、备份恢复演练和授权。
 
-## 6. 反馈
-
-测试反馈发送 test-results/*.log；实际部署问题可用 bash deploy.sh status 或 bash deploy.sh logs（Ctrl+C 退出）。真实业务数据、日志、SQL、原件、.env、admin-password 均可能包含敏感信息，分享前脱敏。该环境专用于候选版验收，不视为正式生产迁移。禁止 docker compose down -v 或清理全部 Docker 卷。
-
-`bash deploy.sh backup` 可单独创建成对备份（停止 Web/API），`apply` 每次写入前亦自动创建。备份位于状态目录 backups/，只有 COMPLETE 标识存在且 SHA256SUMS 检查通过才视作完整备份；恢复仍需另行隔离演练。请勿将试迁移环境直接升格为正式生产。
-
-再次启动时会停止新版应用写入再运行 Flyway；若 Git 提交相较上次成功启动有变化，会先保存成对备份。请在仓库根目录执行所有命令。旧版 SQL 如含 `USE server` 或 `CREATE DATABASE`，请从离线备份重新导出单 schema SQL（`mysqldump ... server`，不要使用 `--databases`）；不要直接修改真实生产数据。
-
-## Docker Hub 拉取超时
-
-若日志在 Maven 容器启动前出现 registry-1.docker.io:443 i/o timeout、exit 125，属于 Docker 镜像网络故障，而不是 Java 测试失败。test.sh 与 deploy.sh 会先检查本地镜像，缺失时最多尝试两次拉取并明确报错，不自动修改 Docker daemon 或切换到陌生镜像站。已缓存镜像可复用。
-
-先单独运行 `docker pull maven:3.9.9-eclipse-temurin-17`。WSL 内运行 Docker Engine 时请按 https://docs.docker.com/engine/daemon/proxy/ 为 daemon 配置可达的 HTTP(S) 代理；使用 Docker Desktop 时在 Desktop 设置代理。Windows 代理需确认监听地址/端口与 WSL 网络模式，不要假定 127.0.0.1 可达。仅在终端 export HTTP_PROXY 不等于为 daemon 配置代理。重启 daemon 前检查其他容器。
-
-也可以显式设置 `ERP_IMAGE_PREFIX`（以 / 结尾、无 URL scheme）为你信任且具备全部原始仓库路径和标签的镜像仓库前缀；例如内部仓库的 `registry.example.com/mirror/` 下有 maven、eclipse-temurin、node、nginx、mysql、flyway/flyway、python 对应镜像。此为示例占位符，不是可用公共镜像地址。test.sh 与 deploy.sh、Compose 及 Dockerfile 共用该前缀；再次部署需使用同样设置。也可离线 docker save/load 原标签镜像。Maven/npm/apt/pip 的下载网络仍需分别可达。不会自动禁用 TLS 或使用不明第三方镜像。
-
-### 测试端口与依赖缓存
-
-本地 Smoke 使用独立随机 Compose 项目及 Docker 自动分配的两个回环端口，只有从该项目查询到的端口会传给所有 API 测试（含 Python 测试）。既有 ERP 可以保持运行。新版和旧版 Maven 容器使用专用 `zjerp-local-test-maven-repository` Docker 卷缓存依赖；不缓存项目构建产物，不使用部署数据库。首次仍需要下载依赖；后续执行 `bash test.sh --smoke` 可直接复测数据库和 API，不重复 Maven 单测（后端 Docker 构建仍会执行）。
+日志：bash deploy.sh status / logs；备份：bash deploy.sh backup（停止新版写入）；启动：bash deploy.sh。不要分享密码、SQL、业务附件或真实数据日志。Docker 网络超时时参见 Docker daemon 代理配置说明 https://docs.docker.com/engine/daemon/proxy/ ，可使用可信 ERP_IMAGE_PREFIX。 

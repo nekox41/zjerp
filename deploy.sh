@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Persistent WSL2 acceptance environment with isolated old DB and migration target.
+# Persistent WSL2 acceptance environment; reuse the existing ERP MySQL when available.
 set -Eeuo pipefail
 umask 077
 ROOT="$(cd -- "$(dirname -- "$0")" && pwd)"
@@ -8,11 +8,13 @@ action="${1:-start}"
 shift || true
 usage(){ cat <<'EOF'
 Usage: bash deploy.sh [start|status|logs|stop|legacy-import SQL|legacy-shell|archive|plan|preview|apply PLAN_SHA256|reconcile|backup]
-默认 start：仅初始化新版 ERP；没有旧库也可正常启动（不是正式生产）。
+默认 start：优先复用旧版 zjerp/mysql 容器；不存在时创建唯一 MySQL。
+ERP_MYSQL_CONTAINER 可显式指定已有 MySQL 容器（首次部署前）。
+已有数据库实例内仅初始化 erp_next；不会创建、导入或迁移 server。
 ERP_TRIAL_DIR 可指定独立状态目录；默认 ~/.local/share/zjerp-trial。
 首次启动前可设置 ERP_NEXT_WEB_PORT / ERP_NEXT_API_PORT（默认 8089/8090）。
-legacy-import SQL：按需创建隔离旧库，再导入单 schema SQL（不接受含 USE server 的整库脚本）。
-legacy-shell：手工操作隔离旧库（仅该 schema）。
+legacy-import SQL：在同一 MySQL 实例按需创建空 server 并导入（仅允许单 schema SQL）。
+legacy-shell：手工操作 server（仅在独立新建的实例允许）。
 archive：将旧库及状态目录 legacy-files 中的旧附件归档。
 plan：生成空白人工审核映射 review.json。
 preview：停止新版 Web/API 后演练，生成唯一凭据。
@@ -66,23 +68,104 @@ set -a; source "$STATE/.env"; set +a
 [[ "$TRIAL_ID" =~ ^[0-9a-f]{32}$ && "$ERP_TRIAL_FILES" == "$STATE/files" && "$ERP_TRIAL_UID" == "$(id -u)" && "$ERP_TRIAL_GID" == "$(id -g)" ]] || { echo "状态目录与创建者不一致"; exit 1; }
 for key in ERP_NEXT_DB_ROOT_PASSWORD ERP_NEXT_DB_PASSWORD ERP_BOOTSTRAP_TOKEN ERP_LEGACY_ROOT_PASSWORD ERP_LEGACY_DB_PASSWORD ERP_LEGACY_LOADER_PASSWORD; do [[ "${!key}" =~ ^[0-9a-f]{64}$ ]] || { echo "无效本地凭据 $key"; exit 1; }; done
 project="erp-next-trial-$TRIAL_ID"
-# Optional explicitly configured old server, for read-only inventory only.
-# The archive/import commands always use the separate local copy.
-unset ERP_LEGACY_EFFECTIVE_URL ERP_LEGACY_EFFECTIVE_USER ERP_LEGACY_EFFECTIVE_PASSWORD ERP_LEGACY_EFFECTIVE_SCHEMA
-if [[ -n "${ERP_LEGACY_SOURCE_DB_URL:-}" ]]; then
- export ERP_LEGACY_EFFECTIVE_URL="$ERP_LEGACY_SOURCE_DB_URL"
- export ERP_LEGACY_EFFECTIVE_USER="${ERP_LEGACY_SOURCE_DB_USER:-}"
- export ERP_LEGACY_EFFECTIVE_PASSWORD="${ERP_LEGACY_SOURCE_DB_PASSWORD:-}"
- export ERP_LEGACY_EFFECTIVE_SCHEMA="${ERP_LEGACY_SOURCE_DB_SCHEMA:-server}"
+# The binding is pinned to the state directory, not rediscovered on every restart.
+# No automatic switch between instances after data has been initialized.
+dc(){ docker compose -p "$project" --profile managed-db --env-file "$STATE/.env" -f "$ROOT/erp-next/compose.trial.yaml" "$@"; }
+binding="$STATE/mysql-binding"
+if [[ -f "$binding" ]]; then
+ [[ ! -L "$binding" ]] || { echo "无效数据库绑定"; exit 1; }
+ db_mode="$(sed -n '1p' "$binding")"; db_name="$(sed -n '2p' "$binding")"
+ if [[ -n "${ERP_MYSQL_CONTAINER:-}" && "$ERP_MYSQL_CONTAINER" != "$db_name" ]]; then echo "已绑定数据库，不允许自动切换"; exit 1; fi
+else
+ [[ "$action" == start ]] || { echo "先启动 ERP"; exit 1; }
+ # Previous versions may have created an isolated copy. Preserve it and require explicit backup.
+ if [[ -n "$(docker ps -aq --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=legacy-mysql")" ]]; then
+  echo "检测到旧脚本创建的独立旧库容器；请先备份其 SQL，再使用新的 ERP_TRIAL_DIR。原数据不会删除。" >&2
+  exit 1
+ fi
+ existing="$(dc ps -aq erp-next-mysql)"
+ if [[ -n "$existing" || -f "$STATE/files/.erp-next-trial.json" ]]; then
+  db_mode=managed; db_name=erp-next-mysql
+  [[ -z "${ERP_MYSQL_CONTAINER:-}" ]] || { echo "已有新版数据，不允许自动切换 MySQL"; exit 1; }
+ else
+  requested="${ERP_MYSQL_CONTAINER:-}"
+  if [[ -z "$requested" ]]; then
+   mapfile -t candidates < <(docker ps -a --filter 'label=com.docker.compose.project=zjerp' --filter 'label=com.docker.compose.service=mysql' --format '{{.Names}}')
+   if (("${#candidates[@]}" > 1)); then echo "发现多个旧版 MySQL，请设置 ERP_MYSQL_CONTAINER"; exit 1; fi
+   requested="${candidates[0]:-}"
+  fi
+  if [[ -n "$requested" ]]; then
+   db_mode=shared
+   db_name="$(docker inspect --type container -f '{{.Name}}' "$requested")"; db_name="${db_name#/}"
+  else
+   db_mode=managed; db_name=erp-next-mysql
+  fi
+ fi
+ printf '%s\n%s\n' "$db_mode" "$db_name" > "$binding"
 fi
-dc(){ docker compose -p "$project" --profile legacy --env-file "$STATE/.env" -f "$ROOT/erp-next/compose.trial.yaml" "$@"; }
-nextsql(){ dc exec -T erp-next-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u erp_next erp_next -N' "$@"; }
-legacyroot(){ dc exec -T legacy-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root server_migration -N' "$@"; }
-loader(){ dc exec "$@" -e MYSQL_PWD="$ERP_LEGACY_LOADER_PASSWORD" legacy-mysql mysql -u legacy_loader server_migration; }
+[[ "$db_mode" == managed || "$db_mode" == shared ]] && [[ "$db_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || { echo "无效数据库绑定"; exit 1; }
+db_container(){
+ if [[ "$db_mode" == managed ]]; then dc ps -q erp-next-mysql; else docker inspect --type container -f '{{.Id}}' "$db_name"; fi
+}
+root_sql(){
+ local id; id="$(db_container)"; [[ -n "$id" ]] || return 1
+ # Use the existing container's configured root password locally, never print it.
+ docker exec -i "$id" sh -ec 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=socket -u root -N' 
+}
+nextsql(){
+ local id; id="$(db_container)"; [[ -n "$id" ]] || return 1
+ docker exec -i -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" "$id" mysql --protocol=TCP -h 127.0.0.1 -u erp_next erp_next -N "$@"
+}
+legacyroot(){ root_sql; }
+loader(){
+ local id; id="$(db_container)"
+ docker exec "$@" -e MYSQL_PWD="$ERP_LEGACY_LOADER_PASSWORD" "$id" mysql --protocol=TCP -h 127.0.0.1 -u erp_legacy_loader server
+}
+prepare_mysql(){
+ if [[ "$db_mode" == managed ]]; then
+  dc up -d --wait --wait-timeout 180 erp-next-mysql
+ else
+  [[ "$(docker inspect -f '{{.State.Running}}' "$db_name")" == true ]] || { echo "已选旧版 MySQL 未运行，请先启动 $db_name；不会另建实例"; exit 1; }
+  # Create only the new project's network and migration container, without starting it.
+  dc create --no-deps erp-next-schema
+  local network="${project}_erp-next-internal" id
+  id="$(db_container)"
+  if [[ "$(docker inspect -f "{{with index .NetworkSettings.Networks \"$network\"}}{{.NetworkID}}{{end}}" "$id")" == "" ]]; then
+   docker network connect --alias erp-next-mysql "$network" "$id"
+  fi
+ fi
+ local version
+ version="$(root_sql <<< 'SELECT VERSION();')" || { echo "无法使用现有 MySQL 容器内管理员凭据；请核对 MYSQL_ROOT_PASSWORD，不会重置旧密码"; exit 1; }
+ [[ "$version" =~ ^8\. ]] || { echo "仅支持 MySQL 8.x（当前 $version），不会升级旧实例"; exit 1; }
+ # Never adopt a pre-existing erp_next database without our persisted identity.
+ local exists
+ exists="$(root_sql <<< "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='erp_next';")"
+ if [[ "$exists" == 1 && "$db_mode" == shared && ! -f "$STATE/files/.erp-next-trial.json" ]]; then
+  echo "共享实例已有 erp_next，但没有本部署标识；拒绝自动接管，请核对备份和状态目录"; exit 1
+ fi
+ if [[ -f "$STATE/files/.erp-next-trial.json" ]]; then verify_marker; fi
+ # Scoped users, no changes to old account credentials or old tables. CREATE USER
+ # fails safely on unexpected pre-existing names rather than resetting passwords.
+ if [[ ! -f "$STATE/mysql-users-ready" ]]; then
+  if [[ "$db_mode" == shared ]]; then
+   root_sql <<SQL
+CREATE DATABASE erp_next CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE USER 'erp_next'@'%' IDENTIFIED BY '$ERP_NEXT_DB_PASSWORD';
+GRANT ALL PRIVILEGES ON erp_next.* TO 'erp_next'@'%';
+SQL
+  fi
+  root_sql <<SQL
+CREATE USER 'erp_legacy_readonly'@'%' IDENTIFIED BY '$ERP_LEGACY_DB_PASSWORD';
+GRANT SELECT, SHOW VIEW ON server.* TO 'erp_legacy_readonly'@'%';
+SQL
+  touch "$STATE/mysql-users-ready"
+ fi
+ echo "MySQL：$db_mode / $(db_container)；版本 $version"
+}
 ensure_databases(){
  dc config --quiet
  echo "[1/3] 初始化新版 MySQL（不要求旧库存在）"
- dc up -d --wait --wait-timeout 180 erp-next-mysql
+ prepare_mysql
  # Stop application writes before applying or checking schema changes.
  dc stop erp-next-web erp-next-api
  if [[ -f "$STATE/files/.erp-next-trial.json" ]]; then
@@ -113,14 +196,18 @@ PY
  verify_marker
 }
 ensure_legacy(){
- echo "按需启动独立旧库副本（不会写入新版业务表）"
- dc up -d --wait --wait-timeout 180 legacy-mysql
- legacyroot <<SQL
-CREATE USER IF NOT EXISTS 'legacy_readonly'@'%' IDENTIFIED BY '$ERP_LEGACY_DB_PASSWORD';
-GRANT SELECT, SHOW VIEW ON server_migration.* TO 'legacy_readonly'@'%';
-CREATE USER IF NOT EXISTS 'legacy_loader'@'%' IDENTIFIED BY '$ERP_LEGACY_LOADER_PASSWORD';
-GRANT ALL PRIVILEGES ON server_migration.* TO 'legacy_loader'@'%';
+ [[ "$db_mode" == managed ]] || { echo "共享旧版实例的 server 不允许 SQL 导入或修改；请使用原数据只读迁移"; exit 1; }
+ verify_marker
+ local count
+ count="$(root_sql <<< "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='server';")"
+ if [[ "$count" == 0 ]]; then root_sql <<< 'CREATE DATABASE server CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'; fi
+ if [[ ! -f "$STATE/legacy-loader-ready" ]]; then
+  root_sql <<SQL
+CREATE USER 'erp_legacy_loader'@'%' IDENTIFIED BY '$ERP_LEGACY_LOADER_PASSWORD';
+GRANT ALL PRIVILEGES ON server.* TO 'erp_legacy_loader'@'%';
 SQL
+  touch "$STATE/legacy-loader-ready"
+ fi
 }
 verify_marker(){
  local server row
@@ -153,7 +240,7 @@ backup_target(){
  mkdir -p "$STATE/backups"
  dest="$(mktemp -d "$STATE/backups/target-$(date -u +%Y%m%dT%H%M%S)-XXXXXX")"
  echo "正在创建数据库和附件成对备份：$dest"
- dc exec -T erp-next-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -u root --single-transaction --no-tablespaces --routines --triggers --events --default-character-set=utf8mb4 erp_next' > "$dest/database.sql"
+ docker exec "$(db_container)" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -u root --single-transaction --no-tablespaces --routines --triggers --events --default-character-set=utf8mb4 erp_next' > "$dest/database.sql"
  [[ -s "$dest/database.sql" ]] || { echo "数据库备份为空"; exit 1; }
  tar -C "$STATE/files" -czf "$dest/files.tar.gz" .
  (cd "$dest" && sha256sum database.sql files.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS)
@@ -176,12 +263,7 @@ case "$action" in
    echo "[3/3] 构建并启动新版 API 和 Web"
    dc up -d --no-deps --build --wait --wait-timeout 180 erp-next-api
    dc up -d --no-deps --build --wait --wait-timeout 60 erp-next-web
-   # Resume an already-created local copy without making it a startup dependency.
-   if [[ -n "$(dc ps -aq legacy-mysql)" ]]; then
-     if ! dc start legacy-mysql; then echo "旧库副本暂不可用；新版仍可正常使用。"; fi
-   else
-     echo "未建立旧库副本，已跳过；需要时使用 legacy-import。"
-   fi
+   echo "新版已启动；旧 server 仅在迁移页面检测，不自动迁移。"
    ready=false
    for ((i=0;i<150;i++)); do
      if curl -fsS "http://127.0.0.1:$ERP_NEXT_API_PORT/actuator/health" >/dev/null 2>&1 &&
@@ -210,23 +292,25 @@ PY
    ;;
  status) dc ps -a; echo "状态目录：$STATE";;
  logs) dc logs --tail=200 -f erp-next-api erp-next-web erp-next-schema;;
- stop) dc stop; echo "服务已停止；所有数据保留";;
+ stop) dc stop erp-next-web erp-next-api erp-next-schema; if [[ "$db_mode" == managed ]]; then dc stop erp-next-mysql; fi; echo "服务已停止；共享旧版 MySQL 不会停止，所有数据保留";;
  legacy-import)
    [[ -f "$1" ]] || { echo "SQL 文件不存在"; exit 1; }
    # Only the isolated legacy loader can execute SQL; never use the new database or old production host.
    ensure_legacy
-   count="$(legacyroot <<< "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='server_migration';")"
+   count="$(legacyroot <<< "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='server';")"
    [[ "$count" == 0 ]] || { echo "旧库非空，拒绝重复导入；请人工核查"; exit 1; }
-   dc exec -T -e MYSQL_PWD="$ERP_LEGACY_LOADER_PASSWORD" legacy-mysql mysql --binary-mode -u legacy_loader server_migration < "$1"
-   echo "旧库导入完成，表数量：$(legacyroot <<< "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='server_migration';")"
+   docker exec -i -e MYSQL_PWD="$ERP_LEGACY_LOADER_PASSWORD" "$(db_container)" mysql --protocol=TCP -h 127.0.0.1 --binary-mode -u erp_legacy_loader server < "$1"
+   echo "旧库导入完成，表数量：$(legacyroot <<< "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='server';")"
    ;;
  legacy-shell) ensure_legacy; loader;;
  archive)
-   [[ -n "$(dc ps -aq legacy-mysql)" ]] || { echo "尚未导入旧库；请先执行 legacy-import"; exit 1; }
-   ensure_legacy
-   [[ "$(legacyroot <<< "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='server_migration' AND TABLE_TYPE='BASE TABLE';")" != 0 ]] || { echo "旧库为空，跳过归档；请先导入 SQL"; exit 1; }
+   verify_marker
+   [[ "$(root_sql <<< "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='server' AND TABLE_TYPE='BASE TABLE';")" != 0 ]] || { echo "旧库为空或不存在，跳过归档；请先导入 SQL"; exit 1; }
+   if [[ "$db_mode" == shared && "${ERP_LEGACY_SOURCE_FROZEN:-}" != yes ]]; then
+     echo "请先停止旧应用写入、备份并复制附件，再设置 ERP_LEGACY_SOURCE_FROZEN=yes 执行 archive。不会自动停止旧服务。"; exit 1
+   fi
    [[ ! -e "$STATE/archive" && ! -e "$STATE/archive.partial" ]] || { echo "已存在归档，请保留并使用独立状态目录重做"; exit 1; }
-   pytrial /scripts/erp-next-legacy-export.py export --host legacy-mysql --user legacy_readonly --schema server_migration --namespace "trial-$TRIAL_ID" --files /state/legacy-files --output /state/archive
+   pytrial /scripts/erp-next-legacy-export.py export --host erp-next-mysql --user erp_legacy_readonly --schema server --confirm-server-read-only --namespace "trial-$TRIAL_ID" --files /state/legacy-files --output /state/archive
    pytrial /scripts/erp-next-legacy-export.py verify --archive /state/archive
    ;;
  plan) pytrial /scripts/erp-next-legacy-import.py new-plan --archive /state/archive --plan /state/review.json; echo "请编辑 $STATE/review.json，按实际业务核对";;

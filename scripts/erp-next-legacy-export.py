@@ -63,8 +63,8 @@ def safe_path(root, relative):
 
 def connect_source(args):
     import mysql.connector
-    if not re.fullmatch(r"server_[A-Za-z0-9_]{1,56}", args.schema):
-        raise ValueError("Only offline server_* copies are supported; never use the live server database")
+    if not re.fullmatch(r"server(?:_[A-Za-z0-9_]{1,56})?", args.schema) or (args.schema=="server" and not args.confirm_server_read_only):
+        raise ValueError("Use an offline server_* copy or explicitly confirm a frozen read-only server source")
     return mysql.connector.connect(host=args.host, port=args.port, database=args.schema, user=args.user,
         password=os.environ.get("ERP_LEGACY_DB_PASSWORD") or getpass.getpass("Read-only source password: "),
         connection_timeout=8, autocommit=False, charset="utf8mb4")
@@ -175,7 +175,7 @@ def verify(root):
     manifest = json.loads(mp.read_text(encoding="utf-8"))
     if manifest.get("format") != "erp-legacy-archive-v1":
         raise ValueError("Unknown archive format")
-    if not re.fullmatch(r"server_[A-Za-z0-9_]{1,56}",str(manifest.get("sourceSchema",""))) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",str(manifest.get("sourceNamespace",""))):
+    if not re.fullmatch(r"server(?:_[A-Za-z0-9_]{1,56})?",str(manifest.get("sourceSchema",""))) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",str(manifest.get("sourceNamespace",""))):
         raise ValueError("Invalid archive source identity")
     seen = set()
     expected = {"manifest.json", "manifest.sha256"}
@@ -242,6 +242,7 @@ def main():
     p.add_argument("--port", type=int, default=3306)
     p.add_argument("--user", required=True)
     p.add_argument("--schema", default="server_migration")
+    p.add_argument("--confirm-server-read-only", action="store_true", help="Confirm server writes are stopped and attachment copy is consistent")
     p.add_argument("--namespace", required=True, help="Stable identifier of the original installation")
     p.add_argument("--files", required=True, help="Offline complete legacy upload directory")
     p.add_argument("--output", required=True)
