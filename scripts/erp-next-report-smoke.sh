@@ -33,8 +33,19 @@ assert "report:write" in session["permissions"] and "report:review" not in sessi
 token=session["token"]
 call("/admin/identities",token=token,status=403)
 profile=call("/business/employees/"+os.environ["EMP_ID"],token=token)
-assert profile["full_name"]=="CI 员工" and not ({"id_number","phone","certificate_no","documents","extra_fields"} & profile.keys())
-call("/business/employees/"+os.environ["EMP_ID"]+"/documents/"+os.environ["EMP_DOC"]+"/download",token=token,status=403)
+assert profile["full_name"]=="CI 员工" and profile["id_number"]=="TEST-ID-NOT-REAL" and profile["phone"]=="13700000000" and profile["certificate_no"]=="CI-CERT-001"
+assert profile["extra_fields"]==[{"key":"专业","value":"消防"}]
+assert {d["document_type"] for d in profile["documents"]}=={"certificate","identity"}
+listing=call("/business/employees?q=CI-CERT-001",token=token)
+assert any(e["certificate_no"]=="CI-CERT-001" and e["phone"]=="13700000000" for e in listing)
+for doc in profile["documents"]:
+    path="/business/employees/"+os.environ["EMP_ID"]+"/documents/"+str(doc["id"])+"/download"
+    req=urllib.request.Request(base+path,headers={"Authorization":"Bearer "+token})
+    with urllib.request.urlopen(req,timeout=30) as r:
+        assert r.status==200 and r.headers["Cache-Control"]=="private, no-store"
+        assert r.read().startswith(b"%PDF-1.4")
+call("/business/employees","POST",{"fullName":"Forbidden","employeeType":"operator"},token=token,status=403)
+call("/business/employees/"+os.environ["EMP_ID"],"PUT",{"fullName":"Forbidden"},token=token,status=403)
 call("/business/employees/account-links",token=token,status=403)
 call("/business/customers","POST",{"customerCode":"CI-NO-WRITE","name":"Forbidden"},token=token,status=403)
 call("/migration/source-status",token=token,status=403)

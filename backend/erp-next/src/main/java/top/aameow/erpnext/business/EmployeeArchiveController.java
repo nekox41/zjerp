@@ -40,22 +40,18 @@ public class EmployeeArchiveController {
     public List<Map<String,Object>> list(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String type,Authentication a,HttpServletResponse response){
         privateResponse(response);
         if(!type.isBlank()&&!Set.of("operator","engineer").contains(type))throw bad("员工类型无效");
-        boolean full=allowed(a,"employee:write");
         String term="%"+q.trim()+"%";
-        if(full)return jdbc.queryForList("SELECT "+BASIC+",phone,certificate_no FROM erp_employee WHERE (?='' OR employee_type=?) AND (full_name ILIKE ? OR phone ILIKE ? OR certificate_no ILIKE ?) ORDER BY id DESC LIMIT 500",type,type,term,term,term);
-        return jdbc.queryForList("SELECT "+BASIC+" FROM erp_employee WHERE (?='' OR employee_type=?) AND full_name ILIKE ? ORDER BY id DESC LIMIT 500",type,type,term);
+        return jdbc.queryForList("SELECT "+BASIC+",phone,certificate_no FROM erp_employee WHERE (?='' OR employee_type=?) AND (full_name ILIKE ? OR phone ILIKE ? OR certificate_no ILIKE ?) ORDER BY id DESC LIMIT 500",type,type,term,term,term);
     }
     @GetMapping("/{id}") @PreAuthorize("hasAuthority('employee:read')")
     public Map<String,Object> detail(@PathVariable long id,Authentication a,HttpServletResponse response){
-        privateResponse(response);return detail(id,allowed(a,"employee:write"));
+        privateResponse(response);return loadDetail(id);
     }
-    private Map<String,Object> detail(long id,boolean full){
-        Map<String,Object> r=new LinkedHashMap<>(one("SELECT "+BASIC+(full?",phone,id_number,certificate_no,extra_fields":"")+" FROM erp_employee WHERE id=?",id));
-        if(full){
+    private Map<String,Object> loadDetail(long id){
+        Map<String,Object> r=new LinkedHashMap<>(one("SELECT "+BASIC+",phone,id_number,certificate_no,extra_fields FROM erp_employee WHERE id=?",id));
             try{r.put("extra_fields",mapper.readValue(r.get("extra_fields").toString(),new TypeReference<List<Map<String,String>>>(){}));}
             catch(Exception e){throw new IllegalStateException("员工扩展字段格式错误",e);}
             r.put("documents",jdbc.queryForList("SELECT id,document_type,original_name,media_type,byte_size,created_at FROM erp_employee_document WHERE employee_id=? ORDER BY id",id));
-        }
         return r;
     }
     private Object field(Map<String,Object>b,Map<String,Object>old,String key,String column){return b.containsKey(key)?b.get(key):old.get(column);}
@@ -127,7 +123,7 @@ public class EmployeeArchiveController {
             }
         }
         addFiles(id,"certificate",certificates);addFiles(id,"identity",identity);
-        return detail(id,true);
+        return loadDetail(id);
     }
     private long positive(Object v){try{long n=Long.parseLong(Objects.toString(v,""));if(n<=0)throw new NumberFormatException();return n;}catch(NumberFormatException e){throw bad("记录编号无效");}}
     private void addFiles(long id,String kind,List<MultipartFile> files){
@@ -141,7 +137,7 @@ public class EmployeeArchiveController {
             jdbc.update("INSERT INTO erp_employee_document(employee_id,document_type,storage_key,original_name,media_type,byte_size,sha256) VALUES(?,?,?,?,?,?,?)",id,kind,stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256());
         }
     }
-    @GetMapping("/{id}/documents/{documentId}/download") @PreAuthorize("hasAuthority('employee:write')")
+    @GetMapping("/{id}/documents/{documentId}/download") @PreAuthorize("hasAuthority('employee:read')")
     public ResponseEntity<InputStreamResource> download(@PathVariable long id,@PathVariable long documentId)throws Exception{
         var doc=one("SELECT * FROM erp_employee_document WHERE id=? AND employee_id=?",documentId,id);
         var path=storage.resolve(doc.get("storage_key").toString());

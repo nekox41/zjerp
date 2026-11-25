@@ -67,24 +67,23 @@ onMounted(async()=>{await load();if(props.destination?.id)await show(props.desti
  <div class="employee-toolbar"><div><h3>员工列表 <span class="muted">· {{rows.length}} 人</span></h3><p>现场操作员与工程师的制文资料档案。</p></div>
  <div class="employee-actions">
   <select v-model="type" aria-label="员工类型" @change="load"><option value="">全部类型</option><option value="operator">操作员</option><option value="engineer">工程师</option></select>
-  <input v-model="q" aria-label="搜索员工" :placeholder="canEdit?'搜索姓名、手机或证书编号':'搜索姓名'" @keyup.enter="load">
+  <input v-model="q" aria-label="搜索员工" placeholder="搜索姓名、手机或证书编号" @keyup.enter="load">
   <button type="button" class="secondary-button" :disabled="loading" @click="load">搜索</button>
   <button v-if="canEdit" type="button" class="primary-button" @click="edit()">＋ 新建员工</button>
  </div></div>
  <p v-if="error&&!editor" class="message error" role="alert">{{error}}</p><p v-if="notice" class="message success" role="status">{{notice}}</p>
- <div class="table-wrap"><table class="employee-table"><thead><tr><th>姓名</th><th>性别</th><th>年龄</th><th>类型</th><th v-if="canEdit">手机号码</th><th v-if="canEdit">证书编号</th><th>操作</th></tr></thead>
- <tbody><tr v-for="r in rows" :key="r.id"><td><div class="employee-name"><span class="employee-avatar">{{r.full_name.slice(0,1)}}</span><b>{{r.full_name}}</b></div></td><td>{{genders[r.gender]||'—'}}</td><td>{{r.age??'—'}}</td><td><span class="employee-type" :class="{engineer:r.employee_type==='engineer'}">{{labels[r.employee_type]}}</span></td><td v-if="canEdit">{{r.phone||'—'}}</td><td v-if="canEdit">{{r.certificate_no||'—'}}</td><td><button type="button" class="secondary-button" @click="show(r.id,$event)">查看详情</button></td></tr></tbody></table>
+ <div class="table-wrap"><table class="employee-table"><thead><tr><th>姓名</th><th>性别</th><th>年龄</th><th>类型</th><th>手机号码</th><th>证书编号</th><th>操作</th></tr></thead>
+ <tbody><tr v-for="r in rows" :key="r.id"><td><div class="employee-name"><span class="employee-avatar">{{r.full_name.slice(0,1)}}</span><b>{{r.full_name}}</b></div></td><td>{{genders[r.gender]||'—'}}</td><td>{{r.age??'—'}}</td><td><span class="employee-type" :class="{engineer:r.employee_type==='engineer'}">{{labels[r.employee_type]}}</span></td><td>{{r.phone||'—'}}</td><td>{{r.certificate_no||'—'}}</td><td><button type="button" class="secondary-button" @click="show(r.id,$event)">查看详情</button></td></tr></tbody></table>
  <div v-if="!rows.length" class="employee-empty"><b>{{loading?'正在加载…':'暂无员工记录'}}</b><p v-if="!loading&&canEdit">点击右上角「新建员工」添加第一份档案。</p></div></div>
 </section>
 <ModalDialog v-if="detail" :title="detail.full_name+' · 员工档案'" :origin="origin" wide :busy="busy" @close="detail=null">
  <div class="employee-detail">
  <div class="employee-detail-heading"><h4>基本资料</h4><button v-if="canEdit" type="button" class="secondary-button" @click="edit(detail)">编辑档案</button></div>
  <dl class="employee-fields"><div><dt>姓名</dt><dd>{{detail.full_name}}</dd></div><div><dt>性别</dt><dd>{{genders[detail.gender]||'—'}}</dd></div><div><dt>年龄</dt><dd>{{detail.age??'—'}}</dd></div><div><dt>类型</dt><dd>{{labels[detail.employee_type]}}</dd></div>
- <template v-if="canEdit"><div><dt>身份证号码</dt><dd>{{detail.id_number||'—'}}</dd></div><div><dt>手机号码</dt><dd>{{detail.phone||'—'}}</dd></div><div><dt>证书编号</dt><dd>{{detail.certificate_no||'—'}}</dd></div></template></dl>
- <template v-if="canEdit">
+ <div><dt>身份证号码</dt><dd>{{detail.id_number||'—'}}</dd></div><div><dt>手机号码</dt><dd>{{detail.phone||'—'}}</dd></div><div><dt>证书编号</dt><dd>{{detail.certificate_no||'—'}}</dd></div></dl>
   <div v-for="[kind,title] in [['certificate','证书附件'],['identity','身份证附件']]" :key="kind" class="employee-docs"><h4>{{title}}</h4><p v-if="!detail.documents?.some(d=>d.document_type===kind)" class="muted">暂无附件</p><div v-for="doc in detail.documents?.filter(d=>d.document_type===kind)" :key="doc.id" class="employee-document"><span>{{doc.original_name}}</span><button type="button" class="secondary-button" @click="download(doc)">下载原件</button></div></div>
   <h4>其他资料</h4><dl v-if="detail.extra_fields?.length" class="employee-fields"><div v-for="x in detail.extra_fields" :key="x.key"><dt>{{x.key}}</dt><dd>{{x.value||'—'}}</dd></div></dl><p v-else class="muted">暂无自定义资料</p>
- </template><p v-else class="muted">证件号码、附件和其他完整资料仅管理人员与超级账户可查看。</p>
+
  <p v-if="error&&!editor" class="message error" role="alert">{{error}}</p>
  </div>
 </ModalDialog>
