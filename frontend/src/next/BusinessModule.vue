@@ -7,7 +7,11 @@ import LegacyProjectDocuments from './LegacyProjectDocuments.vue'
 const props=defineProps({permissions:{type:Array,default:()=>[]},destination:{type:Object,default:null}})
 const emit=defineEmits(['navigate'])
 const can=p=>props.permissions.includes(p)
-const section = ref('customers')
+const section = ref(props.destination?.section||'customers')
+const serviceType=computed(()=>props.destination?.serviceType||'other')
+const typeTitles={maintenance:'维保项目',fire_inspection:'检测项目',fire_assessment:'评定项目',fire_evaluation:'评估项目',other:'其他技术服务'}
+const contractFile=ref(null), uploadedFileId=ref(null), fileKey=ref(0)
+function chooseContractFile(event){contractFile.value=event.target.files?.[0]||null;uploadedFileId.value=null}
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -58,17 +62,18 @@ const forms = {
   employee: ref({employeeCode:'',fullName:'',identityId:'',positionName:'',phone:'',email:'',employeeType:'general'}),
   customer: ref({customerCode:'',name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',notes:''}),
   contact: ref({name:'',positionName:'',phone:'',email:'',isPrimary:false}),
-  contract: ref({contractNo:'',title:'',customerId:'',contractType:'',serviceType:'other',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',notes:''}),
+  contract: ref({contractNo:'',title:'',customerId:'',existingProjectId:'',contractType:'',serviceType:'other',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',notes:''}),
   project: ref({projectNo:'',name:'',customerId:'',contractId:'',managerEmployeeId:'',plannedStart:'',plannedEnd:'',description:''}),
   qualification: ref({qualificationName:'',certificateNo:'',issuingAuthority:'',issuedOn:'',expiresOn:'',notes:''}),
   amendment: ref({amendmentNo:'',title:'',changeSummary:'',revisedAmount:'',effectiveOn:''})
 }
 const rows = ref([])
+watch(()=>[forms.contract.value.customerId,forms.contract.value.serviceType],()=>{forms.contract.value.existingProjectId=''})
 const allConfig = {
   employees:{title:'员工档案',endpoint:'/employees',form:'employee',permission:'employee:write'},
-  customers:{title:'客户管理',endpoint:'/customers',form:'customer',permission:'customer:write'},
+  customers:{title:'甲方管理',endpoint:'/customers',form:'customer',permission:'customer:write'},
   contracts:{title:'合同管理',endpoint:'/contracts',form:'contract',permission:'contract:write'},
-  projects:{title:'项目管理',endpoint:'/projects',form:'project',permission:'project:write'}
+  projects:{title:typeTitles[serviceType.value],endpoint:'/projects',form:'project',permission:'project:write'}
 }
 const config=computed(()=>Object.fromEntries(Object.entries(allConfig).filter(([k])=>can(allConfig[k].permission.replace(':write',':read')))))
 function ensureSection(){
@@ -87,7 +92,7 @@ async function load() {
     ])
     employees.value=e; customers.value=c; contracts.value=ct; projects.value=p; identities.value=ids
     const cfg=config.value[section.value]
-    rows.value=cfg ? await api('/business'+cfg.endpoint+'?q='+encodeURIComponent(q.value)) : []
+    rows.value=cfg ? await api('/business'+cfg.endpoint+'?q='+encodeURIComponent(q.value)+(section.value==='projects'?'&serviceType='+encodeURIComponent(serviceType.value):'')) : []
   } catch(e) { error.value=e.message }
 }
 const initialForms=Object.fromEntries(Object.entries(forms).map(([k,v])=>[k,{...v.value}]))
@@ -108,13 +113,25 @@ async function submit(kind) {
     if(!endpoint) throw new Error('请先选择对应的客户、员工或合同记录')
     const required={employee:'employee:write',customer:'customer:write',contact:'customer:write',contract:'contract:write',amendment:'contract:write',project:'project:write',qualification:'employee:write'}[kind]
     if(!required||!can(required))throw new Error('当前账号没有此项修改权限')
-    await api('/business'+endpoint,{method:'POST',body:JSON.stringify(data)})
-    notice.value='保存成功'; forms[kind].value={...initialForms[kind]}
+    if(kind==='project')data.serviceType=serviceType.value
+    if(kind==='contract'){
+      data.createProject=true
+      if(contractFile.value){
+        if(!can('file:upload'))throw new Error('没有上传合同文件权限')
+        if(!uploadedFileId.value){const fd=new FormData();fd.append('file',contractFile.value);uploadedFileId.value=(await api('/files',{method:'POST',body:fd})).id}
+        data.fileId=uploadedFileId.value
+      }
+    }
+    const created=await api('/business'+endpoint,{method:'POST',body:JSON.stringify(data)})
+    forms[kind].value={...initialForms[kind]}
+    if(kind==='contract'){contractFile.value=null;uploadedFileId.value=null;fileKey.value++}
     await load()
+    if(kind==='contract'){await openContract(created.id);notice.value=data.existingProjectId?'合同已创建并关联已有项目':'合同已创建并自动建立项目'}
+    else notice.value='保存成功'
     if(kind==='contact') await openCustomer(selectedCustomer.value.id)
     if(kind==='qualification') await openEmployee(selectedEmployee.value.id)
     if(kind==='amendment') await openContract(selectedContract.value.id)
-    if(kind==='project'&&selectedProject.value) await openProject(selectedProject.value.id)
+    if(kind==='project') await openProject(created.id)
   } catch(e) { error.value=e.message } finally { busy.value=false }
 }
 async function openCustomer(id) {
@@ -220,6 +237,7 @@ async function saveProject(){
     if(!body.managerEmployeeId)body.managerEmployeeId=null
     if(!body.plannedStart)body.plannedStart=null
     if(!body.plannedEnd)body.plannedEnd=null
+    if(selectedProject.value.auto_from_contract){delete body.plannedStart;delete body.plannedEnd}
     await api('/business/projects/'+selectedProject.value.id,{method:'PUT',body:JSON.stringify(body)})
     await load();await openProject(selectedProject.value.id)
     projectEditOpen.value=false;notice.value='项目档案已更新'
@@ -235,18 +253,16 @@ onMounted(async ()=>{
   if(section.value==='projects')await openProject(target.id)
   else if(section.value==='contracts')await openContract(target.id)
   else if(section.value==='customers')await openCustomer(target.id)
+  else if(section.value==='employees')await openEmployee(target.id)
 })
 </script>
 
 <template>
 <section class="business-module">
-  <div class="business-tabs">
-    <button v-for="(v,k) in config" :key="k" :class="{active:section===k}" @click="section=k">{{v.title}}</button>
-  </div>
   <p v-if="error" class="message error">{{error}}</p><p v-if="notice" class="message success">{{notice}}</p>
   <div class="business-layout">
     <div class="business-list panel">
-      <div class="business-list-head"><div><h3>{{config[section]?.title||'业务管理'}}</h3><p>统一维护业务主数据与关联记录</p></div><input v-model="q" placeholder="搜索名称或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
+      <div class="business-list-head"><div><h3>{{section==='projects'?typeTitles[serviceType]:config[section]?.title||'业务管理'}}</h3><p>统一维护业务主数据与关联记录</p></div><input v-model="q" placeholder="搜索名称或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
       <div class="business-records">
         <button v-for="r in rows" :key="r.id" class="business-record" @click="section==='customers'?openCustomer(r.id):section==='projects'?openProject(r.id):section==='contracts'?openContract(r.id):section==='employees'?openEmployee(r.id):null">
           <b>{{r.name||r.full_name||r.title}}</b><small>{{r.customer_code||r.employee_code||r.contract_no||r.project_no||r.status||r.position_name}}</small>
@@ -273,11 +289,11 @@ onMounted(async ()=>{
           </form>
           <h4>资质证书</h4><p v-for="x in qualifications" :key="x.id" class="log-line">{{x.qualification_name}} · {{x.certificate_no||'无编号'}} · {{x.expires_on||'长期有效'}} · {{x.effective_status}} <button v-if="can('employee:write')" class="secondary-button" @click="editQualification(x)">更正资质</button></p><form v-if="qualificationEdit&&can('employee:write')" class="create-grid compact" @submit.prevent="saveQualification"><label>资质名称<input v-model="qualificationEdit.qualificationName" required></label><label>证书编号<input v-model="qualificationEdit.certificateNo"></label><label>发证机构<input v-model="qualificationEdit.issuingAuthority"></label><label>发证日期<input type="date" v-model="qualificationEdit.issuedOn"></label><label>有效期至<input type="date" v-model="qualificationEdit.expiresOn"></label><label>资质状态<select v-model="qualificationEdit.status"><option value="valid">有效</option><option value="expired">失效</option><option value="revoked">撤销</option></select></label><label>备注<input v-model="qualificationEdit.notes"></label><button class="primary-button">保存更正</button><button type="button" @click="qualificationEdit=null">取消</button></form><form v-if="can('employee:write')" class="create-grid compact" @submit.prevent="submit('qualification')"><label>资质名称<input v-model="forms.qualification.value.qualificationName" required></label><label>证书编号<input v-model="forms.qualification.value.certificateNo"></label><label>发证机构<input v-model="forms.qualification.value.issuingAuthority"></label><label>发证日期<input v-model="forms.qualification.value.issuedOn" type="date"></label><label>有效期至<input v-model="forms.qualification.value.expiresOn" type="date"></label><button class="primary-button">添加资质</button></form></div>
       <template v-else-if="section==='customers'">
-        <h3 v-if="can('customer:write')">新增客户</h3><form v-if="can('customer:write')" class="create-grid" @submit.prevent="submit('customer')"><label>客户编号<input v-model="forms.customer.value.customerCode" required></label><label>客户名称<input v-model="forms.customer.value.name" required></label><label>统一社会信用代码<input v-model="forms.customer.value.creditCode"></label><label>客户类型<select v-model="forms.customer.value.customerType"><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="individual">个人</option></select></label><label>行业<input v-model="forms.customer.value.industry"></label><label>负责人<select v-model="forms.customer.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><label>联系电话<input v-model="forms.customer.value.phone"></label><label>电子邮箱<input v-model="forms.customer.value.email"></label><label>地址<input v-model="forms.customer.value.address"></label><label>备注<input v-model="forms.customer.value.notes"></label><button class="primary-button">创建客户</button></form>
+        <h3 v-if="can('customer:write')">新增甲方</h3><form v-if="can('customer:write')" class="create-grid" @submit.prevent="submit('customer')"><label>甲方编号<input v-model="forms.customer.value.customerCode" required></label><label>甲方名称<input v-model="forms.customer.value.name" required></label><label>统一社会信用代码<input v-model="forms.customer.value.creditCode"></label><label>客户类型<select v-model="forms.customer.value.customerType"><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="individual">个人</option></select></label><label>行业<input v-model="forms.customer.value.industry"></label><label>负责人<select v-model="forms.customer.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><label>联系电话<input v-model="forms.customer.value.phone"></label><label>电子邮箱<input v-model="forms.customer.value.email"></label><label>地址<input v-model="forms.customer.value.address"></label><label>备注<input v-model="forms.customer.value.notes"></label><button class="primary-button">创建甲方</button></form>
         <div v-if="selectedCustomer" class="related-card">
           <div class="section-heading"><h4>{{selectedCustomer.name}} · 甲方客户档案</h4><button v-if="can('customer:write')" class="secondary-button" @click="customerEditOpen=!customerEditOpen">{{customerEditOpen?'收起编辑':'编辑客户'}}</button></div>
           <form v-if="customerEditOpen" class="create-grid compact" @submit.prevent="saveCustomer">
-            <label>客户名称<input v-model="customerEditForm.name" required></label><label>统一社会信用代码<input v-model="customerEditForm.creditCode"></label>
+            <label>甲方名称<input v-model="customerEditForm.name" required></label><label>统一社会信用代码<input v-model="customerEditForm.creditCode"></label>
             <label>客户类型<select v-model="customerEditForm.customerType"><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="individual">个人</option></select></label>
             <label>行业<input v-model="customerEditForm.industry"></label><label>负责人<select v-model="customerEditForm.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label>
             <label>联系电话<input v-model="customerEditForm.phone"></label><label>电子邮箱<input v-model="customerEditForm.email"></label><label>地址<input v-model="customerEditForm.address"></label>
@@ -303,11 +319,11 @@ onMounted(async ()=>{
             <button type="button" class="secondary-button" @click="editingContactId=null">取消</button>
           </form>
           <form v-if="can('customer:write')" class="create-grid compact" @submit.prevent="submit('contact')"><label>联系人姓名<input v-model="forms.contact.value.name" required></label><label>岗位<input v-model="forms.contact.value.positionName"></label><label>电话<input v-model="forms.contact.value.phone"></label><label>邮箱<input v-model="forms.contact.value.email"></label><label class="inline-check"><input type="checkbox" v-model="forms.contact.value.isPrimary">主要联系人</label><button class="primary-button">添加联系人</button></form>
-          <CustomerHistory :key="selectedCustomer.id" :customer-id="Number(selectedCustomer.id)" :permissions="props.permissions" :projects="projects" :employees="employees" @open-contract="id=>{section='contracts';openContract(id)}" @open-project="id=>{section='projects';openProject(id)}" />
+          <CustomerHistory :key="selectedCustomer.id" :customer-id="Number(selectedCustomer.id)" :permissions="props.permissions" :projects="projects" :employees="employees" @open-contract="id=>{emit('navigate','business','contracts',id)}" @open-project="id=>{emit('navigate','business','projects',id)}" />
         </div>
       </template>
       <template v-else-if="section==='contracts'">
-        <h3 v-if="can('contract:write')">新增合同</h3><form v-if="can('contract:write')" class="create-grid" @submit.prevent="submit('contract')"><label>合同编号<input v-model="forms.contract.value.contractNo" required></label><label>合同名称<input v-model="forms.contract.value.title" required></label><label>客户<select v-model="forms.contract.value.customerId" required><option value="">请选择客户</option><option v-for="x in customers" :value="x.id">{{x.name}}</option></select></label><label>合同类型<input v-model="forms.contract.value.contractType"></label><label>服务类型<select v-model="forms.contract.value.serviceType"><option value="maintenance">维护保养</option><option value="fire_inspection">消防检测</option><option value="fire_assessment">消防评定</option><option value="fire_evaluation">消防评估</option><option value="other">其他技术服务</option></select></label><label>金额<input v-model="forms.contract.value.amount" type="number" min="0" step=".01"></label><label>币种<input v-model="forms.contract.value.currency" maxlength="3"></label><label>签订日期<input v-model="forms.contract.value.signedOn" type="date"></label><label>开始日期<input v-model="forms.contract.value.startsOn" type="date"></label><label>结束日期<input v-model="forms.contract.value.endsOn" type="date"></label><label>负责人<select v-model="forms.contract.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><button class="primary-button">创建合同</button></form><div v-if="selectedContract" class="related-card">
+        <h3 v-if="can('contract:write')">新增合同</h3><form v-if="can('contract:write')" class="create-grid" @submit.prevent="submit('contract')"><label>合同编号<input v-model="forms.contract.value.contractNo" required></label><label>合同名称<input v-model="forms.contract.value.title" required></label><label>客户<select v-model="forms.contract.value.customerId" required><option value="">请选择客户</option><option v-for="x in customers" :value="x.id">{{x.name}}</option></select></label><label>合同类型<input v-model="forms.contract.value.contractType"></label><label>服务类型<select v-model="forms.contract.value.serviceType"><option value="maintenance">维护保养</option><option value="fire_inspection">消防检测</option><option value="fire_assessment">消防评定</option><option value="fire_evaluation">消防评估</option><option value="other">其他技术服务</option></select></label><label>金额<input v-model="forms.contract.value.amount" type="number" min="0" step=".01"></label><label>币种<input v-model="forms.contract.value.currency" maxlength="3"></label><label>签订日期<input v-model="forms.contract.value.signedOn" type="date"></label><label>开始日期<input v-model="forms.contract.value.startsOn" type="date" :required="forms.contract.value.serviceType==='maintenance'"></label><label>{{forms.contract.value.serviceType==='maintenance'?'结束日期（必填）':'结束日期（可选）'}}<input v-model="forms.contract.value.endsOn" type="date" :required="forms.contract.value.serviceType==='maintenance'"></label><label>负责人<select v-model="forms.contract.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label><label v-if="can('project:read')">对应项目<select v-model="forms.contract.value.existingProjectId"><option value="">自动创建新项目</option><option v-for="p in projects.filter(p=>String(p.customer_id)===String(forms.contract.value.customerId)&&p.service_type===forms.contract.value.serviceType)" :key="p.id" :value="p.id">{{p.name}} · {{p.project_no}}</option></select></label><label v-if="can('file:upload')">合同原件<input :key="fileKey" type="file" accept=".pdf,.doc,.docx" @change="chooseContractFile"></label><p class="muted">默认按合同名称、服务类型及日期自动创建项目；已有项目可直接关联，维保年度续签请从原项目办理。</p><button class="primary-button" :disabled="busy">{{busy?'正在保存…':'保存合同并建立项目'}}</button></form><div v-if="selectedContract" class="related-card">
           <div class="section-heading"><h4>合同详情 · {{selectedContract.contract_no}}</h4><button v-if="can('contract:write')" class="secondary-button" @click="contractEditOpen=!contractEditOpen">{{contractEditOpen?'收起编辑':'编辑合同'}}</button></div>
           <form v-if="contractEditOpen" class="create-grid compact" @submit.prevent="saveContract">
             <label>合同名称<input v-model="contractEditForm.title" required></label>
@@ -316,12 +332,12 @@ onMounted(async ()=>{
             <label>合同金额<input v-model="contractEditForm.amount" type="number" min="0" step=".01"></label>
             <label>币种<input v-model="contractEditForm.currency" maxlength="3"></label>
             <label>签订日期<input v-model="contractEditForm.signedOn" type="date"></label>
-            <label>开始日期<input v-model="contractEditForm.startsOn" type="date"></label>
-            <label>结束日期<input v-model="contractEditForm.endsOn" type="date"></label>
+            <label>开始日期<input v-model="contractEditForm.startsOn" type="date" :required="contractEditForm.serviceType==='maintenance'"></label>
+            <label>{{contractEditForm.serviceType==='maintenance'?'结束日期（必填）':'结束日期（可选）'}}<input v-model="contractEditForm.endsOn" type="date" :required="contractEditForm.serviceType==='maintenance'"></label>
             <label>负责人<select v-model="contractEditForm.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label>
             <label>合同状态<select v-model="contractEditForm.status"><option value="draft">草稿</option><option value="pending">待生效</option><option value="active">履行中</option><option value="completed">已完成</option><option value="terminated">已终止</option></select></label>
             <label>备注<input v-model="contractEditForm.notes"></label><button class="primary-button" :disabled="busy">保存合同资料</button>
-          </form><p>{{selectedContract.title}} · {{selectedContract.customer_name}}</p><p>金额：{{selectedContract.amount}} {{selectedContract.currency}} · 状态：{{selectedContract.status}}</p><p>签订：{{selectedContract.signed_on||'未签订'}} · 履行：{{selectedContract.starts_on||'—'}} 至 {{selectedContract.ends_on||'—'}}</p><div class="report-actions"><button v-if="can('customer:read')" class="secondary-button" @click="section='customers';openCustomer(selectedContract.customer_id)">甲方档案</button><button v-if="can('contract:read')" class="secondary-button" @click="emit('navigate','partner-maintenance','links',selectedContract.id)">合同关联与附件</button></div><h4 v-if="can('project:read')">关联合同项目</h4><div v-if="can('project:read')" v-for="p in selectedContract.projects||[]" :key="p.id" class="log-line"><button class="secondary-button" @click="section='projects';openProject(p.id)">{{p.project_no}} · {{p.name}}</button></div><h4>合同变更</h4><p v-for="x in contractAmendments" :key="x.id" class="log-line">{{x.amendment_no}} · {{x.title}} · {{x.previous_amount}} → {{x.revised_amount}} · {{x.status}}</p><form v-if="can('contract:write')&&['active','completed'].includes(selectedContract.status)" class="create-grid compact" @submit.prevent="submit('amendment')"><label>变更编号<input v-model="forms.amendment.value.amendmentNo" required></label><label>变更名称<input v-model="forms.amendment.value.title" required></label><label>变更后金额<input v-model="forms.amendment.value.revisedAmount" type="number" min="0" step=".01" required></label><label>生效日期<input v-model="forms.amendment.value.effectiveOn" type="date"></label><label>变更说明<input v-model="forms.amendment.value.changeSummary" required></label><button class="primary-button">登记合同变更</button></form></div>
+          </form><p>{{selectedContract.title}} · {{selectedContract.customer_name}}</p><p>金额：{{selectedContract.amount}} {{selectedContract.currency}} · 状态：{{selectedContract.status}}</p><p>签订：{{selectedContract.signed_on||'未签订'}} · 履行：{{selectedContract.starts_on||'—'}} 至 {{selectedContract.ends_on||'—'}}</p><div class="report-actions"><button v-if="can('customer:read')" class="secondary-button" @click="emit('navigate','business','customers',selectedContract.customer_id)">甲方档案</button><button v-if="can('contract:read')" class="secondary-button" @click="emit('navigate','partner-maintenance','links',selectedContract.id)">合同关联与附件</button></div><h4 v-if="can('project:read')">关联合同项目</h4><div v-if="can('project:read')" v-for="p in selectedContract.projects||[]" :key="p.id" class="log-line"><button class="secondary-button" @click="emit('navigate','business','projects',p.id,p.service_type)">{{p.project_no}} · {{p.name}}</button></div><h4>合同变更</h4><p v-for="x in contractAmendments" :key="x.id" class="log-line">{{x.amendment_no}} · {{x.title}} · {{x.previous_amount}} → {{x.revised_amount}} · {{x.status}}</p><form v-if="can('contract:write')&&['active','completed'].includes(selectedContract.status)" class="create-grid compact" @submit.prevent="submit('amendment')"><label>变更编号<input v-model="forms.amendment.value.amendmentNo" required></label><label>变更名称<input v-model="forms.amendment.value.title" required></label><label>变更后金额<input v-model="forms.amendment.value.revisedAmount" type="number" min="0" step=".01" required></label><label>生效日期<input v-model="forms.amendment.value.effectiveOn" type="date"></label><label>变更说明<input v-model="forms.amendment.value.changeSummary" required></label><button class="primary-button">登记合同变更</button></form></div>
       </template>
       <template v-else>
         <h3 v-if="can('project:write')">新增项目</h3>
@@ -329,7 +345,7 @@ onMounted(async ()=>{
           <label>项目编号<input v-model="forms.project.value.projectNo" required></label>
           <label>项目名称<input v-model="forms.project.value.name" required></label>
           <label>所属甲方<select v-model="forms.project.value.customerId" required><option value="">请选择客户</option><option v-for="x in customers" :value="x.id">{{x.name}}</option></select></label>
-          <label>初始关联合同（可选）<select v-model="forms.project.value.contractId"><option value="">无合同项目</option><option v-for="x in contracts" :value="x.id">{{x.contract_no}} · {{x.title}}</option></select></label>
+          <label>初始关联合同（可选）<select v-model="forms.project.value.contractId"><option value="">无合同项目</option><option v-for="x in contracts.filter(c=>c.service_type===serviceType)" :value="x.id">{{x.contract_no}} · {{x.title}}</option></select></label>
           <label>项目负责人<select v-model="forms.project.value.managerEmployeeId"><option value="">未分配</option><option v-for="x in employees.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_valid_qualification)" :value="x.id">{{x.full_name}}</option></select></label>
           <label>计划开始<input v-model="forms.project.value.plannedStart" type="date"></label>
           <label>计划结束<input v-model="forms.project.value.plannedEnd" type="date"></label>
@@ -341,8 +357,8 @@ onMounted(async ()=>{
           <form v-if="projectEditOpen" class="create-grid compact" @submit.prevent="saveProject">
             <label>项目名称<input v-model="projectEditForm.name" required></label>
             <label>项目负责人<select v-model="projectEditForm.managerEmployeeId"><option value="">未分配</option><option v-for="x in employees.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_valid_qualification)" :value="x.id">{{x.full_name}}</option></select></label>
-            <label>计划开始<input v-model="projectEditForm.plannedStart" type="date"></label>
-            <label>计划结束<input v-model="projectEditForm.plannedEnd" type="date"></label>
+            <label>计划开始<input v-model="projectEditForm.plannedStart" type="date" :disabled="!!selectedProject.auto_from_contract"></label>
+            <label>计划结束（可选）<input v-model="projectEditForm.plannedEnd" type="date" :disabled="!!selectedProject.auto_from_contract"></label><p v-if="selectedProject.auto_from_contract" class="muted">项目计划日期随对应合同维护。</p>
             <label>项目状态<select v-model="projectEditForm.status"><option value="planned">计划中</option><option value="in_progress">进行中</option><option value="paused">暂停</option><option value="completed">已完成</option><option value="cancelled">已取消</option></select></label>
             <label>项目说明<input v-model="projectEditForm.description"></label>
             <button class="primary-button" :disabled="busy">保存项目</button>
@@ -351,13 +367,13 @@ onMounted(async ()=>{
           <p>状态：{{selectedProject.status}} · 负责人：{{selectedProject.manager_name||'未分配'}} · 技术负责人：{{selectedProject.technical_lead_name||'未分配'}}</p>
           <p>{{selectedProject.description||'暂无项目说明'}}</p>
           <div class="report-actions">
-            <button v-if="can('customer:read')" class="secondary-button" @click="section='customers';openCustomer(selectedProject.customer_id)">甲方档案</button>
-            <button v-if="can('maintenance:read')" class="secondary-button" @click="emit('navigate','partner-maintenance','maintenance',selectedProject.id)">维护保养</button>
+            <button v-if="can('customer:read')" class="secondary-button" @click="emit('navigate','business','customers',selectedProject.customer_id)">甲方档案</button>
+            <button v-if="selectedProject.service_type==='maintenance'&&can('maintenance:read')" class="secondary-button" @click="emit('navigate','partner-maintenance','maintenance',selectedProject.id)">维护保养</button>
             <button v-if="can('project:write')" class="secondary-button" @click="emit('navigate','partner-maintenance','leadership',selectedProject.id)">项目人员</button>
-            <button v-if="can('service:read')" class="secondary-button" @click="emit('navigate','service-workflow',null,selectedProject.id)">技术服务交付</button>
+            <button v-if="selectedProject.service_type!=='maintenance'&&can('service:read')" class="secondary-button" @click="emit('navigate','service-workflow',null,selectedProject.id)">技术服务交付</button>
           </div><h4 v-if="can('contract:read')">关联合同历史</h4>
-          <template v-if="can('contract:read')"><div v-for="contract in selectedProject.contracts||[]" :key="contract.id" class="log-line"><button class="secondary-button" @click="section='contracts';openContract(contract.id)">{{contract.contract_no}} · {{contract.title}}</button> · {{contract.relation_type}} · {{contract.starts_on||'—'}} 至 {{contract.ends_on||'—'}} · {{contract.status}}</div></template>
-          <p v-if="can('contract:read')&&!selectedProject.contracts?.length" class="empty">当前尚未关联合同，可在「合作方与维保」中建立合同关系。</p>
+          <template v-if="can('contract:read')"><div v-for="contract in selectedProject.contracts||[]" :key="contract.id" class="log-line"><button class="secondary-button" @click="emit('navigate','business','contracts',contract.id)">{{contract.contract_no}} · {{contract.title}}</button> · {{contract.relation_type}} · {{contract.starts_on||'—'}} 至 {{contract.ends_on||'—'}} · {{contract.status}}</div></template>
+          <p v-if="can('contract:read')&&!selectedProject.contracts?.length" class="empty">当前尚未关联合同，可在合同管理中建立合同关系。</p>
           <LegacyProjectDocuments v-if="can('project:read')&&can('report:read')" :key="selectedProject.id" :project-id="Number(selectedProject.id)" :permissions="props.permissions" />
           <h4>项目动态</h4>
           <p v-for="x in projectLogs" :key="x.id" class="log-line">{{x.created_at}} · {{x.actor_name||'系统'}} · {{x.content}}</p>

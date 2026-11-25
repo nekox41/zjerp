@@ -59,7 +59,7 @@ source scripts/erp-next-report-smoke.sh
 source scripts/erp-next-inspection-library-smoke.sh
 source scripts/erp-next-expense-smoke.sh
 source scripts/erp-next-invoice-smoke.sh
-source scripts/erp-next-dashboard-smoke.sh
+source scripts/erp-next-contract-project-smoke.sh
 if curl -fsS "${SMOKE_API_URL}/api/business/customers" >/dev/null; then echo 'Unauthenticated business request unexpectedly succeeded'; exit 1; fi
 
 # New installations have no legacy DB configured. Detection must be nonblocking and admin-only.

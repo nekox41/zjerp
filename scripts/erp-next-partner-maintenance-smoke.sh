@@ -100,7 +100,7 @@ test "$SAME_LEAD" = "400"
 # Switch this contract to a maintenance contract and track project status and visits.
 curl -fsS -X PUT "${SMOKE_API_URL}/api/business/contracts/$CONTRACT_ID" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"serviceType":"maintenance","status":"active"}' >/dev/null
+  -d '{"serviceType":"maintenance","status":"active","startsOn":"2026-01-01","endsOn":"2026-12-31"}' >/dev/null
 curl -fsS -X PUT "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/maintenance" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"currentContractId\":$CONTRACT_ID,\"honeybeeContractUploaded\":true,\"honeybeeProjectCreated\":true,\"projectMaterialsCompleted\":true,\"publicCardStatus\":\"preparing\",\"notes\":\"CI 维保状态\"}" | grep -q 'preparing'

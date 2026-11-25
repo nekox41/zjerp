@@ -6,12 +6,12 @@ const props=defineProps({permissions:{type:Array,default:()=>[]},destination:{ty
 const emit=defineEmits(['navigate'])
 const can=p=>props.permissions.includes(p)
 const visibleTabs=computed(()=>[
-  {id:'partners',name:'合作方档案',allowed:can('partner:read')},
+  {id:'partners',name:'中间人档案',allowed:can('partner:read')},
   {id:'links',name:'合同与项目关联',allowed:can('contract:read')},
   {id:'leadership',name:'项目人员',allowed:can('project:read')&&can('project:write')},
   {id:'maintenance',name:'维保项目',allowed:can('maintenance:read')&&can('project:read')}
 ].filter(t=>t.allowed))
-const tab=ref('partners'),busy=ref(false),error=ref(''),notice=ref('')
+const tab=ref(props.destination?.section||'partners'),busy=ref(false),error=ref(''),notice=ref('')
 const partners=ref([]),contracts=ref([]),projects=ref([]),employees=ref([])
 const partner=ref(null),maintenance=ref(null),contractDetail=ref(null)
 const partnerForm=ref({partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''})
@@ -43,6 +43,7 @@ async function createRenewal(){
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 
+const maintenanceProjects=computed(()=>projects.value.filter(p=>p.service_type==='maintenance'))
 const engineers=computed(()=>employees.value.filter(e=>e.employee_type==='engineer'&&e.status==='active'&&e.has_valid_qualification))
 async function load(){
   error.value=''
@@ -58,7 +59,7 @@ async function load(){
 }
 async function createPartner(){
   busy.value=true;error.value=''
-  try{await api('/business/partners',{method:'POST',body:JSON.stringify(partnerForm.value)});partnerForm.value={partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''};await load();notice.value='合作方档案已创建'}
+  try{await api('/business/partners',{method:'POST',body:JSON.stringify(partnerForm.value)});partnerForm.value={partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''};await load();notice.value='中间人档案已创建'}
   catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function openPartner(id){
@@ -81,7 +82,7 @@ async function savePartner(){
     partnerEditOpen.value=false
     await load()
     await openPartner(partner.value.id)
-    notice.value='合作方档案已更新'
+    notice.value='中间人档案已更新'
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function openContractDetail(id){
@@ -94,7 +95,7 @@ async function linkPartner(){
 }
 async function unlinkPartner(partnerId){
   const contractId=contractDetail.value?.id
-  if(!contractId||!confirm('确定解除此合作方与当前合同的关联？历史审计记录仍会保留。'))return
+  if(!contractId||!confirm('确定解除此合作方与当前合同的关联？'))return
   busy.value=true;error.value=''
   try{
     await api('/business/contracts/'+contractId+'/partners/'+partnerId,{method:'DELETE'})
@@ -179,19 +180,18 @@ onMounted(async ()=>{
 
 <template>
 <section class="pm-module">
-  <div class="pm-head"><div><span class="pm-kicker">BUSINESS PARTNERS · MAINTENANCE</span><h2>合作方与维护保养</h2><p>独立管理中间人、合同来源与分成，跟踪维护保养项目的合同和资料状态。</p></div><button @click="load">刷新</button></div>
+  <div class="pm-head"><div><h2>{{({partners:"中间人管理",links:"合同关联与附件",leadership:"项目人员",maintenance:"维保项目详情"})[tab]}}</h2></div><button @click="load">刷新</button></div>
   <p v-if="error" class="pm-msg error">{{error}}</p><p v-if="notice" class="pm-msg success">{{notice}}</p>
-  <nav class="pm-tabs"><button v-for="t in visibleTabs" :key="t.id" :class="{active:tab===t.id}" @click="tab=t.id">{{t.name}}</button></nav>
 
   <div v-if="tab==='partners'" class="pm-layout">
-    <div v-if="can('partner:write')" class="pm-panel"><h3>新增合作方</h3><form @submit.prevent="createPartner" class="pm-form">
+    <div v-if="can('partner:write')" class="pm-panel"><h3>新增中间人</h3><form @submit.prevent="createPartner" class="pm-form">
       <label>合作方编号<input v-model="partnerForm.partnerCode" required></label><label>名称<input v-model="partnerForm.name" required></label>
       <label>类型<select v-model="partnerForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label><label>联系人<input v-model="partnerForm.contactName"></label>
-      <label>电话<input v-model="partnerForm.phone"></label><label>邮箱<input v-model="partnerForm.email"></label><label class="wide">地址<input v-model="partnerForm.address"></label><label class="wide">备注<textarea v-model="partnerForm.notes"></textarea></label><button class="primary" :disabled="busy">创建合作方</button>
+      <label>电话<input v-model="partnerForm.phone"></label><label>邮箱<input v-model="partnerForm.email"></label><label class="wide">地址<input v-model="partnerForm.address"></label><label class="wide">备注<textarea v-model="partnerForm.notes"></textarea></label><button class="primary" :disabled="busy">创建中间人</button>
     </form></div>
-    <div class="pm-panel"><h3>合作方列表</h3><div class="pm-list"><button v-for="p in partners" :key="p.id" @click="openPartner(p.id)" :class="{selected:partner?.id===p.id}"><b>{{p.name}}</b><small>{{p.partner_code}} · {{p.contract_count}} 份关联合同</small></button><p v-if="!partners.length" class="pm-empty">暂无合作方</p></div>
+    <div class="pm-panel"><h3>中间人列表</h3><div class="pm-list"><button v-for="p in partners" :key="p.id" @click="openPartner(p.id)" :class="{selected:partner?.id===p.id}"><b>{{p.name}}</b><small>{{p.partner_code}} · {{p.contract_count}} 份关联合同</small></button><p v-if="!partners.length" class="pm-empty">暂无中间人</p></div>
       <div v-if="partner" class="pm-detail">
-        <div class="pm-detail-head"><h4>{{partner.name}} · 合作方档案</h4><button v-if="can('partner:write')" class="secondary-button" @click="partnerEditOpen=!partnerEditOpen">{{partnerEditOpen?'收起编辑':'编辑档案'}}</button></div>
+        <div class="pm-detail-head"><h4>{{partner.name}} · 中间人档案</h4><button v-if="can('partner:write')" class="secondary-button" @click="partnerEditOpen=!partnerEditOpen">{{partnerEditOpen?'收起编辑':'编辑档案'}}</button></div>
         <p>编号：{{partner.partner_code}} · 状态：{{partner.status==='active'?'启用':'停用'}}</p>
         <form v-if="partnerEditOpen" class="pm-form" @submit.prevent="savePartner">
           <label>名称<input v-model="partnerEditForm.name" required></label>
@@ -235,7 +235,7 @@ onMounted(async ()=>{
   </form><p class="pm-note">前端只列出在职且具有有效资格记录的工程师；服务端还会校验两人不同并再次核验资格有效期。</p></div>
 
   <div v-if="tab==='maintenance'" class="pm-layout">
-    <div class="pm-panel"><h3>选择维护保养项目</h3><div class="pm-list"><button v-for="p in projects" :key="p.id" @click="openMaintenance(p.id)" :class="{selected:String(maintenanceForm.projectId)===String(p.id)}"><b>{{p.name}}</b><small>{{p.project_no}} · {{p.customer_name}}</small></button></div></div>
+    <div class="pm-panel"><h3>选择维护保养项目</h3><div class="pm-list"><button v-for="p in maintenanceProjects" :key="p.id" @click="openMaintenance(p.id)" :class="{selected:String(maintenanceForm.projectId)===String(p.id)}"><b>{{p.name}}</b><small>{{p.project_no}} · {{p.customer_name}}</small></button></div></div>
     <div class="pm-panel" v-if="maintenance">
       <h3>维保项目状态</h3><button class="secondary-button" @click="emit('navigate','business','projects',Number(maintenanceForm.projectId))">返回项目档案</button><form class="pm-form" @submit.prevent="saveMaintenance"><fieldset :disabled="!can('maintenance:write')" class="wide" style="display:contents">
         <label>当前有效维护合同<select v-model="maintenanceForm.currentContractId" @change="selectAnnualState"><option value="">未指定</option><option v-for="c in maintenance.contractHistory||[]" :key="c.id" :value="c.id">{{c.contract_no}} · {{c.starts_on||'未开始'}} 至 {{c.ends_on||'未设置'}}</option></select></label>

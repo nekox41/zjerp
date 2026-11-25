@@ -428,8 +428,8 @@ class Migration:
                         raise ValueError("Project leader must have confirmed active engineering qualification")
             description=canonical({k:row.get(k) for k in ("site_address","contact_name","contact_phone","remark","project_type")})
             def create_project():
-                n=self.execute("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,planned_start,planned_end,status) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'planned')",
-                    (code,name,contract,customer,description,leader,technical,starts,ends))
+                n=self.execute("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,technical_lead_employee_id,planned_start,planned_end,service_type,status) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'planned')",
+                    (code,name,contract,customer,description,leader,technical,starts,ends,TYPES[project_type]))
                 if contract:
                     self.execute("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(%s,%s,'service')",(contract,n))
                 if project_type=="WB":

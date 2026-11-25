@@ -4,7 +4,6 @@ import { api } from './api'
 import BusinessModule from './BusinessModule.vue'
 import FinanceModule from './FinanceModule.vue'
 import InvoiceModule from './InvoiceModule.vue'
-import DashboardModule from './DashboardModule.vue'
 import ServiceWorkflow from './ServiceWorkflow.vue'
 import InspectionTemplateLibrary from './InspectionTemplateLibrary.vue'
 import FireStandardLibrary from './FireStandardLibrary.vue'
@@ -22,21 +21,45 @@ const notice = ref('')
 const tab = ref('overview')
 const destination = ref(null)
 const navigationKey = ref(0)
-function navigate(target, section=null, id=null) {
+let navigationRequest=0
+const projectTypes = [
+  {type:'maintenance',title:'维保项目'},
+  {type:'fire_inspection',title:'检测项目'},
+  {type:'fire_assessment',title:'评定项目'},
+  {type:'fire_evaluation',title:'评估项目'},
+  {type:'other',title:'其他技术服务'}
+]
+const pageTitle = computed(()=>{
+  if(tab.value==='business')return destination.value?.section==='projects'
+    ? projectTypes.find(p=>p.type===destination.value?.serviceType)?.title||'项目档案'
+    : ({employees:'员工档案',customers:'甲方管理',contracts:'合同管理'})[destination.value?.section]||'业务档案'
+  if(tab.value==='partner-maintenance')return ({partners:'中间人管理',links:'合同关联与附件',leadership:'项目人员',maintenance:'维保项目详情'})[destination.value?.section]||'中间人管理'
+  return ({overview:'工作台',identities:'账户管理',migration:'数据迁移','service-workflow':'技术服务交付','inspection-templates':'检测报告模板','fire-standards':'消防规范资料库',invoices:'发票与应收应付',finance:'费用报账与审批'})[tab.value]||'工作台'
+})
+async function navigate(target, section=null, id=null, serviceType=null) {
   const allowed = {
-    business: section ? can(({customers:'customer:read',contracts:'contract:read',projects:'project:read',employees:'employee:read'})[section]) : ['customer:read','contract:read','project:read','employee:read'].some(can),
-    'partner-maintenance': section==='maintenance' ? can('maintenance:read')&&can('project:read') : section==='leadership' ? can('project:read')&&can('project:write') : section==='links' ? can('contract:read') : can('partner:read')||can('maintenance:read')||can('contract:read')||can('project:read'),
+    business: section ? can(({customers:'customer:read',contracts:'contract:read',projects:'project:read',employees:'employee:read'})[section]) : false,
+    'partner-maintenance': section==='maintenance' ? can('maintenance:read')&&can('project:read') : section==='leadership' ? can('project:read')&&can('project:write') : section==='links' ? can('contract:read') : can('partner:read'),
     'service-workflow': can('service:read')
   }
   if (!allowed[target]) return
-  destination.value = {section,id}
+  const request=++navigationRequest
+  if(target==='business'&&section==='projects'&&id&&!serviceType){
+    try{serviceType=(await api('/business/projects/'+id)).service_type}catch(e){if(request===navigationRequest)error.value=e.message;return}
+  }
+  if(request!==navigationRequest)return
   navigationKey.value++
+  destination.value = {section,id,serviceType:section==='projects'?(serviceType||'other'):null}
   tab.value = target
 }
 function sidebar(target) {
+  navigationRequest++
   destination.value=null
   navigationKey.value++
   tab.value=target
+}
+function activeBusiness(section,type=null){
+  return tab.value==='business'&&destination.value?.section===section&&(type===null||destination.value?.serviceType===type)
 }
 const loginForm = ref({ username: '', password: '' })
 const bootstrapForm = ref({ token: '', username: 'admin', displayName: '系统管理员', password: '', confirm: '' })
@@ -152,14 +175,18 @@ onMounted(refresh)
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">众</span><span>众基 ERP</span></div>
       <div class="side-caption">工作空间</div>
-      <button :class="{active:tab==='overview'}" @click="tab='overview'"><span>⌂</span>工作台</button>
-      <button v-if="can('project:read')" :class="{active:tab==='dashboard'}" @click="tab='dashboard'"><span>◫</span>经营驾驶舱</button>
-      <div class="side-caption">业务管理</div>
-      <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="sidebar('business')"><span>▦</span>业务全生命周期</button>
-      <button v-if="can('partner:read') || can('contract:read') || (can('project:read')&&(can('maintenance:read')||can('project:write')))" :class="{active:tab==='partner-maintenance'}" @click="sidebar('partner-maintenance')"><span>♧</span>合作方与维保</button>
-      <button v-if="can('service:read')" :class="{active:tab==='service-workflow'}" @click="sidebar('service-workflow')"><span>◈</span>技术服务交付</button>
+      <button :class="{active:tab==='overview'}" @click="sidebar('overview')"><span>⌂</span>工作台</button>
+      <div v-if="['employee:read','partner:read','customer:read','report:read','report:standard:write','report:template:write'].some(can)" class="side-caption">基础资料</div>
+      <button v-if="can('employee:read')" :class="{active:activeBusiness('employees')}" @click="navigate('business','employees')"><span>♙</span>员工档案</button>
+      <button v-if="can('partner:read')" :class="{active:tab==='partner-maintenance'&&destination?.section==='partners'}" @click="navigate('partner-maintenance','partners')"><span>♧</span>中间人管理</button>
+      <button v-if="can('customer:read')" :class="{active:activeBusiness('customers')}" @click="navigate('business','customers')"><span>▦</span>甲方管理</button>
       <button v-if="can('report:read')||can('report:standard:write')" :class="{active:tab==='fire-standards'}" @click="sidebar('fire-standards')"><span>▤</span>消防规范资料库</button>
       <button v-if="can('report:template:write')" :class="{active:tab==='inspection-templates'}" @click="sidebar('inspection-templates')"><span>▤</span>检测报告模板</button>
+      <div v-if="can('contract:read')||can('project:read')" class="side-caption">合同与项目</div>
+      <button v-if="can('contract:read')" :class="{active:activeBusiness('contracts')||(tab==='partner-maintenance'&&destination?.section==='links')}" @click="navigate('business','contracts')"><span>▤</span>合同管理</button>
+      <template v-if="can('project:read')">
+        <button v-for="p in projectTypes" :key="p.type" :class="{active:activeBusiness('projects',p.type)||(p.type==='maintenance'&&tab==='partner-maintenance'&&destination?.section==='maintenance')}" @click="navigate('business','projects',null,p.type)"><span>◈</span>{{p.title}}</button>
+      </template>
       <div class="side-caption">财务管理</div>
       <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>
       <button v-if="can('invoice:read')" :class="{active:tab==='invoices'}" @click="tab='invoices'"><span>▤</span>发票与应收应付</button>
@@ -169,7 +196,7 @@ onMounted(refresh)
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账户管理':tab==='migration'?'数据迁移':tab==='partner-maintenance'?'合作方与维保':tab==='service-workflow'?'技术服务交付':tab==='inspection-templates'?'检测报告模板':tab==='fire-standards'?'消防规范资料库':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ pageTitle }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
       <div class="content">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
@@ -185,7 +212,6 @@ onMounted(refresh)
         <FireStandardLibrary v-else-if="tab==='fire-standards'&&(can('report:read')||can('report:standard:write'))" :permissions="user.permissions"/>
         <InspectionTemplateLibrary v-else-if="tab==='inspection-templates'&&can('report:template:write')" :permissions="user.permissions"/>
         <ServiceWorkflow v-else-if="tab==='service-workflow'" :key="navigationKey" :permissions="user.permissions" :user-id="user.id" :destination="destination" @navigate="navigate" />
-        <DashboardModule v-else-if="tab==='dashboard'" />
         <InvoiceModule v-else-if="tab==='invoices'" :permissions="user.permissions" />
         <FinanceModule v-else-if="tab==='finance'" :permissions="user.permissions" :user-id="user.id" />
         <BusinessModule v-else :key="navigationKey" :permissions="user.permissions" :destination="destination" @navigate="navigate" />

@@ -74,13 +74,13 @@ public class PartnerMaintenanceController {
     }
     @PostMapping("/contracts/{id}/projects") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> linkProject(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
-        Map<String,Object> c=one("SELECT id,customer_id FROM erp_contract WHERE id=? FOR UPDATE",id);long project=Long.parseLong(req(b,"projectId"));
-        Map<String,Object> p=one("SELECT id,customer_id,contract_id FROM erp_project WHERE id=? FOR UPDATE",project);
+        Map<String,Object> c=one("SELECT id,customer_id,service_type FROM erp_contract WHERE id=? FOR UPDATE",id);long project=Long.parseLong(req(b,"projectId"));
+        Map<String,Object> p=one("SELECT id,customer_id,contract_id,service_type FROM erp_project WHERE id=? FOR UPDATE",project);
         if(!Objects.equals(((Number)c.get("customer_id")).longValue(),((Number)p.get("customer_id")).longValue()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同与项目必须属于同一客户");
         String type=b.get("relationType")==null?"service":b.get("relationType").toString();
         if(!Set.of("service","renewal","supplement","other").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效合同项目关系");
         jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,?) ON DUPLICATE KEY UPDATE relation_type=VALUES(relation_type)",id,project,type);
-        if(p.get("contract_id")==null)jdbc.update("UPDATE erp_project SET contract_id=? WHERE id=?",id,project);
+        if(p.get("contract_id")==null)jdbc.update("UPDATE erp_project SET contract_id=?,service_type=CASE WHEN service_type='other' THEN ? ELSE service_type END WHERE id=?",id,c.get("service_type"),project);
         
         return one("SELECT * FROM erp_contract_project WHERE contract_id=? AND project_id=?",id,project);
     }
@@ -103,7 +103,7 @@ public class PartnerMaintenanceController {
         if(jdbc.update("DELETE FROM erp_contract_project WHERE contract_id=? AND project_id=?",id,projectId)==0)
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"合同项目关系不存在");
         Long replacement=jdbc.queryForObject("SELECT MIN(contract_id) FROM erp_contract_project WHERE project_id=?",Long.class,projectId);
-        jdbc.update("UPDATE erp_project SET contract_id=? WHERE id=? AND contract_id=?",replacement,projectId,id);
+        jdbc.update("UPDATE erp_project SET contract_id=?,auto_from_contract=FALSE WHERE id=? AND contract_id=?",replacement,projectId,id);
         
         return Map.of("removed",true);
     }
@@ -242,13 +242,14 @@ public class PartnerMaintenanceController {
     }
     @PostMapping("/contracts/{id}/files") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> addContractFile(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
-        one("SELECT id FROM erp_contract WHERE id=?",id);long file=Long.parseLong(req(b,"fileId"));
+        one("SELECT id FROM erp_contract WHERE id=? FOR UPDATE",id);long file=Long.parseLong(req(b,"fileId"));
         Map<String,Object> f=one("SELECT id,uploaded_by FROM erp_file_object WHERE id=?",file);
         if(((Number)f.get("uploaded_by")).longValue()!=actor(a))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能关联自己上传的文件");
         String type=b.get("fileType")==null?"contract":b.get("fileType").toString();
         if(!Set.of("contract","maintenance_card","project_material","other").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效合同文件类型");
         jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(?,?,?,?,?)",id,file,type,b.get("title"),actor(a));
         long record=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        if("contract".equals(type))ContractProjectCreation.createIfUnlinked(jdbc,id,actor(a));
         return one("SELECT cf.*,f.original_name FROM erp_contract_file cf JOIN erp_file_object f ON f.id=cf.file_id WHERE cf.id=?",record);
     }
 }
