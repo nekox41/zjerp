@@ -252,7 +252,7 @@ backup_target(){
  touch "$dest/COMPLETE"
  echo "备份已完成：$dest（敏感数据，请勿分享）"
 }
-actor(){ nextsql <<< "SELECT id FROM erp_identity WHERE username='trial-admin';"; }
+actor(){ nextsql <<< "SELECT id FROM erp_identity WHERE username='admin';"; }
 migration(){
  verify_marker
  pause_app
@@ -282,7 +282,7 @@ base="http://127.0.0.1:"+sys.argv[2]+"/next-api"
 with urllib.request.urlopen(base+"/bootstrap/status",timeout=15) as r:status=json.load(r)
 if not status["initialized"]:
     password=(Path(sys.argv[1])/"admin-password").read_text().strip()
-    req=urllib.request.Request(base+"/bootstrap/admin",data=json.dumps({"username":"trial-admin","displayName":"验收管理员","password":password}).encode(),headers={"Content-Type":"application/json","X-Bootstrap-Token":os.environ["ERP_BOOTSTRAP_TOKEN"]})
+    req=urllib.request.Request(base+"/bootstrap/admin",data=json.dumps({"username":"admin","displayName":"验收管理员","password":password}).encode(),headers={"Content-Type":"application/json","X-Bootstrap-Token":os.environ["ERP_BOOTSTRAP_TOKEN"]})
     with urllib.request.urlopen(req,timeout=30) as r:
         if r.status!=201:raise SystemExit("管理员初始化失败")
 PY
@@ -290,7 +290,7 @@ PY
    git rev-parse HEAD > "$STATE/last-successful-commit"
    dc ps -a
    echo "访问：http://localhost:$ERP_NEXT_WEB_PORT/next.html"
-   echo "账号：trial-admin；初始密码文件：$STATE/admin-password"
+   echo "账号：admin；初始密码文件：$STATE/admin-password"
    echo "旧版附件副本目录：$STATE/legacy-files"
    echo "试迁移环境目录：$STATE（不要上传其中的密码/真实资料）"
    ;;

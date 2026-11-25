@@ -101,13 +101,13 @@ python - "$apiaddr" "$bootstrap" "$adminpassword" <<'PY'
 import json,sys,urllib.request
 addr,token,password=sys.argv[1:]
 req=urllib.request.Request("http://"+addr+"/api/bootstrap/admin",
- data=json.dumps({"username":"trial-admin","displayName":"Trial administrator","password":password}).encode(),
+ data=json.dumps({"username":"admin","displayName":"Trial administrator","password":password}).encode(),
  headers={"Content-Type":"application/json","X-Bootstrap-Token":token})
 with urllib.request.urlopen(req,timeout=20) as response:
     if response.status!=201:raise SystemExit("Trial bootstrap failed")
 PY
 dc stop api
-dc exec -T -e MYSQL_PWD="$password" mysql mysql -u erp_next erp_next -N -e "SELECT id FROM erp_identity WHERE username='trial-admin'" > "$trial/admin-id"
+dc exec -T -e MYSQL_PWD="$password" mysql mysql -u erp_next erp_next -N -e "SELECT id FROM erp_identity WHERE username='admin'" > "$trial/admin-id"
 dc port mysql 3306 > "$trial/mysql-address"
 printf 'Trial: %s\nMySQL: %s\nSecrets: %s/.env\nFiles: %s/files\n' "$project" "$(cat "$trial/mysql-address")" "$trial" "$trial"
 echo "Trial administrator initialized and API stopped. Actor ID: $(cat "$trial/admin-id"). Password is in admin-password (private)."

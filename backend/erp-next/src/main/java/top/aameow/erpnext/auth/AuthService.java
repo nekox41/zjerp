@@ -34,7 +34,7 @@ public class AuthService {
         Integer count = jdbc.queryForObject("""
             SELECT COUNT(*) FROM erp_identity i
             JOIN erp_identity_role ir ON ir.identity_id=i.id
-            JOIN erp_role r ON r.id=ir.role_id WHERE r.code='admin'
+            JOIN erp_role r ON r.id=ir.role_id WHERE r.code='admin' AND i.username='admin' AND i.status='active'
             """, Integer.class);
         return count != null && count > 0;
     }
@@ -46,32 +46,13 @@ public class AuthService {
     @Transactional
     public void bootstrapAdmin(String username, String displayName, String password) {
         username=username.trim();displayName=displayName.trim();validateNewPassword(password);
-        if(username.isBlank()||displayName.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"账号和姓名不能为空");
+        if(!"admin".equals(username)||displayName.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"账号和姓名不能为空");
         Long roleId = jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE", Long.class);
         if (isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT, "管理员已初始化");
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'active')",
             username, passwords.encode(password), displayName);
         Long identityId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         jdbc.update("INSERT INTO erp_identity_role(identity_id,role_id) VALUES(?,?)", identityId, roleId);
-        audit(identityId, "identity.bootstrap", "erp_identity", identityId.toString(), "管理员初始化");
-    }
-
-    @Transactional
-    public void register(String username, String displayName, String password) {
-        if (!isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT,"请先初始化管理员");
-        username=username.trim();
-        displayName=displayName.trim();validateNewPassword(password);
-        if(username.isBlank()||displayName.isBlank()||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"账号和姓名不能为空，密码不得超过72字节");
-        try {
-            jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'disabled')",
-                username,passwords.encode(password),displayName);
-        } catch(org.springframework.dao.DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"账号不可用，请选择其他账号");
-        }
-        Long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-        // Public registrations never acquire roles, employee records or sessions.
-        audit(id,"identity.registered","erp_identity",id.toString(),"自主注册，等待管理员启用及授权");
     }
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
@@ -100,7 +81,6 @@ public class AuthService {
                   failed_login_count=LEAST(failed_login_count+1,?)
                 WHERE id=?
                 """, Math.max(0, maxFailedLogins - 1), lockMinutes, Math.max(1,maxFailedLogins), id);
-            audit(null, "auth.login.failed", "erp_identity", Long.toString(id), "登录失败");
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }
         jdbc.update("UPDATE erp_identity SET failed_login_count=0, locked_until=NULL WHERE id=?", id);
@@ -108,7 +88,6 @@ public class AuthService {
         String hash = TokenUtil.sha256(token);
         jdbc.update("INSERT INTO erp_auth_session(identity_id,token_hash,expires_at) VALUES(?,?,DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? HOUR))",
             id, hash, sessionHours);
-        audit(id, "auth.login", "erp_auth_session", hash.substring(0, 12), "用户登录");
         List<String> permissions = permissions(id);
         return new LoginResult(token, id, (String) row.get("username"), (String) row.get("display_name"),
             row.get("organization_id") == null ? null : ((Number) row.get("organization_id")).longValue(), permissions);
@@ -116,17 +95,11 @@ public class AuthService {
 
     public void logout(CurrentUser user) {
         jdbc.update("UPDATE erp_auth_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE token_hash=? AND revoked_at IS NULL", user.tokenHash());
-        audit(user.id(), "auth.logout", "erp_auth_session", user.tokenHash().substring(0, 12), "用户退出");
     }
 
     public List<String> permissions(long identityId) {
         return jdbc.query("SELECT DISTINCT p.code FROM erp_identity_role ir JOIN erp_role_permission rp ON rp.role_id=ir.role_id JOIN erp_permission p ON p.id=rp.permission_id WHERE ir.identity_id=? ORDER BY p.code",
             (rs, row) -> rs.getString(1), identityId);
-    }
-
-    private void audit(Long actor, String action, String type, String id, String summary) {
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('summary',?))",
-            actor, action, type, id, UUID.randomUUID().toString(), summary);
     }
 
     public record LoginResult(String token, long id, String username, String displayName, Long organizationId, List<String> permissions) { }

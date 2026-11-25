@@ -37,7 +37,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                .requestMatchers("/error", "/api/auth/login", "/api/auth/register", "/api/bootstrap/**", "/actuator/health").permitAll()
+                .requestMatchers("/error", "/api/auth/login", "/api/bootstrap/**", "/actuator/health").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(tokenFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
