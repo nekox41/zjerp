@@ -8,7 +8,6 @@ import ServiceWorkflow from './ServiceWorkflow.vue'
 import InspectionTemplateLibrary from './InspectionTemplateLibrary.vue'
 import FireStandardLibrary from './FireStandardLibrary.vue'
 import PartnerMaintenance from './PartnerMaintenance.vue'
-import MigrationConsole from './MigrationConsole.vue'
 import AccountManagement from './AccountManagement.vue'
 import ThemeSwitch from './ThemeSwitch.vue'
 
@@ -35,7 +34,7 @@ const pageTitle = computed(()=>{
     ? projectTypes.find(p=>p.type===destination.value?.serviceType)?.title||'项目档案'
     : ({employees:'员工档案',customers:'甲方管理',contracts:'合同管理'})[destination.value?.section]||'业务档案'
   if(tab.value==='partner-maintenance')return ({partners:'中间人管理',links:'合同关联与附件',leadership:'项目人员',maintenance:'维保项目详情'})[destination.value?.section]||'中间人管理'
-  return ({overview:'工作台',identities:'账户管理',migration:'数据迁移','service-workflow':'技术服务交付','inspection-templates':'检测报告模板','fire-standards':'消防规范资料库',invoices:'发票与应收应付',finance:'费用报账与审批'})[tab.value]||'工作台'
+  return ({overview:'工作台',identities:'账户管理','service-workflow':'技术服务交付','inspection-templates':'检测报告模板','fire-standards':'消防规范资料库',invoices:'发票与应收应付',finance:'费用报账与审批'})[tab.value]||'工作台'
 })
 async function navigate(target, section=null, id=null, serviceType=null) {
   const allowed = {
@@ -193,7 +192,6 @@ onMounted(refresh)
       <button v-if="can('invoice:read')" :class="{active:tab==='invoices'}" @click="tab='invoices'"><span>▤</span>发票与应收应付</button>
       <div class="side-caption">系统管理</div>
       <button v-if="can('identity:read')" :class="{active:tab==='identities'}" @click="tab='identities'"><span>♙</span>账户管理</button>
-      <button v-if="can('identity:write')" :class="{active:tab==='migration'}" @click="sidebar('migration')"><span>⇄</span>数据迁移</button>
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
@@ -208,7 +206,6 @@ onMounted(refresh)
           
         </template>
         <AccountManagement v-else-if="tab==='identities'&&can('identity:write')" :user-id="user.id" @self-changed="logout" @updated="loadWorkspace"/>
-        <MigrationConsole v-else-if="tab==='migration'&&can('identity:write')" />
         <PartnerMaintenance v-else-if="tab==='partner-maintenance'" :key="navigationKey" :permissions="user.permissions" :destination="destination" @navigate="navigate" />
         <FireStandardLibrary v-else-if="tab==='fire-standards'&&(can('report:read')||can('report:standard:write'))" :permissions="user.permissions"/>
         <InspectionTemplateLibrary v-else-if="tab==='inspection-templates'&&can('report:template:write')" :permissions="user.permissions"/>

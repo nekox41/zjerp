@@ -8,7 +8,7 @@ action="${1:-start}"
 usage(){ cat <<'EOF'
 Usage: bash deploy.sh [start|fresh|status|logs|stop]
 默认 start（fresh 为同义命令）：每次删除新版测试库全部记录与私有附件，重新初始化并部署。
-仅使用独立测试 MySQL，不检测、连接或迁移旧生产 server。
+仅使用独立测试 PostgreSQL，不检测、连接或迁移旧生产 server。
 不删除其他项目容器、共享数据库、历史归档或旧版附件；Docker 构建缓存保留。
 测试端口仅绑定 127.0.0.1，账号 admin，密码 123456；禁止用于生产。
 ERP_TRIAL_DIR 可指定专用状态目录（默认 ~/.local/share/zjerp-trial）。
@@ -31,7 +31,7 @@ chmod 700 "$STATE"
 exec 9>"$STATE/.lock"
 flock -n 9 || { echo "另一个测试部署命令正在运行" >&2; exit 1; }
 web="${ERP_NEXT_WEB_PORT:-8089}"; api="${ERP_NEXT_API_PORT:-8090}"
-if [[ -n "${ERP_MYSQL_CONTAINER:-}" ]]; then echo "测试部署不允许绑定外部 MySQL" >&2; exit 1; fi
+if [[ -n "${ERP_MYSQL_CONTAINER:-}" ]]; then echo "测试部署不允许绑定外部数据库" >&2; exit 1; fi
 for key in ERP_NEXT_DB_ROOT_PASSWORD ERP_NEXT_DB_PASSWORD ERP_BOOTSTRAP_TOKEN ERP_TRIAL_FILES ERP_TRIAL_UID ERP_TRIAL_GID ERP_NEXT_WEB_PORT ERP_NEXT_API_PORT COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES TRIAL_ID; do unset "$key"; done
 if [[ ! -e "$STATE/.env" ]]; then
  python3 - "$STATE" "$web" "$api" <<'PY'
@@ -67,47 +67,43 @@ set -a; source "$STATE/.env"; set +a
 for key in ERP_NEXT_DB_ROOT_PASSWORD ERP_NEXT_DB_PASSWORD ERP_BOOTSTRAP_TOKEN; do [[ "${!key}" =~ ^[0-9a-f]{64}$ ]] || { echo "无效测试凭据 $key" >&2; exit 1; }; done
 for port in "$ERP_NEXT_WEB_PORT" "$ERP_NEXT_API_PORT"; do [[ "$port" =~ ^[1-9][0-9]{3,4}$ ]] && ((port>=1024 && port<=65535)) || { echo "无效测试端口" >&2; exit 1; }; done
 [[ "$ERP_NEXT_WEB_PORT" != "$ERP_NEXT_API_PORT" ]] || exit 1
-project="erp-next-trial-$TRIAL_ID"
-if [[ -f "$STATE/mysql-binding" && "$(cat "$STATE/mysql-binding")" != $'managed\nerp-next-mysql' ]]; then
- echo "此状态目录曾绑定共享 MySQL；不会操作它。请使用新的独立 ERP_TRIAL_DIR（并选择空闲端口）。" >&2; exit 1
-fi
-printf 'managed\nerp-next-mysql\n' > "$STATE/mysql-binding"
+project="erp-next-pg-trial-$TRIAL_ID"
+old_project="erp-next-trial-$TRIAL_ID"
 dc(){ docker compose -p "$project" --profile managed-db --env-file "$STATE/.env" -f "$ROOT/erp-next/compose.trial.yaml" "$@"; }
 case "$action" in
  status) dc ps -a; exit;;
  logs) dc logs --tail=200 -f erp-next-api erp-next-web erp-next-schema; exit;;
- stop) dc stop erp-next-web erp-next-api erp-next-schema erp-next-mysql; exit;;
+ stop) dc stop erp-next-web erp-next-api erp-next-schema erp-next-postgres; exit;;
 esac
 echo "=== 本地测试全新部署：旧新版业务数据与附件将清空 ==="
-# Build first so a compiler/download failure does not unnecessarily erase the old test stack.
 erp_build_images
 dc config --quiet
 dc build erp-next-api erp-next-web
-dc stop erp-next-web erp-next-api erp-next-schema
-dc rm -f erp-next-web erp-next-api erp-next-schema
-echo "[1/3] 重建独立测试数据库与附件"
-dc up -d --wait --wait-timeout 180 erp-next-mysql
-id="$(dc ps -q erp-next-mysql)"
-[[ "$id" =~ ^[a-f0-9]{12,64}$ ]] || { echo "未找到独立测试 MySQL" >&2; exit 1; }
-[[ "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$id")" == "$project" && "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' "$id")" == erp-next-mysql ]] || { echo "拒绝操作非测试 MySQL" >&2; exit 1; }
-volume="${project}_trial_mysql"
-[[ "$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/mysql"}}{{.Type}}:{{.Name}}{{end}}{{end}}' "$id")" == "volume:$volume" && "$(docker volume inspect -f '{{index .Labels "com.docker.compose.project"}}' "$volume")" == "$project" && "$(docker volume inspect -f '{{index .Labels "com.docker.compose.volume"}}' "$volume")" == trial_mysql ]] || { echo "测试数据库卷归属校验失败" >&2; exit 1; }
-root_sql(){ docker exec -i "$id" sh -ec 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=socket -u root -N'; }
-# Reuse only the dedicated MySQL engine/volume; destroy and recreate the target schema.
-# Any old imported server schema, historical archives and unrelated volumes are left alone.
-root_sql <<'SQL'
-DROP DATABASE IF EXISTS erp_next;
-CREATE DATABASE erp_next CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-SQL
+# The old MySQL trial has a different Compose project. Retire only its own containers;
+# do not delete its volume (it could contain an imported legacy server schema).
+for svc in erp-next-web erp-next-api erp-next-schema erp-next-mysql; do
+ mapfile -t old_ids < <(docker ps -aq --filter "label=com.docker.compose.project=$old_project" --filter "label=com.docker.compose.service=$svc")
+ for old_id in "${old_ids[@]}"; do
+  [[ "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$old_id")" == "$old_project" ]] || exit 1
+  docker rm -f "$old_id"
+ done
+done
+# Only this dedicated PostgreSQL trial project owns this volume.
+volume="${project}_trial_postgres"
+if docker volume inspect "$volume" >/dev/null 2>&1; then
+ [[ "$(docker volume inspect -f '{{index .Labels "com.docker.compose.project"}}' "$volume")" == "$project" && "$(docker volume inspect -f '{{index .Labels "com.docker.compose.volume"}}' "$volume")" == trial_postgres ]] || { echo "测试数据库卷归属校验失败" >&2; exit 1; }
+fi
+dc down -v --remove-orphans
+echo "[1/3] 重建独立 PostgreSQL 测试数据库与附件"
 if [[ -e "$STATE/files" ]]; then
  [[ -d "$STATE/files" && ! -L "$STATE/files" && -O "$STATE/files" ]] || { echo "附件目录校验失败" >&2; exit 1; }
- # Do not traverse mounted subdirectories.
  find "$STATE/files" -xdev -mindepth 1 -delete
 else
  mkdir -m 700 "$STATE/files"
 fi
 for item in schema-init-pending schema-build last-successful-commit latest-preview review.json; do rm -f -- "$STATE/$item"; done
 printf '123456\n' > "$STATE/admin-password"
+dc up -d --wait --wait-timeout 180 erp-next-postgres
 echo "[2/3] 初始化最终 Schema"
 dc up --no-deps --force-recreate --exit-code-from erp-next-schema erp-next-schema
 echo "[3/3] 启动新 API 与 Web"

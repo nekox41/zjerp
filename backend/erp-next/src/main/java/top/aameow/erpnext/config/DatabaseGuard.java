@@ -17,12 +17,12 @@ public class DatabaseGuard implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        String database = jdbc.queryForObject("SELECT DATABASE()", String.class);
+        String database = jdbc.queryForObject("SELECT current_database()", String.class);
         if (!"erp_next".equals(database)) {
             throw new IllegalStateException("ERP Next must connect only to the isolated 'erp_next' database; actual database: " + database);
         }
         Integer versions = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM flyway_schema_history WHERE version='1' AND script='V1__initial_schema.sql' AND success=1 AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version IS NOT NULL OR success=0)=1", Integer.class);
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version='1' AND script='V1__initial_schema.sql' AND success=TRUE AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version IS NOT NULL OR success=FALSE)=1", Integer.class);
         if (versions == null || versions != 1) {
             throw new IllegalStateException("ERP Next initial schema is required; pre-release development databases must be freshly deployed");
         }

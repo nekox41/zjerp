@@ -48,7 +48,7 @@ public class AdminController {
         long roleId=role(b.role());AuthService.validateNewPassword(b.password());
         try{jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'active')",username,passwords.encode(b.password()),display);}
         catch(DuplicateKeyException e){throw new ResponseStatusException(HttpStatus.CONFLICT,"账号已存在");}
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         jdbc.update("INSERT INTO erp_identity_role(identity_id,role_id) VALUES(?,?)",id,roleId);
         return jdbc.queryForList(LIST+"WHERE i.id=?",id).get(0);
     }

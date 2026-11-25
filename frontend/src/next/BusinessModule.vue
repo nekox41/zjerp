@@ -31,7 +31,7 @@ async function saveQualification(){
 const selectedEmployee = ref(null)
 const employeeDetailOpen=ref(false)
 const employeeTypes={general:'普通员工',operator:'操作员',engineer:'工程师',manager:'管理人员'}
-const employeeFields=computed(()=>{const r=selectedEmployee.value||{};return [['员工编号',r.employee_code],['姓名',r.full_name],['员工类型',employeeTypes[r.employee_type]||r.employee_type],['岗位',r.position_name],['电话',r.phone||'—'],['邮箱',r.email||'—'],['所属组织',r.organization_name||'—'],['关联登录账号',identities.value.find(x=>String(x.id)===String(r.identity_id))?.username||(r.identity_id?'已关联':'未关联')],['状态',r.status==='active'?'在职':'离职 / 停用'],['创建时间',r.created_at],['最后更新',r.updated_at]]})
+const employeeFields=computed(()=>{const r=selectedEmployee.value||{};return [['员工编号',r.employee_code],['姓名',r.full_name],['员工类型',employeeTypes[r.employee_type]||r.employee_type],['岗位',r.position_name],['电话',r.phone||'—'],['邮箱',r.email||'—'],['所属组织',r.organization_name||'—'],['关联登录账号',identities.value.find(x=>String(x.id)===String(r.identity_id))?.username||(r.identity_id?'已关联':'未关联')],['状态',r.status==='active'?'在职':'离职 / 停用'],['入职日期',r.joined_on],['离职日期',r.left_on],['创建时间',r.created_at],['最后更新',r.updated_at]]})
 async function showEmployee(id){error.value='';await openEmployee(id);if(!error.value&&selectedEmployee.value)employeeDetailOpen.value=true}
 const customers = ref([])
 const contracts = ref([])
@@ -176,8 +176,7 @@ const projectEditForm=ref({name:'',description:'',managerEmployeeId:'',plannedSt
 async function openEmployee(id) {
   try {
     qualificationEdit.value=null
-    selectedEmployee.value=employees.value.find(x=>String(x.id)===String(id))
-    if(!selectedEmployee.value) throw new Error('员工记录不存在，请刷新列表')
+    selectedEmployee.value=await api('/business/employees/'+id)
     employeeEditForm.value={
       fullName:selectedEmployee.value.full_name||'',employeeType:selectedEmployee.value.employee_type||'general',
       identityId:selectedEmployee.value.identity_id||'',positionName:selectedEmployee.value.position_name||'',
@@ -301,7 +300,7 @@ onMounted(async ()=>{
 <button class="primary-button" :disabled="busy">保存员工档案</button>
 </div>
 </form></template></FormDialog>
-          <dl class="employee-fields"><div v-for="[label,value] in employeeFields" :key="label"><dt>{{label}}</dt><dd>{{value??'—'}}</dd></div></dl><h4>资质证书</h4><p v-if="!qualifications.length" class="empty">暂无资质记录</p><article v-for="x in qualifications" :key="x.id" class="employee-cert"><div class="section-heading"><b>{{x.qualification_name}}</b><button v-if="can('employee:write')" class="secondary-button" @click="editQualification(x)">更正资质</button></div><dl class="employee-fields"><div><dt>证书编号</dt><dd>{{x.certificate_no||'—'}}</dd></div><div><dt>发证机构</dt><dd>{{x.issuing_authority||'—'}}</dd></div><div><dt>发证日期</dt><dd>{{x.issued_on||'—'}}</dd></div><div><dt>有效期至</dt><dd>{{x.expires_on||'长期有效'}}</dd></div><div><dt>状态</dt><dd>{{({valid:'有效',expired:'失效',revoked:'撤销'})[x.effective_status||x.status]||x.effective_status||x.status}}</dd></div><div><dt>备注</dt><dd>{{x.notes||'—'}}</dd></div></dl></article><FormDialog v-if="qualificationEdit&&can('employee:write')" title="更正资质" :steps="['证书信息','有效期与状态']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="qualificationEdit=null">
+          <dl class="employee-fields"><div v-for="[label,value] in employeeFields" :key="label"><dt>{{label}}</dt><dd>{{value||'—'}}</dd></div></dl><h4>资质证书</h4><p v-if="!qualifications.length" class="empty">暂无资质记录</p><article v-for="x in qualifications" :key="x.id" class="employee-cert"><div class="section-heading"><b>{{x.qualification_name}}</b><button v-if="can('employee:write')" class="secondary-button" @click="editQualification(x)">更正资质</button></div><dl class="employee-fields"><div><dt>证书编号</dt><dd>{{x.certificate_no||'—'}}</dd></div><div><dt>发证机构</dt><dd>{{x.issuing_authority||'—'}}</dd></div><div><dt>发证日期</dt><dd>{{x.issued_on||'—'}}</dd></div><div><dt>有效期至</dt><dd>{{x.expires_on||'长期有效'}}</dd></div><div><dt>状态</dt><dd>{{({valid:'有效',expiring:'即将到期',expired:'失效',revoked:'撤销'})[x.effective_status||x.status]||x.effective_status||x.status}}</dd></div><div><dt>备注</dt><dd>{{x.notes||'—'}}</dd></div></dl></article><FormDialog v-if="qualificationEdit&&can('employee:write')" title="更正资质" :steps="['证书信息','有效期与状态']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="qualificationEdit=null">
 <template #default="{step,finish}"><form class="create-grid compact" @submit.prevent="finish(()=>saveQualification())">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
 <label>资质名称<input v-model="qualificationEdit.qualificationName" required></label>

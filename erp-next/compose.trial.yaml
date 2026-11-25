@@ -1,17 +1,19 @@
 # Disposable loopback-only ERP development test stack. No production data.
 services:
-  erp-next-mysql:
+  erp-next-postgres:
     profiles: ["managed-db"]
-    image: ${ERP_IMAGE_PREFIX:-}mysql:8.4
+    image: ${ERP_IMAGE_PREFIX:-}postgres:17
     environment:
-      MYSQL_ROOT_PASSWORD: ${ERP_NEXT_DB_ROOT_PASSWORD:?Set ERP_NEXT_DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: erp_next
-      MYSQL_USER: erp_next
-      MYSQL_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      POSTGRES_USER: postgres
+      POSTGRES_DB: erp_next
+      POSTGRES_PASSWORD: ${ERP_NEXT_DB_ROOT_PASSWORD:?Set ERP_NEXT_DB_ROOT_PASSWORD}
+      ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      TZ: Asia/Shanghai
     volumes:
-      - trial_mysql:/var/lib/mysql
+      - trial_postgres:/var/lib/postgresql/data
+      - ./db/postgres-init.sh:/docker-entrypoint-initdb.d/10-erp-user.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -u root --silent"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d erp_next"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -22,7 +24,7 @@ services:
   erp-next-schema:
     image: ${ERP_IMAGE_PREFIX:-}flyway/flyway:10.20.1
     environment:
-      FLYWAY_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useSSL=false&allowPublicKeyRetrieval=true
+      FLYWAY_URL: jdbc:postgresql://erp-next-postgres:5432/erp_next
       FLYWAY_USER: erp_next
       FLYWAY_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
       FLYWAY_CONNECT_RETRIES: "30"
@@ -45,7 +47,8 @@ services:
         ERP_IMAGE_PREFIX: ${ERP_IMAGE_PREFIX:-}
     environment:
       ERP_NEXT_PORT: "8090"
-      ERP_NEXT_DB_URL: jdbc:mysql://erp-next-mysql:3306/erp_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      ERP_NEXT_DB_URL: jdbc:postgresql://erp-next-postgres:5432/erp_next?stringtype=unspecified
+      TZ: Asia/Shanghai
       ERP_NEXT_DB_USER: erp_next
       ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
       ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
@@ -86,7 +89,7 @@ services:
 
 
 volumes:
-  trial_mysql: {}
+  trial_postgres: {}
 
 networks:
   erp-next-internal:

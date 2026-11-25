@@ -96,7 +96,7 @@ public class InspectionProfileController {
         var references=mapper.createArrayNode();Set<String> keys=new HashSet<>();List<String> lines=new ArrayList<>();
         for(BasisChoice choice:request.basisChoices()){
             if(choice==null||choice.id()==null||choice.id()<=0||choice.scope()==null||choice.scope().isBlank()||choice.scope().length()>500||choice.reason()==null||choice.reason().isBlank()||choice.reason().length()>2000)throw bad("每项依据需填写适用范围和选用说明");
-            var rows=jdbc.queryForList("SELECT s.id,s.standard_no,s.edition,s.title,s.category,s.publication_year,s.effective_on,s.withdrawn_on,s.validity,s.source_url,s.access_url,s.notes,s.revision_no,s.verified_by,s.verified_at,s.file_id,f.sha256 file_sha256 FROM erp_fire_standard s LEFT JOIN erp_file_object f ON f.id=s.file_id WHERE s.id=? AND s.active=1 AND s.verified=1",choice.id());
+            var rows=jdbc.queryForList("SELECT s.id,s.standard_no,s.edition,s.title,s.category,s.publication_year,s.effective_on,s.withdrawn_on,s.validity,s.source_url,s.access_url,s.notes,s.revision_no,s.verified_by,s.verified_at,s.file_id,f.sha256 file_sha256 FROM erp_fire_standard s LEFT JOIN erp_file_object f ON f.id=s.file_id WHERE s.id=? AND s.active=TRUE AND s.verified=TRUE",choice.id());
             com.fasterxml.jackson.databind.node.ObjectNode ref=null;
             if(rows.size()==1){
                 ref=mapper.createObjectNode();

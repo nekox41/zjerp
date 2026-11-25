@@ -1,6 +1,6 @@
 # 新版 ERP 独立运行环境
 
-这是新版 ERP 的独立运行栈，与旧版 RuoYi 应用和旧的 server 数据库完全隔离。它包含 MySQL 8.4、Flyway 最终初始 Schema V1、新版 Spring Boot API、独立 Vue 工作空间入口，以及独立持久化的私有业务附件目录。
+这是新版 ERP 的独立运行栈，与旧版 RuoYi 应用和旧的 server 数据库完全隔离。它包含 PostgreSQL 17、Flyway 最终初始 Schema V1、新版 Spring Boot API、独立 Vue 工作空间入口，以及独立持久化的私有业务附件目录。
 
 ## 首次启动
 
@@ -96,3 +96,5 @@ bash scripts/erp-next-local-verify.sh --full
 ## 基础资料、合同与项目
 
 员工档案、中间人管理、甲方管理与消防规范资料库归入基础资料；合同管理和五类项目分别进入合同与项目。经营驾驶舱暂时移除。新增合同默认自动创建同名同类型项目，项目日期取自合同；可明确关联已有同甲方同类型项目，维保续签使用原项目。维保合同必须填写起止日期，其他服务的结束日期允许为空。
+
+新版运行栈：Docker Compose、PostgreSQL 17、Flyway 10.20.1、Spring Boot 和 Vue。仅新版 PostgreSQL；旧生产 MySQL 不变，生产迁移暂缓。

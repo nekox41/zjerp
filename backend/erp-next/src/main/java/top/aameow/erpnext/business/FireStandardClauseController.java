@@ -27,7 +27,7 @@ public class FireStandardClauseController {
         if(q.length()>200||offset<0||limit<1||limit>100)throw bad("查询参数无效");
         boolean manager=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:standard:write"));
         String like="%"+q.trim()+"%";
-        var rows=jdbc.queryForList("SELECT c.*,s.standard_no,s.edition,s.title,s.source_url,s.access_url,s.active standard_active,s.verified FROM erp_fire_standard_clause c JOIN erp_fire_standard s ON s.id=c.standard_id WHERE (?=1 OR (c.active=1 AND s.active=1 AND s.verified=1)) AND (? IS NULL OR s.id=?) AND (c.clause_no LIKE ? OR c.requirement_summary LIKE ? OR s.standard_no LIKE ? OR s.title LIKE ?) ORDER BY s.standard_no,s.edition,c.clause_no,c.revision_no DESC LIMIT ? OFFSET ?",manager&&includeInactive?1:0,standardId,standardId,like,like,like,like,limit+1,offset);
+        var rows=jdbc.queryForList("SELECT c.*,s.standard_no,s.edition,s.title,s.source_url,s.access_url,s.active standard_active,s.verified FROM erp_fire_standard_clause c JOIN erp_fire_standard s ON s.id=c.standard_id WHERE (?=1 OR (c.active=TRUE AND s.active=TRUE AND s.verified=TRUE)) AND (CAST(? AS bigint) IS NULL OR s.id=?) AND (c.clause_no ILIKE ? OR c.requirement_summary ILIKE ? OR s.standard_no ILIKE ? OR s.title ILIKE ?) ORDER BY s.standard_no,s.edition,c.clause_no,c.revision_no DESC LIMIT ? OFFSET ?",manager&&includeInactive?1:0,standardId,standardId,like,like,like,like,limit+1,offset);
         return Map.of("rows",rows.size()>limit?rows.subList(0,limit):rows,"hasMore",rows.size()>limit);
     }
     @PostMapping @PreAuthorize("hasAuthority('report:standard:write')") @Transactional
@@ -35,10 +35,10 @@ public class FireStandardClauseController {
         long sid=id(b.get("standardId"));
         if(!Boolean.TRUE.equals(b.get("confirmed")))throw bad("须确认已核对指定版本原文、条款位置及摘录或摘要");
         String no=field(b,"clauseNo",80),summary=field(b,"summary",4000),locator=field(b,"locator",500);
-        if(jdbc.queryForList("SELECT id FROM erp_fire_standard WHERE id=? AND verified=1 AND active=1 FOR UPDATE",sid).isEmpty())throw bad("只能为已核验且启用的规范版本建立条款");
+        if(jdbc.queryForList("SELECT id FROM erp_fire_standard WHERE id=? AND verified=TRUE AND active=TRUE FOR UPDATE",sid).isEmpty())throw bad("只能为已核验且启用的规范版本建立条款");
         int revision=jdbc.queryForObject("SELECT COALESCE(MAX(revision_no),0)+1 FROM erp_fire_standard_clause WHERE standard_id=? AND clause_no=?",Integer.class,sid,no);
         jdbc.update("INSERT INTO erp_fire_standard_clause(standard_id,clause_no,requirement_summary,source_locator,revision_no,created_by) VALUES(?,?,?,?,?,?)",sid,no,summary,locator,revision,actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         return Map.of("id",id,"revisionNo",revision);
     }
     @PutMapping("/{id}/active") @PreAuthorize("hasAuthority('report:standard:write')") @Transactional

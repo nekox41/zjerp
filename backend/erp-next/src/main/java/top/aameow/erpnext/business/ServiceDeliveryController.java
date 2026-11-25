@@ -30,7 +30,7 @@ public class ServiceDeliveryController {
     @GetMapping("/employees/{id}/qualifications") @PreAuthorize("hasAuthority('employee:read')")
     public List<Map<String,Object>> qualifications(@PathVariable long id) {
         one("SELECT id FROM erp_employee WHERE id=?",id);
-        return jdbc.queryForList("SELECT *,CASE WHEN status='revoked' THEN 'revoked' WHEN status='expired' OR expires_on<CURRENT_DATE THEN 'expired' WHEN expires_on<=DATE_ADD(CURRENT_DATE,INTERVAL 60 DAY) THEN 'expiring' ELSE 'valid' END effective_status FROM erp_employee_qualification WHERE employee_id=? ORDER BY expires_on",id);
+        return jdbc.queryForList("SELECT *,CASE WHEN status='revoked' THEN 'revoked' WHEN status='expired' OR expires_on<CURRENT_DATE THEN 'expired' WHEN expires_on<=(CURRENT_DATE + 60) THEN 'expiring' ELSE 'valid' END effective_status FROM erp_employee_qualification WHERE employee_id=? ORDER BY expires_on",id);
     }
     private java.time.LocalDate qualificationDate(Object value){
         if(value==null||value.toString().isBlank())return null;
@@ -55,13 +55,13 @@ public class ServiceDeliveryController {
     public Map<String,Object> addQualification(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_employee WHERE id=?",id);validateQualification(b);
         jdbc.update("INSERT INTO erp_employee_qualification(employee_id,qualification_name,certificate_no,issuing_authority,issued_on,expires_on,notes,status) VALUES(?,?,?,?,?,?,?,?)",id,req(b,"qualificationName"),b.get("certificateNo"),b.get("issuingAuthority"),qualificationDate(b.get("issuedOn")),qualificationDate(b.get("expiresOn")),b.get("notes"),val(b,"status","valid"));
-        long qid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long qid=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT * FROM erp_employee_qualification WHERE id=?",qid);
     }
     @GetMapping("/qualifications/expiring") @PreAuthorize("hasAuthority('employee:read')")
     public List<Map<String,Object>> expiringQualifications(@RequestParam(defaultValue="60") int days) {
         int bounded=Math.max(0,Math.min(days,365));
-        return jdbc.queryForList("SELECT q.*,e.full_name,e.employee_code FROM erp_employee_qualification q JOIN erp_employee e ON e.id=q.employee_id WHERE q.expires_on IS NOT NULL AND q.expires_on<=DATE_ADD(CURRENT_DATE,INTERVAL ? DAY) AND q.status='valid' ORDER BY q.expires_on",bounded);
+        return jdbc.queryForList("SELECT q.*,e.full_name,e.employee_code FROM erp_employee_qualification q JOIN erp_employee e ON e.id=q.employee_id WHERE q.expires_on IS NOT NULL AND q.expires_on<=(CURRENT_DATE + CAST(? AS integer)) AND q.status='valid' ORDER BY q.expires_on",bounded);
     }
 
     @PostMapping("/contracts/{id}/amendments") @PreAuthorize("hasAuthority('contract:write')") @Transactional
@@ -72,7 +72,7 @@ public class ServiceDeliveryController {
         if(revised.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"变更金额不能为负数");
         String no=req(b,"amendmentNo"),title=req(b,"title"),summary=req(b,"changeSummary");
         jdbc.update("INSERT INTO erp_contract_amendment(contract_id,amendment_no,title,change_summary,previous_amount,revised_amount,effective_on,created_by) VALUES(?,?,?,?,?,?,?,?)",id,no,title,summary,previous,revised,b.get("effectiveOn"),actor(a));
-        long aid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long aid=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT * FROM erp_contract_amendment WHERE id=?",aid);
     }
     @GetMapping("/contracts/{id}/amendments") @PreAuthorize("hasAuthority('contract:read')")
@@ -94,7 +94,7 @@ public class ServiceDeliveryController {
     @GetMapping("/projects/{id}/issues") @PreAuthorize("hasAuthority('project:read')")
     public List<Map<String,Object>> issues(@PathVariable long id) {
         one("SELECT id FROM erp_project WHERE id=?",id);
-        return jdbc.queryForList("SELECT i.*,e.full_name owner_name FROM erp_project_issue i LEFT JOIN erp_employee e ON e.id=i.owner_employee_id WHERE i.project_id=? ORDER BY FIELD(i.status,'open','in_progress','resolved','closed'),i.due_on",id);
+        return jdbc.queryForList("SELECT i.*,e.full_name owner_name FROM erp_project_issue i LEFT JOIN erp_employee e ON e.id=i.owner_employee_id WHERE i.project_id=? ORDER BY CASE i.status WHEN 'open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'resolved' THEN 3 WHEN 'closed' THEN 4 ELSE 5 END,i.due_on",id);
     }
     @PostMapping("/projects/{id}/issues") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> createIssue(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
@@ -102,7 +102,7 @@ public class ServiceDeliveryController {
         String title=req(b,"title"),severity=val(b,"severity","medium");
         if(!Set.of("low","medium","high","critical").contains(severity)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效严重级别");
         jdbc.update("INSERT INTO erp_project_issue(project_id,title,description,severity,owner_employee_id,due_on) VALUES(?,?,?,?,?,?)",id,title,b.get("description"),severity,owner,b.get("dueOn"));
-        long issueId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long issueId=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT * FROM erp_project_issue WHERE id=?",issueId);
     }
     @PutMapping("/issues/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
@@ -110,7 +110,7 @@ public class ServiceDeliveryController {
         one("SELECT id FROM erp_project_issue WHERE id=?",id); String status=b.get("status")==null?null:b.get("status").toString();
         if(status!=null&&!Set.of("open","in_progress","resolved","closed").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效整改状态");
         if(status!=null&&Set.of("resolved","closed").contains(status)&&(b.get("resolution")==null||b.get("resolution").toString().isBlank())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"关闭整改项必须填写处理结果");
-        jdbc.update("UPDATE erp_project_issue SET title=COALESCE(?,title),description=COALESCE(?,description),severity=COALESCE(?,severity),owner_employee_id=COALESCE(?,owner_employee_id),due_on=COALESCE(?,due_on),status=COALESCE(?,status),resolution=COALESCE(?,resolution),closed_at=CASE WHEN COALESCE(?,status) IN ('resolved','closed') THEN COALESCE(closed_at,CURRENT_TIMESTAMP(3)) WHEN ? IS NOT NULL THEN NULL ELSE closed_at END WHERE id=?",b.get("title"),b.get("description"),b.get("severity"),opt(b,"ownerEmployeeId"),b.get("dueOn"),status,b.get("resolution"),status,status,id);
+        jdbc.update("UPDATE erp_project_issue SET title=COALESCE(?,title),description=COALESCE(?,description),severity=COALESCE(?,severity),owner_employee_id=COALESCE(?,owner_employee_id),due_on=COALESCE(?,due_on),status=COALESCE(?,status),resolution=COALESCE(?,resolution),closed_at=CASE WHEN COALESCE(?,status) IN ('resolved','closed') THEN COALESCE(closed_at,CURRENT_TIMESTAMP(3)) WHEN CAST(? AS text) IS NOT NULL THEN NULL ELSE closed_at END WHERE id=?",b.get("title"),b.get("description"),b.get("severity"),opt(b,"ownerEmployeeId"),b.get("dueOn"),status,b.get("resolution"),status,status,id);
          return one("SELECT * FROM erp_project_issue WHERE id=?",id);
     }
 
@@ -124,7 +124,7 @@ public class ServiceDeliveryController {
         one("SELECT id FROM erp_project WHERE id=?",id); Long assignee=opt(b,"assigneeEmployeeId"); if(assignee!=null) one("SELECT id FROM erp_employee WHERE id=?",assignee);
         String no=req(b,"packageNo"),title=req(b,"title");
         jdbc.update("INSERT INTO erp_service_work_package(project_id,package_no,title,description,assignee_employee_id,planned_start,planned_end) VALUES(?,?,?,?,?,?,?)",id,no,title,b.get("description"),assignee,b.get("plannedStart"),b.get("plannedEnd"));
-        long wid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long wid=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT * FROM erp_service_work_package WHERE id=?",wid);
     }
     @PutMapping("/work-packages/{id}") @PreAuthorize("hasAuthority('service:write')") @Transactional
@@ -145,7 +145,7 @@ public class ServiceDeliveryController {
     public Map<String,Object> addRecord(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_service_work_package WHERE id=?",id); String title=req(b,"title"),content=req(b,"content");
         jdbc.update("INSERT INTO erp_service_record(work_package_id,record_type,title,content,performed_on,recorded_by) VALUES(?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP(3)),?)",id,val(b,"recordType","field"),title,content,b.get("performedOn"),actor(a));
-        long rid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long rid=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT * FROM erp_service_record WHERE id=?",rid);
     }
 }

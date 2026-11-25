@@ -27,7 +27,7 @@ public class InspectionTemplateController {
     @PreAuthorize("hasAuthority('report:read') or hasAuthority('report:template:write')")
     public List<Map<String,Object>> list(Authentication a,@RequestParam(defaultValue="false") boolean includeInactive){
         boolean manager=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:template:write"));
-        var rows=jdbc.queryForList("SELECT t.*,f.original_name,f.byte_size,(SELECT COUNT(*) FROM erp_inspection_template_item i WHERE i.template_id=t.id) item_count FROM erp_inspection_template t JOIN erp_file_object f ON f.id=t.file_id WHERE (?=1 OR t.active=1) ORDER BY t.template_kind,t.system_name,t.template_name,t.revision_no DESC",manager&&includeInactive?1:0);
+        var rows=jdbc.queryForList("SELECT t.*,f.original_name,f.byte_size,(SELECT COUNT(*) FROM erp_inspection_template_item i WHERE i.template_id=t.id) item_count FROM erp_inspection_template t JOIN erp_file_object f ON f.id=t.file_id WHERE (?=1 OR t.active=TRUE) ORDER BY t.template_kind,t.system_name,t.template_name,t.revision_no DESC",manager&&includeInactive?1:0);
         var references=jdbc.queryForList("SELECT x.template_id,s.id,s.standard_no,s.edition,s.title,s.active,s.verified FROM erp_inspection_template_standard x JOIN erp_fire_standard s ON s.id=x.standard_id ORDER BY s.standard_no,s.edition,s.revision_no");
         Map<Long,List<Map<String,Object>>> byTemplate=new HashMap<>();
         for(var row:references){long id=((Number)row.remove("template_id")).longValue();byTemplate.computeIfAbsent(id,k->new ArrayList<>()).add(row);}
@@ -62,13 +62,13 @@ public class InspectionTemplateController {
         jdbc.queryForObject("SELECT id FROM erp_permission WHERE code='report:template:write' FOR UPDATE",Long.class);
         int next=jdbc.queryForObject("SELECT COALESCE(MAX(revision_no),0)+1 FROM erp_inspection_template WHERE template_kind=? AND system_name=? AND template_name=?",Integer.class,kind,system,name);
         jdbc.update("INSERT INTO erp_inspection_template(template_kind,system_name,template_name,revision_no,file_id,sha256,notes,created_by) VALUES(?,?,?,?,?,?,?,?)",kind,system,name,next,f.get("id"),hash,notes,actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         if(b.containsKey("standardIds")){
             if(!(b.get("standardIds") instanceof List<?> selected)||selected.size()>100)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"模板参考规范选择无效");
             Set<Long> unique=new HashSet<>();
             for(Object raw:selected){
                 long sid=fileId(raw);if(!unique.add(sid))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"重复规范");
-                one("SELECT id FROM erp_fire_standard WHERE id=? AND verified=1 AND active=1",sid);
+                one("SELECT id FROM erp_fire_standard WHERE id=? AND verified=TRUE AND active=TRUE",sid);
                 jdbc.update("INSERT INTO erp_inspection_template_standard(template_id,standard_id) VALUES(?,?)",id,sid);
             }
         }
@@ -92,7 +92,7 @@ public class InspectionTemplateController {
         for(Object raw:rows){
             if(!(raw instanceof Map<?,?> row)||!(row.get("item") instanceof String item)||item.isBlank()||item.length()>240||item.contains("{{erp."))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"检测项目名称无效");
             long clause=fileId(row.get("clauseId"));
-            var c=one("SELECT c.id,s.id standard_id FROM erp_fire_standard_clause c JOIN erp_fire_standard s ON s.id=c.standard_id WHERE c.id=? AND c.active=1 AND s.active=1 AND s.verified=1",clause);
+            var c=one("SELECT c.id,s.id standard_id FROM erp_fire_standard_clause c JOIN erp_fire_standard s ON s.id=c.standard_id WHERE c.id=? AND c.active=TRUE AND s.active=TRUE AND s.verified=TRUE",clause);
             standards.add(((Number)c.get("standard_id")).longValue());items.add(Map.of("item",item.trim(),"clauseId",clause));
         }
         jdbc.queryForObject("SELECT id FROM erp_permission WHERE code='report:template:write' FOR UPDATE",Long.class);
@@ -103,9 +103,9 @@ public class InspectionTemplateController {
             @Override public void afterCompletion(int status){if(status==STATUS_ROLLED_BACK)storage.deleteQuietly(stored.key());}
         });
         jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
-        long file=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long file=jdbc.queryForObject("SELECT lastval()",Long.class);
         jdbc.update("INSERT INTO erp_inspection_template(template_kind,system_name,template_name,revision_no,file_id,sha256,notes,created_by) VALUES('system',?,?,?,?,?,?,?)",system,name,next,file,stored.sha256(),notes,actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         for(long sid:standards)jdbc.update("INSERT INTO erp_inspection_template_standard(template_id,standard_id) VALUES(?,?)",id,sid);
         int order=0;for(var item:items)jdbc.update("INSERT INTO erp_inspection_template_item(template_id,sort_order,item_name,clause_id) VALUES(?,?,?,?)",id,++order,item.get("item"),item.get("clauseId"));
         return Map.of("id",id,"revisionNo",next,"itemCount",items.size());
@@ -126,9 +126,9 @@ public class InspectionTemplateController {
             @Override public void afterCompletion(int status){if(status==STATUS_ROLLED_BACK)storage.deleteQuietly(stored.key());}
         });
         jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
-        long file=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long file=jdbc.queryForObject("SELECT lastval()",Long.class);
         jdbc.update("INSERT INTO erp_inspection_template(template_kind,system_name,template_name,revision_no,file_id,sha256,notes,created_by) VALUES('base','',?,?,?,?,?,?)",name,next,file,stored.sha256(),notes,actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         return Map.of("id",id,"revisionNo",next,"tables",info.tables(),"rows",info.rows());
     }
     @PutMapping("/{id}/active")

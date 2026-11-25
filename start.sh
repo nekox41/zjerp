@@ -14,7 +14,7 @@ Usage: bash start.sh [start|status|logs|stop|help]
   logs    follow application logs
   stop    stop containers, preserving database and private files
 All commands operate ONLY on erp-next/compose.yaml.
-For every new pre-release test version use bash deploy.sh fresh (isolated trial).
+For every new pre-release test version use bash deploy.sh (disposable local trial).
 This quickstart is non-destructive; it does not upgrade development schemas.
 EOF
 }
@@ -68,7 +68,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 # Secrets are never echoed in full; Compose reads only the ERP Next environment file.
-compose() { docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
+compose() { docker compose -p erp-next-postgres --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
 case "$command_name" in
   status) compose ps -a; exit ;;
   logs) compose logs --tail=150 -f erp-next-api erp-next-web erp-next-schema; exit ;;
@@ -77,10 +77,10 @@ esac
 compose config --quiet
 echo "[1/4] Building ERP Next API and Web images..."
 compose build erp-next-api erp-next-web
-echo "[2/4] Starting MySQL and waiting for health..."
-if ! compose up -d --wait --wait-timeout 180 erp-next-mysql; then
+echo "[2/4] Starting PostgreSQL and waiting for health..."
+if ! compose up -d --wait --wait-timeout 180 erp-next-postgres; then
   compose ps -a >&2
-  compose logs --tail=100 erp-next-mysql >&2
+  compose logs --tail=100 erp-next-postgres >&2
   exit 1
 fi
 # Do not migrate while the application can still write to its database.

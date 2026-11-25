@@ -124,7 +124,7 @@ public class ServiceReportController {
         Map<String,Object> data=b.get("content") instanceof Map<?,?> m?(Map<String,Object>)m:Map.of();
         data=bindInspectionProfile(b,data,Map.of(),workPackageId,type,a);
         jdbc.update("INSERT INTO erp_service_report(report_no,work_package_id,title,report_type,created_by) VALUES(?,?,?,?,?)",no,workPackageId,title,type,actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         insertVersion(id,1,data,actor(a),title);
         event(id,null,"draft",actor(a),"创建报告");
         return detail(id);

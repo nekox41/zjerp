@@ -79,7 +79,7 @@ public class FileController {
         try{
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",
                 stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
-            long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+            long id=jdbc.queryForObject("SELECT lastval()",Long.class);
             Map<String,Object> result=one(id);result.remove("storage_key");return result;
         }catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }

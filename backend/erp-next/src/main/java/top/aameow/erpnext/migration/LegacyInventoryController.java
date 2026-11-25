@@ -30,7 +30,7 @@ public class LegacyInventoryController {
         @Value("${ERP_LEGACY_DB_USER:}") String user,
         @Value("${ERP_LEGACY_DB_PASSWORD:}") String password,
         @Value("${ERP_LEGACY_DB_SCHEMA:server_migration}") String schema){
-        this.target=target;this.enabled=enabled;this.url=url;this.user=user;this.password=password;this.schema=schema;
+        this.target=target;this.enabled=false; // Legacy MySQL reader is dormant until the production migration is redesigned.this.url=url;this.user=user;this.password=password;this.schema=schema;
     }
     private ResponseStatusException bad(HttpStatus status,String message){return new ResponseStatusException(status,message);}
     private void admin(Authentication a){
@@ -41,7 +41,7 @@ public class LegacyInventoryController {
     private boolean configured(){return enabled&&!url.isBlank()&&!user.isBlank()&&!password.isBlank()&&schema.matches("server(?:_[A-Za-z0-9_]{1,56})?")&&url.startsWith("jdbc:mysql://");}
     @GetMapping("/config")
     public Map<String,Object> config(Authentication a){
-        admin(a);return Map.of("enabled",enabled,"configured",configured(),"sourceSchema",schema,"targetSchema",Objects.toString(target.queryForObject("SELECT DATABASE()",String.class),""),"mode","server".equals(schema)?"existing-server-read-only":"offline-copy-read-only","previewLimit",20);
+        admin(a);return Map.of("enabled",enabled,"configured",configured(),"sourceSchema",schema,"targetSchema",Objects.toString(target.queryForObject("SELECT current_database()",String.class),""),"mode","server".equals(schema)?"existing-server-read-only":"offline-copy-read-only","previewLimit",20);
     }
     @GetMapping("/source-status")
     public Map<String,Object> sourceStatus(Authentication a){
@@ -78,7 +78,7 @@ public class LegacyInventoryController {
     }
     private Connection connect()throws SQLException{
         if(!configured())throw bad(HttpStatus.CONFLICT,"请配置旧 server 或隔离 server_ 副本的只读账户");
-        if(!"erp_next".equals(target.queryForObject("SELECT DATABASE()",String.class)))throw bad(HttpStatus.CONFLICT,"目标数据库不是隔离的 erp_next");
+        if(!"erp_next".equals(target.queryForObject("SELECT current_database()",String.class)))throw bad(HttpStatus.CONFLICT,"目标数据库不是隔离的 erp_next");
         Properties props=new Properties();
         props.setProperty("user",user);props.setProperty("password",password);
         props.setProperty("connectTimeout","5000");props.setProperty("socketTimeout","20000");

@@ -56,7 +56,7 @@ public class AuthService {
         if (isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT, "管理员已初始化");
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'active')",
             username, passwords.encode(password), displayName);
-        Long identityId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        Long identityId = jdbc.queryForObject("SELECT lastval()", Long.class);
         jdbc.update("INSERT INTO erp_identity_role(identity_id,role_id) VALUES(?,?)", identityId, roleId);
     }
 
@@ -68,7 +68,7 @@ public class AuthService {
         List<Map<String,Object>> rows = jdbc.queryForList("""
             SELECT id, username, password_hash, display_name, organization_id, status,
                    failed_login_count, locked_until
-            FROM erp_identity WHERE username=? FOR UPDATE
+            FROM erp_identity WHERE lower(username)=lower(?) FOR UPDATE
             """, username);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         Map<String,Object> row = rows.get(0);
@@ -82,7 +82,7 @@ public class AuthService {
             jdbc.update("UPDATE erp_identity SET failed_login_count=0,locked_until=NULL WHERE id=?",id);
         if (!passwords.matches(password, (String) row.get("password_hash"))) {
             jdbc.update("""
-                UPDATE erp_identity SET locked_until=CASE WHEN failed_login_count >= ? THEN DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MINUTE) ELSE NULL END,
+                UPDATE erp_identity SET locked_until=CASE WHEN failed_login_count >= ? THEN (LOCALTIMESTAMP(3) + CAST(? AS integer) * INTERVAL '1 minute') ELSE NULL END,
                   failed_login_count=LEAST(failed_login_count+1,?)
                 WHERE id=?
                 """, Math.max(0, maxFailedLogins - 1), lockMinutes, Math.max(1,maxFailedLogins), id);
@@ -91,7 +91,7 @@ public class AuthService {
         jdbc.update("UPDATE erp_identity SET failed_login_count=0, locked_until=NULL WHERE id=?", id);
         String token = TokenUtil.newToken();
         String hash = TokenUtil.sha256(token);
-        jdbc.update("INSERT INTO erp_auth_session(identity_id,token_hash,expires_at) VALUES(?,?,DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? HOUR))",
+        jdbc.update("INSERT INTO erp_auth_session(identity_id,token_hash,expires_at) VALUES(?,?,(LOCALTIMESTAMP(3) + CAST(? AS integer) * INTERVAL '1 hour'))",
             id, hash, sessionHours);
         List<String> permissions = permissions(id);
         return new LoginResult(token, id, (String) row.get("username"), (String) row.get("display_name"),

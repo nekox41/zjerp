@@ -53,7 +53,7 @@ public class CustomerHistoryController {
                 permission="service:visit:read";
                 sql="""
                     SELECT v.id,v.visit_date,v.visit_type,v.title,v.summary,v.result_summary,v.status,p.id project_id,p.name project_name,
-                        (SELECT GROUP_CONCAT(e.full_name ORDER BY e.full_name SEPARATOR '、') FROM erp_service_visit_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.visit_id=v.id) staff_names
+                        (SELECT string_agg(e.full_name, '、' ORDER BY e.full_name) FROM erp_service_visit_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.visit_id=v.id) staff_names
                     FROM erp_service_visit v JOIN erp_service_work_package w ON w.id=v.work_package_id
                     JOIN erp_project p ON p.id=w.project_id WHERE p.customer_id=?
                     ORDER BY v.visit_date DESC,v.id DESC
@@ -63,7 +63,7 @@ public class CustomerHistoryController {
                 permission="maintenance:read";
                 sql="""
                     SELECT v.id,v.visit_date,v.notes,p.id project_id,p.name project_name,c.contract_no,
-                        (SELECT GROUP_CONCAT(e.full_name ORDER BY e.full_name SEPARATOR '、') FROM erp_maintenance_visit_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.visit_id=v.id) staff_names
+                        (SELECT string_agg(e.full_name, '、' ORDER BY e.full_name) FROM erp_maintenance_visit_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.visit_id=v.id) staff_names
                     FROM erp_maintenance_visit v JOIN erp_project p ON p.id=v.project_id
                     LEFT JOIN erp_contract c ON c.id=v.contract_id WHERE p.customer_id=?
                     ORDER BY v.visit_date DESC,v.id DESC
@@ -73,7 +73,7 @@ public class CustomerHistoryController {
                 permission="repair:read";
                 sql="""
                     SELECT r.id,r.repair_date,r.title,r.description,r.result_summary,p.id project_id,p.name project_name,
-                        (SELECT GROUP_CONCAT(e.full_name ORDER BY e.full_name SEPARATOR '、') FROM erp_repair_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.repair_id=r.id) staff_names
+                        (SELECT string_agg(e.full_name, '、' ORDER BY e.full_name) FROM erp_repair_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.repair_id=r.id) staff_names
                     FROM erp_repair_record r JOIN erp_project p ON p.id=r.project_id WHERE p.customer_id=?
                     ORDER BY r.repair_date DESC,r.id DESC
                     """;
@@ -114,7 +114,7 @@ public class CustomerHistoryController {
         long actor=((CurrentUser)a.getPrincipal()).id();
         jdbc.update("INSERT INTO erp_repair_record(project_id,repair_date,title,description,result_summary,created_by) VALUES(?,?,?,?,?,?)",
             project,LocalDate.parse(b.repairDate()),b.title().trim(),b.description().trim(),b.resultSummary(),actor);
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         saveStaff(id,b.employeeIds());
         
         return detail(customerId,id);

@@ -79,7 +79,7 @@ public class ExpenseController {
         Long project=b.get("projectId")==null?null:Long.valueOf(b.get("projectId").toString());
         if(project!=null)one("SELECT id FROM erp_project WHERE id=?",project);
         jdbc.update("INSERT INTO erp_expense_claim(claim_no,title,applicant_identity_id,project_id) VALUES(?,?,?,?)",no,title,actor(a),project);
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         replaceLines(id,b.get("lines"));audit(id,actor(a),null,"draft","创建费用报账单");return detail(id);
     }
     @PutMapping("/{id}") @PreAuthorize("hasAuthority('expense:write')") @Transactional

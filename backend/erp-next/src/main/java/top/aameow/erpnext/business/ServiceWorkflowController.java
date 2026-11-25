@@ -40,7 +40,7 @@ public class ServiceWorkflowController {
     private String json(Object v){try{return mapper.writeValueAsString(v);}catch(Exception e){throw new IllegalStateException(e);}}
     private String sha(byte[] bytes){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));}catch(Exception e){throw new IllegalStateException(e);}}
     private void photoReviewEvent(long who,String action,long id,String summary){
-        jdbc.update("INSERT INTO erp_photo_review_event(batch_id,actor_identity_id,action,summary_json) VALUES(?,?,?,JSON_OBJECT('summary',?))",id,who,action,summary);
+        jdbc.update("INSERT INTO erp_photo_review_event(batch_id,actor_identity_id,action,summary_json) VALUES(?,?,?,json_build_object('summary',CAST(? AS text))::text)",id,who,action,summary);
     }
     private void eventDelivery(long id,String from,String to,long who,String notes){
         jdbc.update("INSERT INTO erp_service_delivery_event(delivery_id,from_status,to_status,actor_identity_id,notes) VALUES(?,?,?,?,?)",id,from,to,who,notes);
@@ -57,7 +57,7 @@ public class ServiceWorkflowController {
     @GetMapping("/work-packages/{id}/visits") @PreAuthorize("hasAuthority('service:visit:read')")
     public List<Map<String,Object>> visits(@PathVariable long id){
         one("SELECT id FROM erp_service_work_package WHERE id=?",id);
-        return jdbc.queryForList("SELECT v.*,i.display_name creator_name,(SELECT COUNT(*) FROM erp_service_visit_staff s WHERE s.visit_id=v.id) staff_count,(SELECT GROUP_CONCAT(e.full_name ORDER BY e.full_name SEPARATOR '、') FROM erp_service_visit_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.visit_id=v.id) staff_names,(SELECT COUNT(*) FROM erp_service_visit_issue x WHERE x.visit_id=v.id) issue_count FROM erp_service_visit v LEFT JOIN erp_identity i ON i.id=v.created_by WHERE v.work_package_id=? ORDER BY v.visit_date DESC,v.id DESC",id);
+        return jdbc.queryForList("SELECT v.*,i.display_name creator_name,(SELECT COUNT(*) FROM erp_service_visit_staff s WHERE s.visit_id=v.id) staff_count,(SELECT string_agg(e.full_name, '、' ORDER BY e.full_name) FROM erp_service_visit_staff s JOIN erp_employee e ON e.id=s.employee_id WHERE s.visit_id=v.id) staff_names,(SELECT COUNT(*) FROM erp_service_visit_issue x WHERE x.visit_id=v.id) issue_count FROM erp_service_visit v LEFT JOIN erp_identity i ON i.id=v.created_by WHERE v.work_package_id=? ORDER BY v.visit_date DESC,v.id DESC",id);
     }
     @PostMapping("/work-packages/{id}/visits") @PreAuthorize("hasAuthority('service:visit:write')") @Transactional
     public Map<String,Object> createVisit(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
@@ -67,7 +67,7 @@ public class ServiceWorkflowController {
         Integer visitNo=jdbc.queryForObject("SELECT COALESCE(MAX(visit_no),0)+1 FROM erp_service_visit WHERE work_package_id=?",Integer.class,id);
         jdbc.update("INSERT INTO erp_service_visit(work_package_id,visit_no,visit_date,visit_type,title,summary,result_summary,status,created_by) VALUES(?,?,?,?,?,?,?,'completed',?)",
             id,visitNo,date,type,title,b.get("summary"),b.get("resultSummary"),actor(a));
-        long visitId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long visitId=jdbc.queryForObject("SELECT lastval()",Long.class);
         Object staff=b.get("staff");
         if(!(staff instanceof List<?> list)||list.isEmpty()||list.size()>100)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择实际到场人员");
         Set<Long> assignedStaff=new HashSet<>();
@@ -92,7 +92,7 @@ public class ServiceWorkflowController {
         if(visitProject==null||((Number)issue.get("project_id")).longValue()!=visitProject)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"只能关联同一项目的问题清单");
         String relation=b.get("relationType")==null?"found":b.get("relationType").toString();
         if(!Set.of("found","reviewed","resolved").contains(relation))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效问题关联类型");
-        jdbc.update("INSERT INTO erp_service_visit_issue(visit_id,issue_id,relation_type,notes) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE relation_type=VALUES(relation_type),notes=VALUES(notes)",id,issueId,relation,b.get("notes"));
+        jdbc.update("INSERT INTO erp_service_visit_issue(visit_id,issue_id,relation_type,notes) VALUES(?,?,?,?) ON CONFLICT (visit_id,issue_id) DO UPDATE SET relation_type=EXCLUDED.relation_type,notes=EXCLUDED.notes",id,issueId,relation,b.get("notes"));
         
         return one("SELECT * FROM erp_service_visit_issue WHERE visit_id=? AND issue_id=?",id,issueId);
     }
@@ -115,7 +115,7 @@ public class ServiceWorkflowController {
         Long visitId=opt(b,"visitId"); if(visitId!=null)one("SELECT id FROM erp_service_visit WHERE id=? AND work_package_id=?",visitId,id);
         String title=req(b,"title"),date=req(b,"visitDate");
         jdbc.update("INSERT INTO erp_report_photo_batch(work_package_id,visit_id,title,visit_date,created_by) VALUES(?,?,?,?,?)",id,visitId,title,date,actor(a));
-        long batchId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long batchId=jdbc.queryForObject("SELECT lastval()",Long.class);
         
         return batchDetail(batchId);
     }
@@ -141,7 +141,7 @@ public class ServiceWorkflowController {
         if(totalBytes!=null&&totalBytes+((Number)file.get("byte_size")).longValue()>220L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"单批照片总量不能超过 220MB");
         Integer order=jdbc.queryForObject("SELECT COALESCE(MAX(sort_order),-1)+1 FROM erp_report_photo WHERE batch_id=?",Integer.class,id);
         jdbc.update("INSERT INTO erp_report_photo(batch_id,file_id,taken_on,caption,sort_order) VALUES(?,?,?,?,?)",id,fileId,b.get("takenOn"),b.get("caption"),order);
-        long photoId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long photoId=jdbc.queryForObject("SELECT lastval()",Long.class);
         
         return one("SELECT p.*,f.original_name,f.media_type,f.byte_size file_size FROM erp_report_photo p JOIN erp_file_object f ON f.id=p.file_id WHERE p.id=?",photoId);
     }
@@ -243,7 +243,7 @@ public class ServiceWorkflowController {
         long templateId;
         if(libraryId!=null){
             if(a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("report:read")))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"无权使用模板库");
-            var lib=one("SELECT file_id FROM erp_inspection_template WHERE id=? AND template_kind='base' AND active=1",libraryId);
+            var lib=one("SELECT file_id FROM erp_inspection_template WHERE id=? AND template_kind='base' AND active=TRUE",libraryId);
             templateId=((Number)lib.get("file_id")).longValue();
         }else templateId=Long.parseLong(req(b,"templateFileId"));
         var template=one("SELECT * FROM erp_file_object WHERE id=?",templateId);
@@ -272,12 +272,12 @@ public class ServiceWorkflowController {
             return new TemplatePlan(bytes,template.get("sha256").toString(),List.of(),allPhotoSystems());
         }
         if(ids.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"至少选择一个系统章节模板");
-        var base=one("SELECT id,template_name,revision_no,sha256,file_id FROM erp_inspection_template WHERE id=? AND template_kind='base' AND active=1",baseId);
+        var base=one("SELECT id,template_name,revision_no,sha256,file_id FROM erp_inspection_template WHERE id=? AND template_kind='base' AND active=TRUE",baseId);
         if(!Objects.equals(base.get("sha256"),template.get("sha256"))||((Number)base.get("file_id")).longValue()!=((Number)template.get("id")).longValue())throw new ResponseStatusException(HttpStatus.CONFLICT,"基础模板已变更");
         List<Map<String,Object>> revisions=new ArrayList<>();revisions.add(base);
         List<InspectionTemplateComposer.Section> sections=new ArrayList<>();Set<String> systems=new LinkedHashSet<>();long total=bytes.length;
         for(Long id:ids){
-            var s=one("SELECT t.id,t.system_name,t.template_name,t.revision_no,t.sha256,t.file_id,f.storage_key,f.media_type FROM erp_inspection_template t JOIN erp_file_object f ON f.id=t.file_id WHERE t.id=? AND t.template_kind='system' AND t.active=1",id);
+            var s=one("SELECT t.id,t.system_name,t.template_name,t.revision_no,t.sha256,t.file_id,f.storage_key,f.media_type FROM erp_inspection_template t JOIN erp_file_object f ON f.id=t.file_id WHERE t.id=? AND t.template_kind='system' AND t.active=TRUE",id);
             String system=s.get("system_name").toString();
             if(!systems.add(system))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"同一系统只能选择一个模板："+system);
             byte[] part=templateBytes(s);total+=part.length;if(total>40L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"基础模板和章节模板合计超过40MB");
@@ -389,7 +389,7 @@ public class ServiceWorkflowController {
             if(original.path("templateRevisions").isArray())manifest.put("sourceTemplateRevisions",original.path("templateRevisions").deepCopy());
         }
         jdbc.update("INSERT INTO erp_service_report_artifact(report_id,version_no,file_id,artifact_type,artifact_revision_no,sha256,created_by,generation_manifest) VALUES(?,?,?,'docx',?,?,?,?)",id,version,fileId,revision,f.get("sha256"),actor(a),json(manifest));
-        long artifactId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long artifactId=jdbc.queryForObject("SELECT lastval()",Long.class);
         if(jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment WHERE report_id=? AND version_no=? AND file_id=?",Integer.class,id,version,fileId)==0)
             jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
         
@@ -490,7 +490,7 @@ public class ServiceWorkflowController {
         });
         try {
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
-            long fileId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+            long fileId=jdbc.queryForObject("SELECT lastval()",Long.class);
             Integer artifactRevision=jdbc.queryForObject("SELECT COALESCE(MAX(artifact_revision_no),0)+1 FROM erp_service_report_artifact WHERE report_id=? AND version_no=? AND artifact_type='docx'",Integer.class,id,version);
             jdbc.update("INSERT INTO erp_service_report_artifact(report_id,version_no,file_id,artifact_type,artifact_revision_no,sha256,created_by,generation_manifest) VALUES(?,?,?,'docx',?,?,?,?)",id,version,fileId,artifactRevision,stored.sha256(),actor(a),json(manifest));
             jdbc.update("INSERT INTO erp_service_report_attachment(report_id,version_no,file_id,created_by) VALUES(?,?,?,?)",id,version,fileId,actor(a));
@@ -519,7 +519,7 @@ public class ServiceWorkflowController {
         if(!Set.of("courier","hand_delivery","electronic").contains(method))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效交付方式");
         jdbc.update("INSERT INTO erp_service_delivery(report_id,version_no,artifact_id,delivery_method,recipient_name,recipient_phone,recipient_organization,recipient_address,courier_name,tracking_no,status,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,'prepared',?,?)",
             id,version,artifact,method,req(b,"recipientName"),b.get("recipientPhone"),b.get("recipientOrganization"),req(b,"recipientAddress"),b.get("courierName"),b.get("trackingNo"),b.get("notes"),actor(a));
-        long deliveryId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long deliveryId=jdbc.queryForObject("SELECT lastval()",Long.class);
         eventDelivery(deliveryId,null,"prepared",actor(a),"创建交付登记");
         
         return one("SELECT * FROM erp_service_delivery WHERE id=?",deliveryId);

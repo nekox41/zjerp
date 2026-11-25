@@ -4,12 +4,11 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 mode="${1:---smoke}"
-# Validate scripts and offline migration helpers before starting any test service.
+# Validate active test scripts before starting any test service. Legacy migration is deferred.
 command -v python >/dev/null
 for script in scripts/erp-next-*.sh; do bash -n "$script"; done
-python scripts/erp-next-legacy-unit-test.py
 if [[ "$mode" == "--static" ]]; then
-  echo "Shell syntax and offline migration tests passed (not a Java/frontend build)."
+  echo "Shell syntax checks passed (not a Java/frontend build)."
   exit 0
 fi
 if [[ "$mode" != "--smoke" && "$mode" != "--build-only" && "$mode" != "--full" ]]; then
@@ -51,7 +50,7 @@ python - "$compose_file" "$project" <<'PY'
 import sys
 from pathlib import Path
 s=Path("erp-next/compose.yaml").read_text()
-for original in ("erp_next_mysql_data","erp_next_private_files"):
+for original in ("erp_next_postgres_data","erp_next_private_files"):
     old="name: "+original
     assert s.count(old)==1, "Unexpected volume definition; stop for review"
     s=s.replace(old,"name: "+sys.argv[2]+"_"+original)
@@ -73,14 +72,14 @@ printf 'ERP_LEGACY_SCAN_ENABLED=false\n' > "$env_file"
 dc(){ docker compose -p "$project" --env-file "$env_file" -f "$compose_file" "$@"; }
 dc config --quiet
 trap cleanup EXIT
-dc up -d erp-next-mysql
+dc up -d --wait erp-next-postgres
 dc run --rm erp-next-schema
 dc run --rm erp-next-schema
-dc exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql mysql -u erp_next -D erp_next -N -e 'SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL' | grep -qx 1
+dc exec -T -e PGPASSWORD="$ERP_NEXT_DB_PASSWORD" erp-next-postgres psql -h 127.0.0.1 -U erp_next -d erp_next -At -v ON_ERROR_STOP=1 -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success=TRUE AND version IS NOT NULL' | grep -qx 1
 # The first release has exactly one initial schema; development upgrade paths are not supported.
-dc exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql mysql -u erp_next -D erp_next -N -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version='1' AND script='V1__initial_schema.sql' AND success=1" | grep -qx 1
-dc exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql mysql -u erp_next -D erp_next -N -e "SELECT GROUP_CONCAT(code ORDER BY code) FROM erp_role" | grep -qx 'admin,employee,manager'
-dc exec -T -e MYSQL_PWD="$ERP_NEXT_DB_PASSWORD" erp-next-mysql mysql -u erp_next -D erp_next -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='erp_next' AND table_name IN ('erp_audit_event','erp_retired_audit_event')" | grep -qx 0
+dc exec -T -e PGPASSWORD="$ERP_NEXT_DB_PASSWORD" erp-next-postgres psql -h 127.0.0.1 -U erp_next -d erp_next -At -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM flyway_schema_history WHERE version='1' AND script='V1__initial_schema.sql' AND success=TRUE" | grep -qx 1
+dc exec -T -e PGPASSWORD="$ERP_NEXT_DB_PASSWORD" erp-next-postgres psql -h 127.0.0.1 -U erp_next -d erp_next -At -v ON_ERROR_STOP=1 -c "SELECT string_agg(code, ',' ORDER BY code) FROM erp_role" | grep -qx 'admin,employee,manager'
+dc exec -T -e PGPASSWORD="$ERP_NEXT_DB_PASSWORD" erp-next-postgres psql -h 127.0.0.1 -U erp_next -d erp_next -At -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('erp_audit_event','erp_retired_audit_event')" | grep -qx 0
 dc up -d --build
 # Query only our randomly named Compose project's bindings, never probe a
 # known production port or fall back to a default if Docker did not publish.

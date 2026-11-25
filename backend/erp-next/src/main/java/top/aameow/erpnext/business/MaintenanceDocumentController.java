@@ -45,7 +45,7 @@ public class MaintenanceDocumentController {
             FROM erp_contract_project cp JOIN erp_project p ON p.id=cp.project_id
             JOIN erp_contract c ON c.id=cp.contract_id LEFT JOIN erp_employee e ON e.id=p.manager_employee_id
             WHERE cp.project_id=? AND cp.contract_id=? AND c.service_type='maintenance'
-            """+(lock?" FOR UPDATE":""),project,contract);
+            """+(lock?" FOR UPDATE OF cp,p,c":""),project,contract);
     }
     private String code(long n){return String.format(Locale.ROOT,"%07d",n);}
     private long lastNumber(boolean lock){return jdbc.queryForObject("SELECT last_number FROM erp_maintenance_card_sequence WHERE id=1"+(lock?" FOR UPDATE":""),Long.class);}
@@ -96,10 +96,10 @@ public class MaintenanceDocumentController {
         });
         jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",
             stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
-        long file=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long file=jdbc.queryForObject("SELECT lastval()",Long.class);
         jdbc.update("INSERT INTO erp_maintenance_card(project_id,contract_id,file_id,code,project_name,company,leader,phone,systems,starts_on,ends_on,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
             project,contract,file,no,card.name(),card.company(),card.leader(),card.phone(),card.system1(),v.start(),v.end(),actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(?,?,?,?,?)",contract,file,"maintenance_card","维保公示卡 "+no,actor(a));
         
         return one("SELECT * FROM erp_maintenance_card WHERE id=?",id);
@@ -119,7 +119,7 @@ public class MaintenanceDocumentController {
     @PostMapping("/contacts") @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
     public Map<String,Object> addContact(@RequestBody Map<String,Object>b,Authentication a){
         jdbc.update("INSERT INTO erp_maintenance_contact(name,phone) VALUES(?,?)",field(b,"name",100,true),field(b,"phone",50,true));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         return one("SELECT * FROM erp_maintenance_contact WHERE id=?",id);
     }
     @PutMapping("/contacts/{id}") @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
@@ -141,7 +141,7 @@ public class MaintenanceDocumentController {
             if(pdf.isEncrypted()||pdf.getNumberOfPages()<1||pdf.getNumberOfPages()>300)throw bad("仅支持未加密的 1 至 300 页 PDF");
         }catch(IOException e){throw bad("无效或加密的 PDF 文件");}
         jdbc.update("INSERT INTO erp_maintenance_material(name,file_id,notes,created_by) VALUES(?,?,?,?)",name,file,field(b,"notes",2000,false),actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         return one("SELECT * FROM erp_maintenance_material WHERE id=?",id);
     }
     @PutMapping("/materials/{id}") @PreAuthorize("hasAuthority('maintenance:write')") @Transactional
@@ -159,8 +159,8 @@ public class MaintenanceDocumentController {
         if(jdbc.queryForObject("SELECT COUNT(*) FROM erp_maintenance_material_archive WHERE contract_id=? AND project_id=? AND material_id=?",Integer.class,contract,project,material)>0)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"该资料已归档");
         jdbc.update("INSERT INTO erp_maintenance_material_archive(contract_id,project_id,material_id,file_id,title,created_by) VALUES(?,?,?,?,?,?)",contract,project,material,m.get("file_id"),m.get("name"),actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-        jdbc.update("INSERT IGNORE INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(?,?,?,?,?)",contract,m.get("file_id"),"project_material",m.get("name"),actor(a));
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
+        jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(?,?,?,?,?) ON CONFLICT (contract_id,file_id) DO NOTHING",contract,m.get("file_id"),"project_material",m.get("name"),actor(a));
         
         return one("SELECT * FROM erp_maintenance_material_archive WHERE id=?",id);
     }

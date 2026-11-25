@@ -32,7 +32,7 @@ public class PartnerMaintenanceController {
     public Map<String,Object> createPartner(@RequestBody Map<String,Object>b,Authentication a){
         String code=req(b,"partnerCode"),name=req(b,"name"),type=b.get("partnerType")==null?"introducer":b.get("partnerType").toString();
         jdbc.update("INSERT INTO erp_partner(partner_code,name,partner_type,contact_name,phone,email,address,notes) VALUES(?,?,?,?,?,?,?,?)",code,name,type,b.get("contactName"),b.get("phone"),b.get("email"),b.get("address"),b.get("notes"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);return one("SELECT * FROM erp_partner WHERE id=?",id);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);return one("SELECT * FROM erp_partner WHERE id=?",id);
     }
     @PutMapping("/partners/{id}") @PreAuthorize("hasAuthority('partner:write')") @Transactional
     public Map<String,Object> updatePartner(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
@@ -48,7 +48,7 @@ public class PartnerMaintenanceController {
         if(share.signum()<0||share.compareTo(java.math.BigDecimal.valueOf(100))>0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"分成比例必须在 0 到 100 之间");
         java.math.BigDecimal existing=jdbc.queryForObject("SELECT COALESCE(SUM(share_percent),0) FROM erp_contract_partner WHERE contract_id=? AND partner_id<>?",java.math.BigDecimal.class,id,partner);
         if(existing.add(share).compareTo(java.math.BigDecimal.valueOf(100))>0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"该合同合作方分成比例合计不能超过 100%");
-        jdbc.update("INSERT INTO erp_contract_partner(contract_id,partner_id,share_percent,notes) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE share_percent=VALUES(share_percent),notes=VALUES(notes)",id,partner,share,b.get("notes"));
+        jdbc.update("INSERT INTO erp_contract_partner(contract_id,partner_id,share_percent,notes) VALUES(?,?,?,?) ON CONFLICT (contract_id,partner_id) DO UPDATE SET share_percent=EXCLUDED.share_percent,notes=EXCLUDED.notes",id,partner,share,b.get("notes"));
         jdbc.update("UPDATE erp_contract SET signing_source='partner',partner_share_percent=(SELECT COALESCE(SUM(share_percent),0) FROM erp_contract_partner WHERE contract_id=?) WHERE id=?",id,id);
         
         return one("SELECT * FROM erp_contract_partner WHERE contract_id=? AND partner_id=?",id,partner);
@@ -79,7 +79,7 @@ public class PartnerMaintenanceController {
         if(!Objects.equals(((Number)c.get("customer_id")).longValue(),((Number)p.get("customer_id")).longValue()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同与项目必须属于同一客户");
         String type=b.get("relationType")==null?"service":b.get("relationType").toString();
         if(!Set.of("service","renewal","supplement","other").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效合同项目关系");
-        jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,?) ON DUPLICATE KEY UPDATE relation_type=VALUES(relation_type)",id,project,type);
+        jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,?) ON CONFLICT (contract_id,project_id) DO UPDATE SET relation_type=EXCLUDED.relation_type",id,project,type);
         if(p.get("contract_id")==null)jdbc.update("UPDATE erp_project SET contract_id=?,service_type=CASE WHEN service_type='other' THEN ? ELSE service_type END WHERE id=?",id,c.get("service_type"),project);
         
         return one("SELECT * FROM erp_contract_project WHERE contract_id=? AND project_id=?",id,project);
@@ -164,7 +164,7 @@ public class PartnerMaintenanceController {
             VALUES(?,?,?,'renewal','maintenance',?,'CNY',?,?,?,'draft',?,'direct',0)
             """,contractNo,title,project.get("customer_id"),amount,
             signedOn==null||signedOn.toString().isBlank()?null:signedOn,start,end,b.get("notes"));
-        long contractId=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long contractId=jdbc.queryForObject("SELECT lastval()",Long.class);
         jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'renewal')",contractId,id);
         
         return one("SELECT * FROM erp_contract WHERE id=?",contractId);
@@ -175,7 +175,7 @@ public class PartnerMaintenanceController {
         Map<String,Object> p=one("SELECT * FROM erp_project WHERE id=?",id);
         Map<String,Object> state=jdbc.queryForList("SELECT m.*,c.contract_no current_contract_no,c.starts_on current_starts_on,c.ends_on current_ends_on FROM erp_maintenance_project m LEFT JOIN erp_contract c ON c.id=m.current_contract_id WHERE m.project_id=?",id).stream().findFirst().orElse(Map.of("project_id",id));
         state=new LinkedHashMap<>(state);
-        state.put("visits",jdbc.queryForList("SELECT v.*,c.contract_no,(SELECT GROUP_CONCAT(e.full_name ORDER BY e.full_name SEPARATOR '、') FROM erp_maintenance_visit_staff vs JOIN erp_employee e ON e.id=vs.employee_id WHERE vs.visit_id=v.id) staff_names FROM erp_maintenance_visit v LEFT JOIN erp_contract c ON c.id=v.contract_id WHERE v.project_id=? ORDER BY v.visit_date DESC",id));
+        state.put("visits",jdbc.queryForList("SELECT v.*,c.contract_no,(SELECT string_agg(e.full_name, '、' ORDER BY e.full_name) FROM erp_maintenance_visit_staff vs JOIN erp_employee e ON e.id=vs.employee_id WHERE vs.visit_id=v.id) staff_names FROM erp_maintenance_visit v LEFT JOIN erp_contract c ON c.id=v.contract_id WHERE v.project_id=? ORDER BY v.visit_date DESC",id));
         state.put("contractHistory",jdbc.queryForList("""
             SELECT c.id,c.contract_no,c.title,c.starts_on,c.ends_on,c.status,
                    s.honeybee_contract_uploaded,s.honeybee_project_created,s.project_materials_completed,s.public_card_status,s.notes,
@@ -220,11 +220,11 @@ public class PartnerMaintenanceController {
         Object notes=b.containsKey("notes")?b.get("notes"):previous.get("notes");
         if(current!=null)jdbc.update("""
             INSERT INTO erp_maintenance_contract_state(contract_id,project_id,honeybee_contract_uploaded,honeybee_project_created,project_materials_completed,public_card_status,notes,updated_by)
-            VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE honeybee_contract_uploaded=VALUES(honeybee_contract_uploaded),
-            honeybee_project_created=VALUES(honeybee_project_created),project_materials_completed=VALUES(project_materials_completed),
-            public_card_status=VALUES(public_card_status),notes=VALUES(notes),updated_by=VALUES(updated_by)
+            VALUES(?,?,?,?,?,?,?,?) ON CONFLICT (contract_id,project_id) DO UPDATE SET honeybee_contract_uploaded=EXCLUDED.honeybee_contract_uploaded,
+            honeybee_project_created=EXCLUDED.honeybee_project_created,project_materials_completed=EXCLUDED.project_materials_completed,
+            public_card_status=EXCLUDED.public_card_status,notes=EXCLUDED.notes,updated_by=EXCLUDED.updated_by
             """,current,id,uploaded,created,materials,card,notes,actor(a));
-        jdbc.update("INSERT INTO erp_maintenance_project(project_id,honeybee_contract_uploaded,honeybee_project_created,project_materials_completed,public_card_status,current_contract_id,notes,updated_by) VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE honeybee_contract_uploaded=VALUES(honeybee_contract_uploaded),honeybee_project_created=VALUES(honeybee_project_created),project_materials_completed=VALUES(project_materials_completed),public_card_status=VALUES(public_card_status),current_contract_id=VALUES(current_contract_id),notes=VALUES(notes),updated_by=VALUES(updated_by)",
+        jdbc.update("INSERT INTO erp_maintenance_project(project_id,honeybee_contract_uploaded,honeybee_project_created,project_materials_completed,public_card_status,current_contract_id,notes,updated_by) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT (project_id) DO UPDATE SET honeybee_contract_uploaded=EXCLUDED.honeybee_contract_uploaded,honeybee_project_created=EXCLUDED.honeybee_project_created,project_materials_completed=EXCLUDED.project_materials_completed,public_card_status=EXCLUDED.public_card_status,current_contract_id=EXCLUDED.current_contract_id,notes=EXCLUDED.notes,updated_by=EXCLUDED.updated_by",
             id,uploaded,created,materials,card,current,notes,actor(a));
         
         return maintenance(id);
@@ -234,7 +234,7 @@ public class PartnerMaintenanceController {
         one("SELECT id FROM erp_project WHERE id=?",id);Long contract=opt(b,"contractId");
         if(contract!=null)one("SELECT c.id FROM erp_contract c JOIN erp_contract_project cp ON cp.contract_id=c.id WHERE c.id=? AND cp.project_id=? AND c.service_type='maintenance'",contract,id);
         jdbc.update("INSERT INTO erp_maintenance_visit(project_id,contract_id,visit_date,notes,created_by) VALUES(?,?,?,?,?)",id,contract,req(b,"visitDate"),b.get("notes"),actor(a));
-        long visit=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long visit=jdbc.queryForObject("SELECT lastval()",Long.class);
         Object staff=b.get("employeeIds");
         if(staff instanceof List<?> ids)for(Object value:ids){long employee=Long.parseLong(value.toString());one("SELECT id FROM erp_employee WHERE id=?",employee);jdbc.update("INSERT INTO erp_maintenance_visit_staff(visit_id,employee_id) VALUES(?,?)",visit,employee);}
         
@@ -248,7 +248,7 @@ public class PartnerMaintenanceController {
         String type=b.get("fileType")==null?"contract":b.get("fileType").toString();
         if(!Set.of("contract","maintenance_card","project_material","other").contains(type))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"无效合同文件类型");
         jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,title,created_by) VALUES(?,?,?,?,?)",id,file,type,b.get("title"),actor(a));
-        long record=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long record=jdbc.queryForObject("SELECT lastval()",Long.class);
         if("contract".equals(type))ContractProjectCreation.createIfUnlinked(jdbc,id,actor(a));
         return one("SELECT cf.*,f.original_name FROM erp_contract_file cf JOIN erp_file_object f ON f.id=cf.file_id WHERE cf.id=?",record);
     }

@@ -26,7 +26,7 @@ final class ContractProjectCreation {
             INSERT INTO erp_project(project_no,name,contract_id,customer_id,service_type,auto_from_contract,planned_start,planned_end)
             VALUES(?,?,?,?,?,TRUE,?,?)
             ""","P-"+UUID.randomUUID(),c.get("title"),contractId,c.get("customer_id"),type,c.get("starts_on"),c.get("ends_on"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contractId,id);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor,"由新合同自动创建项目");
         if("maintenance".equals(type))jdbc.update("INSERT INTO erp_maintenance_project(project_id,updated_by) VALUES(?,?)",id,actor);

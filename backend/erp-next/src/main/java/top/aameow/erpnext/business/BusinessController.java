@@ -51,7 +51,7 @@ public class BusinessController {
         String name=required(b,"name"); Long parent=optionalLong(b,"parentId");
         if(parent!=null) one("SELECT id FROM erp_organization WHERE id=?",parent);
         jdbc.update("INSERT INTO erp_organization(name,parent_id,status) VALUES(?,?,?)",name,parent,"active");
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT id,name,parent_id,status FROM erp_organization WHERE id=?",id);
     }
 
@@ -86,12 +86,16 @@ public class BusinessController {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
           SELECT e.id,e.employee_code,e.full_name,e.organization_id,o.name organization_name,e.identity_id,
-                 e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on,e.employee_type,
+                 e.status,e.phone,e.email,e.position_name,e.joined_on,e.left_on,e.employee_type,e.created_at,e.updated_at,
                  EXISTS(SELECT 1 FROM erp_employee_qualification q WHERE q.employee_id=e.id AND q.status='valid' AND (q.expires_on IS NULL OR q.expires_on>=CURRENT_DATE)) AS has_valid_qualification
           FROM erp_employee e LEFT JOIN erp_organization o ON o.id=e.organization_id
-          WHERE ?='' OR e.full_name LIKE ? OR e.employee_code LIKE ? OR e.phone LIKE ?
+          WHERE ?='' OR e.full_name ILIKE ? OR e.employee_code ILIKE ? OR e.phone ILIKE ?
           ORDER BY e.id DESC LIMIT 500
           """,q.trim(),term,term,term);
+    }
+    @GetMapping("/employees/{id}") @PreAuthorize("hasAuthority('employee:read')")
+    public Map<String,Object> employeeDetail(@PathVariable long id) {
+        return one("SELECT e.*,o.name organization_name FROM erp_employee e LEFT JOIN erp_organization o ON o.id=e.organization_id WHERE e.id=?",id);
     }
     @PostMapping("/employees") @PreAuthorize("hasAuthority('employee:write')") @Transactional
     public Map<String,Object> createEmployee(@RequestBody Map<String,Object>b,Authentication a) {
@@ -101,7 +105,7 @@ public class BusinessController {
         if(identity!=null) one("SELECT id FROM erp_identity WHERE id=?",identity);
         jdbc.update("INSERT INTO erp_employee(employee_code,full_name,organization_id,identity_id,phone,email,position_name,employee_type,status) VALUES(?,?,?,?,?,?,?,?,'active')",
             b.get("employeeCode"),name,org,identity,b.get("phone"),b.get("email"),b.get("positionName"),val(b,"employeeType","general"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT * FROM erp_employee WHERE id=?",id);
     }
 
@@ -112,7 +116,7 @@ public class BusinessController {
           SELECT c.*,e.full_name owner_name,(SELECT COUNT(*) FROM erp_customer_contact cc WHERE cc.customer_id=c.id) contact_count,
                  (SELECT COUNT(*) FROM erp_contract ct WHERE ct.customer_id=c.id) contract_count
           FROM erp_customer c LEFT JOIN erp_employee e ON e.id=c.owner_employee_id
-          WHERE (?='' OR c.name LIKE ? OR c.customer_code LIKE ? OR c.credit_code LIKE ?)
+          WHERE (?='' OR c.name ILIKE ? OR c.customer_code ILIKE ? OR c.credit_code ILIKE ?)
             AND (?='' OR c.status=?) ORDER BY c.id DESC LIMIT 500
           """,q.trim(),term,term,term,status,status);
     }
@@ -131,7 +135,7 @@ public class BusinessController {
           INSERT INTO erp_customer(customer_code,name,credit_code,customer_type,industry,phone,email,address,status,owner_employee_id,notes)
           VALUES(?,?,?,?,?,?,?,?,?,?,?)
           """,code,name,b.get("creditCode"),val(b,"customerType","enterprise"),b.get("industry"),b.get("phone"),b.get("email"),b.get("address"),val(b,"status","active"),owner,b.get("notes"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return customer(id);
     }
     @PutMapping("/customers/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
@@ -152,10 +156,10 @@ public class BusinessController {
     public Map<String,Object> addContact(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_customer WHERE id=?",id); String name=required(b,"name");
         boolean primary=Boolean.parseBoolean(val(b,"isPrimary","false"));
-        if(primary) jdbc.update("UPDATE erp_customer_contact SET is_primary=0 WHERE customer_id=?",id);
+        if(primary) jdbc.update("UPDATE erp_customer_contact SET is_primary=FALSE WHERE customer_id=?",id);
         jdbc.update("INSERT INTO erp_customer_contact(customer_id,name,position_name,phone,email,is_primary,notes) VALUES(?,?,?,?,?,?,?)",
             id,name,b.get("positionName"),b.get("phone"),b.get("email"),primary,b.get("notes"));
-        long cid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long cid=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT * FROM erp_customer_contact WHERE id=?",cid);
     }
     @PutMapping("/contacts/{id}") @PreAuthorize("hasAuthority('customer:write')") @Transactional
@@ -165,7 +169,7 @@ public class BusinessController {
         if(b.containsKey("isPrimary") && !(b.get("isPrimary") instanceof Boolean))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"主要联系人标记必须为布尔值");
         if(Boolean.TRUE.equals(b.get("isPrimary")))
-            jdbc.update("UPDATE erp_customer_contact SET is_primary=0 WHERE customer_id=?",existing.get("customer_id"));
+            jdbc.update("UPDATE erp_customer_contact SET is_primary=FALSE WHERE customer_id=?",existing.get("customer_id"));
         jdbc.update("UPDATE erp_customer_contact SET name=COALESCE(?,name),position_name=?,phone=?,email=?,notes=?,is_primary=COALESCE(?,is_primary) WHERE id=?",
             b.get("name"),b.get("positionName"),b.get("phone"),b.get("email"),b.get("notes"),b.get("isPrimary"),id);
         
@@ -183,10 +187,10 @@ public class BusinessController {
         String term="%"+q.trim()+"%";
         return jdbc.queryForList("""
           SELECT ct.*,c.name customer_name,e.full_name owner_name,
-                 CASE WHEN ct.status='active' AND ct.ends_on IS NOT NULL THEN DATEDIFF(ct.ends_on,CURRENT_DATE) ELSE NULL END days_until_expiry
+                 CASE WHEN ct.status='active' AND ct.ends_on IS NOT NULL THEN (ct.ends_on - CURRENT_DATE) ELSE NULL END days_until_expiry
           FROM erp_contract ct
           JOIN erp_customer c ON c.id=ct.customer_id LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id
-          WHERE (?='' OR ct.title LIKE ? OR ct.contract_no LIKE ? OR c.name LIKE ?)
+          WHERE (?='' OR ct.title ILIKE ? OR ct.contract_no ILIKE ? OR c.name ILIKE ?)
             AND (?='' OR ct.status=?) ORDER BY ct.id DESC LIMIT 500
           """,q.trim(),term,term,term,status,status);
     }
@@ -230,7 +234,7 @@ public class BusinessController {
           INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,service_type,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
           """,no,title,customer,b.get("contractType"),val(b,"serviceType","other"),amount,val(b,"currency","CNY"),contractDate(b,Map.of(),"signedOn","signed_on"),contractDate(b,Map.of(),"startsOn","starts_on"),contractDate(b,Map.of(),"endsOn","ends_on"),val(b,"status","draft"),owner,b.get("notes"));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         Long file=optionalLong(b,"fileId"), existing=optionalLong(b,"existingProjectId");
         if(file!=null) {
             if(a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("file:upload")))
@@ -284,9 +288,9 @@ public class BusinessController {
             jdbc.update("UPDATE erp_project SET service_type=? WHERE contract_id=? AND service_type=?",service,id,current.get("service_type"));
         // Synchronize automatically created projects and the selected current annual maintenance contract.
         jdbc.update("""
-            UPDATE erp_project p LEFT JOIN erp_maintenance_project m ON m.project_id=p.id
-            SET p.planned_start=?,p.planned_end=?
-            WHERE m.current_contract_id=? OR (p.auto_from_contract=TRUE AND p.contract_id=? AND m.current_contract_id IS NULL)
+            UPDATE erp_project p SET planned_start=?,planned_end=?
+            WHERE EXISTS (SELECT 1 FROM erp_maintenance_project m WHERE m.project_id=p.id AND m.current_contract_id=?)
+               OR (p.auto_from_contract=TRUE AND p.contract_id=? AND NOT EXISTS (SELECT 1 FROM erp_maintenance_project m WHERE m.project_id=p.id AND m.current_contract_id IS NOT NULL))
             """,contractDate(b,current,"startsOn","starts_on"),contractDate(b,current,"endsOn","ends_on"),id,id);
          return one("SELECT * FROM erp_contract WHERE id=?",id);
     }
@@ -299,7 +303,7 @@ public class BusinessController {
           SELECT p.*,c.name customer_name,ct.contract_no,e.full_name manager_name
           FROM erp_project p JOIN erp_customer c ON c.id=p.customer_id LEFT JOIN erp_contract ct ON ct.id=p.contract_id
           LEFT JOIN erp_employee e ON e.id=p.manager_employee_id
-          WHERE (?='' OR p.name LIKE ? OR p.project_no LIKE ? OR c.name LIKE ?)
+          WHERE (?='' OR p.name ILIKE ? OR p.project_no ILIKE ? OR c.name ILIKE ?)
             AND (?='' OR p.status=?) AND (?='' OR p.service_type=?) ORDER BY p.id DESC LIMIT 500
           """,q.trim(),term,term,term,status,status,serviceType,serviceType);
     }
@@ -320,7 +324,7 @@ public class BusinessController {
         Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) requireEngineer(manager);
         jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,service_type,progress,status) VALUES(?,?,?,?,?,?,?,?,?,0,'planned')",
             no,name,contract,customer,b.get("description"),manager,start,end,service);
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contract,id); 
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contract,id); 
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
@@ -397,7 +401,7 @@ public class BusinessController {
     @PostMapping("/projects/{id}/members") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public void addMember(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_project WHERE id=?",id); long employee=Long.parseLong(required(b,"employeeId")); one("SELECT id FROM erp_employee WHERE id=?",employee);
-        jdbc.update("INSERT INTO erp_project_member(project_id,employee_id,member_role) VALUES(?,?,?) ON DUPLICATE KEY UPDATE member_role=VALUES(member_role)",id,employee,b.get("role"));
+        jdbc.update("INSERT INTO erp_project_member(project_id,employee_id,member_role) VALUES(?,?,?) ON CONFLICT (project_id,employee_id) DO UPDATE SET member_role=EXCLUDED.member_role",id,employee,b.get("role"));
         
     }
     @GetMapping("/projects/{id}/members") @PreAuthorize("hasAuthority('project:read')")
@@ -408,7 +412,7 @@ public class BusinessController {
     public Map<String,Object> addMilestone(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
         one("SELECT id FROM erp_project WHERE id=?",id); String title=required(b,"title");
         jdbc.update("INSERT INTO erp_project_milestone(project_id,title,description,due_on,sort_order) VALUES(?,?,?,?,?)",id,title,b.get("description"),b.get("dueOn"),b.get("sortOrder")==null?0:Integer.valueOf(b.get("sortOrder").toString()));
-        long mid=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class); 
+        long mid=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return one("SELECT * FROM erp_project_milestone WHERE id=?",mid);
     }
     @GetMapping("/projects/{id}/milestones") @PreAuthorize("hasAuthority('project:read')")

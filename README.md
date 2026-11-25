@@ -7,7 +7,7 @@
 - [backend/](backend/) — 旧版后端 Maven 多模块工程
 - [backend/erp-next/](backend/erp-next/) — 新版 ERP 独立 Spring Boot API
 - [frontend/](frontend/) — Vue 前端；旧版入口为 /，新版入口为 /next.html
-- [erp-next/](erp-next/) — 新版独立 MySQL、Flyway、API、Web Compose 与数据库迁移
+- [erp-next/](erp-next/) — 新版独立 PostgreSQL、Flyway、API、Web Compose 与数据库迁移
 - [docs/](docs/) — 架构、产品和仓库迁移文档
 - [.github/workflows/](.github/workflows/) — 前后端构建和新版全栈 smoke test
 
@@ -54,7 +54,7 @@ bash deploy.sh      # 每次清空独立新版测试库及附件，重新部署
 bash start.sh
 ```
 
-脚本首次运行会生成独立随机数据库密码和管理员初始化令牌，保存到被 Git 忽略的 `erp-next/.env.local`，自动构建并启动新版 MySQL、Flyway、API 和 Web，完成健康检查后输出访问地址。**Codespaces 的 8089 转发端口请始终设为 Private**。首次打开 `/next.html` 时，从本地 `erp-next/.env.local` 获取 `ERP_BOOTSTRAP_TOKEN` 初始化管理员，密码至少 12 位。
+脚本首次运行会生成独立随机数据库密码和管理员初始化令牌，保存到被 Git 忽略的 `erp-next/.env.local`，自动构建并启动新版 PostgreSQL、Flyway、API 和 Web，完成健康检查后输出访问地址。**Codespaces 的 8089 转发端口请始终设为 Private**。首次打开 `/next.html` 时，从本地 `erp-next/.env.local` 获取 `ERP_BOOTSTRAP_TOKEN` 初始化管理员，密码至少 12 位。
 
 再次运行 `bash start.sh` 可升级/重建应用，保留已有密码、数据库和附件卷；`bash start.sh status` 查看状态，`bash start.sh logs` 查看日志，`bash start.sh stop` 安全停止（不删除持久化数据）。请勿运行 `docker compose down -v`。该入口专用于 `erp_next` 新库，不连接旧生产系统；Codespaces 用于验收测试，不代表已完成生产 HTTPS/备份恢复演练。
 
@@ -77,3 +77,5 @@ docker compose --env-file erp-next/.env.local -f erp-next/compose.yaml up -d --b
 本仓库由原 zjerp_backend 重命名而来，前端 zjerp_frontend 的完整 Git 历史通过双父提交接入。旧前端仓库首页已标注为历史归档入口，今后只在本 Monorepo 开发。原始仓库历史和旧 Issue/PR 讨论仍保留供追溯。
 
 参见 [仓库合并执行记录](docs/monorepo-import.md)。
+
+新版运行栈：Docker Compose、PostgreSQL 17、Flyway 10.20.1、Spring Boot 和 Vue。仅新版 PostgreSQL；旧生产 MySQL 不变，生产迁移暂缓。
