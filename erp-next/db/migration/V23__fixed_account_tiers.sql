@@ -1,12 +1,13 @@
 -- Fixed account tiers. Retain identity IDs, passwords and business references.
 -- Fail before changes if an existing installation has ambiguous administrator ownership.
-CREATE TEMPORARY TABLE tmp_admin_guard(n INT CHECK(n=1));
-INSERT INTO tmp_admin_guard SELECT CASE
+CREATE TEMPORARY TABLE tmp_admin_guard(n INT PRIMARY KEY);
+INSERT INTO tmp_admin_guard VALUES(1);
+INSERT INTO tmp_admin_guard SELECT 1 WHERE (CASE
  WHEN EXISTS(SELECT 1 FROM erp_identity WHERE username='admin') THEN
    (SELECT COUNT(*) FROM erp_identity i JOIN erp_identity_role ir ON ir.identity_id=i.id JOIN erp_role r ON r.id=ir.role_id WHERE i.username='admin' AND i.status='active' AND r.code='admin')
  WHEN (SELECT COUNT(*) FROM erp_identity)=0 THEN 1
  ELSE (SELECT COUNT(*) FROM erp_identity i JOIN erp_identity_role ir ON ir.identity_id=i.id JOIN erp_role r ON r.id=ir.role_id WHERE i.status='active' AND r.code='admin')
- END;
+ END)<>1;
 DROP TEMPORARY TABLE tmp_admin_guard;
 SET @has_named_admin=(SELECT COUNT(*) FROM erp_identity WHERE username='admin');
 UPDATE erp_identity i JOIN erp_identity_role ir ON ir.identity_id=i.id JOIN erp_role r ON r.id=ir.role_id

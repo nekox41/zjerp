@@ -39,7 +39,7 @@ python scripts/erp-next-legacy-export.py export --host 127.0.0.1 --user legacy_r
 python scripts/erp-next-legacy-export.py verify --archive /secure/erp-legacy-archive
 ```
 
-每个可见实体表保留原 DDL 和逐行 JSONL（Decimal、日期、二进制显式编码，不能丢精度），视图保留定义；所有文件（包含孤儿/暂缓业务文件）按相对路径逐字复制并核验长度、SHA256；生成清单和校验和。失败保留 .partial，不会覆盖已存在档案或把未完成档案当作完成。文件备份保留旧路径关系，拒绝符号链接。清单不代表加密或数字签名，必须存放于权限受控、加密的备份介质，不提交 Git、不上传公共网盘。源库账号密码哈希、系统配置等敏感数据仅离线保全，不进入普通业务页面。另需保留标准 MySQL 全量备份（包括过程、触发器、事件、授权等非表对象）及旧部署配置，确保可恢复整个旧系统。
+每个可见实体表保留原 DDL 和逐行 JSONL（Decimal、日期、二进制显式编码，不能丢精度），视图保留定义；所有文件（包含孤儿/暂缓业务文件）按相对路径逐字复制并核验长度、SHA256；生成清单和校验和。失败保留 .partial，不会覆盖已存在档案或把未完成档案当作完成。文件备份保留旧路径关系，拒绝符号链接。清单不代表加密或数字签名，必须存放于权限受控、加密的备份介质，不提交 Git、不上传公共网盘。源库账号密码哈希、系统配置等敏感数据不进入普通业务页面；经过确认的兼容 BCrypt 哈希可迁入新版身份表。另需保留标准 MySQL 全量备份（包括过程、触发器、事件、授权等非表对象）及旧部署配置，确保可恢复整个旧系统。
 
 V15 增加旧 ID→新 ID 映射与已提交迁移批次账本，为后续显式映射、重复导入防重与审计提供基础。它不会自动执行任何迁移。
 
@@ -69,7 +69,7 @@ unset ERP_NEXT_DB_PASSWORD ERP_NEXT_DB_ROOT_PASSWORD ERP_BOOTSTRAP_TOKEN
 {"customers":[{"key":"customer-1","code":"L-C001","name":"人工确认甲方"}],"accounts":[{"sourceId":100}],"employees":[{"sourceId":1,"type":"engineer","linkAccount":true}],"qualifications":[{"sourceId":2,"employeeSourceId":1,"status":"valid"}],"partners":[{"sourceId":1}],"contracts":[{"sourceTable":"zj_contract_maintenance","sourceId":10,"customerKey":"customer-1","signingSource":"direct"}],"projects":[{"sourceId":20,"customerKey":"customer-1","contractSourceTable":"zj_contract_maintenance"}],"contacts":[{"sourceId":1}],"files":[{"sourceId":1,"archivePath":"2026/contract.pdf","mediaType":"application/pdf"}],"contractFiles":[{"key":"cf-1","contractSourceTable":"zj_contract_maintenance","contractSourceId":10,"fileSourceId":1,"fileType":"contract"}],"materials":[{"sourceId":1,"fileSourceId":2}],"cards":[{"sourceId":1,"projectSourceId":20,"contractSourceId":10,"fileSourceId":3,"projectName":"经核实项目","company":"经核实公司","leader":"经核实负责人","phone":"经核实电话","systems":"经核实系统","startsOn":"2026-01-01","endsOn":"2026-12-31","printed":true,"sent":false}],"maintenanceStates":[{"projectSourceId":20,"contractSourceId":10,"honeybeeContractUploaded":true,"honeybeeProjectCreated":true,"materialsCompleted":false,"publicCardStatus":"preparing"}]}
 ```
 
-- accounts 默认禁用且不可用密码，旧权限不自动授予。若与目标账号重名，只允许显式 existingId + 相同用户名关联，不更改其角色或密码。员工类型与是否关联账号必须明确选择；资质状态也必须明确选择。
+- accounts 兼容旧 sys_user.user_name / nick_name / password（BCrypt）/ status / del_flag；保留可用 BCrypt 哈希，旧启用且未删除账号才可启用；未知或不兼容哈希需管理员重置。默认普通员工，管理人员需 role=manager 且 managerConfirmed=true；旧角色编号绝不自动授予超级权限。旧 admin 仅显式 existingId 关联唯一新版 admin，不覆盖密码或权限。若与目标账号重名，只允许显式 existingId + 相同用户名关联，不更改其角色或密码。员工类型与是否关联账号必须明确选择；资质状态也必须明确选择。
 - 合同旧金额不能准确转为两位小数或为空时阻止；只有明确审定 amount 才允许使用调整值，原值在档案内保全。中间人合同必须提供 sharePercent；旧 ownership 冲突则拒绝。合同默认草稿，可显式选择已核实状态；非草稿/待生效合同须关联项目，项目默认计划中；不可凭日期推断活跃/结算/签发。
 - 项目已有旧 contract_id 不能隐式抛弃；校验类型和甲方一致。领导可暂不填，填写时两个不同有效工程师及有效资格必须成立。当前维保合同默认不自动选中，年度状态人工确认后独立保存。只有显式 current=true、合同已确认 active 且起止日期完整时才允许设置当前合同及同步期限；既有不同当前合同不覆盖。
 - 文件须明确对应归档文件相对路径、媒体类型、原始 SHA256/大小；未知格式、孤儿或未选记录继续留在离线档案。旧报告不自动签发。现有映射目标、旧行哈希和决策哈希不一致时终止，不覆盖。
@@ -91,7 +91,7 @@ unset ERP_NEXT_DB_PASSWORD ERP_NEXT_DB_ROOT_PASSWORD ERP_BOOTSTRAP_TOKEN
 
 ## 本地验证入口
 
-`bash scripts/erp-next-local-verify.sh --smoke`（Linux/WSL，Docker Compose、Python、curl、flock）启动随机命名测试栈，校验 V1–V22 幂等执行，调用与手动 Actions 相同的 API Smoke。脚本检查 8089/8090 空闲、改写测试专用卷名，退出只清理测试栈，不使用生产 Compose 卷。
+`bash scripts/erp-next-local-verify.sh --smoke`（Linux/WSL，Docker Compose、Python、curl、flock）启动随机命名测试栈，校验 V1–V24 幂等执行，调用与手动 Actions 相同的 API Smoke。脚本使用动态回环端口、改写测试专用卷名，退出只清理测试栈，不使用生产 Compose 卷。
 
 `bash scripts/erp-next-local-verify.sh --build-only` 本地 Maven ERP Next verify + npm ci / 前端构建；`--full` 另执行旧版 Maven reactor 和隔离 Smoke。需已安装 JDK 17、Maven、Node 22 及依赖访问环境。此轮没有调用 Actions；这些命令由用户在完成第一版后手动执行。
 

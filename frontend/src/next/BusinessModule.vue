@@ -96,6 +96,7 @@ async function submit(kind) {
   try {
     const data={...forms[kind].value}
     Object.keys(data).forEach(k=>{if(data[k]==='') data[k]=null})
+    if(kind==='employee'&&!can('identity:write'))delete data.identityId
     let endpoint=null
     if(kind==='employee') endpoint='/employees'
     else if(kind==='customer') endpoint='/customers'
@@ -166,7 +167,8 @@ async function saveEmployee(){
   if(!selectedEmployee.value)return
   busy.value=true
   try{
-    await api('/business/employees/'+selectedEmployee.value.id,{method:'PUT',body:JSON.stringify(employeeEditForm.value)})
+    const body={...employeeEditForm.value};if(!can('identity:write'))delete body.identityId
+    await api('/business/employees/'+selectedEmployee.value.id,{method:'PUT',body:JSON.stringify(body)})
     await load();await openEmployee(selectedEmployee.value.id)
     employeeEditOpen.value=false;notice.value='员工档案已更新'
   }catch(e){error.value=e.message}finally{busy.value=false}

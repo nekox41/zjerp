@@ -44,7 +44,7 @@ bash test.sh        # 完整构建与隔离 Smoke，日志在 test-results/
 bash deploy.sh      # 持久化本地验收环境，优先复用旧版 MySQL，默认仅回环端口
 ```
 
-部署后访问 http://localhost:8089/next.html，账号 trial-admin，初始密码文件 ~/.local/share/zjerp-trial/admin-password。该目录保留数据库的隔离标识、凭据、旧附件副本及迁移档案。测试与部署不共享容器或数据卷。详见 [WSL2 验收与迁移](erp-next/WSL_ACCEPTANCE.md)。
+部署后访问 http://localhost:8089/next.html，账号 admin，初始密码文件 ~/.local/share/zjerp-trial/admin-password。该目录保留数据库的隔离标识、凭据、旧附件副本及迁移档案。测试与部署不共享容器或数据卷。详见 [WSL2 验收与迁移](erp-next/WSL_ACCEPTANCE.md)。
 
 ## Codespaces 一键启动新版 ERP（普通空库）
 

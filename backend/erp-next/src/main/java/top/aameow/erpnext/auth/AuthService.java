@@ -46,7 +46,7 @@ public class AuthService {
     @Transactional
     public void bootstrapAdmin(String username, String displayName, String password) {
         username=username.trim();displayName=displayName.trim();validateNewPassword(password);
-        if(!"admin".equals(username)||displayName.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"账号和姓名不能为空");
+        if(!"admin".equals(username)||displayName.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"唯一超级账户必须为 admin，姓名不能为空");
         Long roleId = jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE", Long.class);
         if (isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT, "管理员已初始化");
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'active')",
