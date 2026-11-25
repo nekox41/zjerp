@@ -52,6 +52,7 @@ services:
       FLYWAY_USER: erp_next
       FLYWAY_PASSWORD: ${ERP_NEXT_DB_PASSWORD}
       FLYWAY_CONNECT_RETRIES: "30"
+      FLYWAY_LOCATIONS: "filesystem:/flyway/sql"
       FLYWAY_CLEAN_DISABLED: "true"
     volumes: ["__MIGRATIONS__:/flyway/sql:ro"]
     command: ["migrate"]

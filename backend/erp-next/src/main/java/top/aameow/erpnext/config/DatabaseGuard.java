@@ -22,9 +22,9 @@ public class DatabaseGuard implements ApplicationRunner {
             throw new IllegalStateException("ERP Next must connect only to the isolated 'erp_next' database; actual database: " + database);
         }
         Integer versions = jdbc.queryForObject(
-            "SELECT COUNT(DISTINCT version) FROM flyway_schema_history WHERE version IN ('1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24') AND success=1", Integer.class);
-        if (versions == null || versions != 24) {
-            throw new IllegalStateException("ERP Next database schema V1–V24 is required before the API can start");
+            "SELECT COUNT(*) FROM flyway_schema_history WHERE version='1' AND script='V1__initial_schema.sql' AND success=1 AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version IS NOT NULL OR success=0)=1", Integer.class);
+        if (versions == null || versions != 1) {
+            throw new IllegalStateException("ERP Next initial schema is required; pre-release development databases must be freshly deployed");
         }
     }
 }

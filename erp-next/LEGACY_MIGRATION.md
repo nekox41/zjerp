@@ -1,6 +1,6 @@
 # ERP V1 迁移映射与保全清单（M01/M02）
 
-以仓库的旧版 SQL、升级脚本和新版 V1–V14 为依据。旧库实况可能与初始化 SQL 不同，扫描结果不能用代码清单替代。迁移只针对离线副本，生产 `server` 不执行 UPDATE/INSERT/DDL；目标必须为独立 `erp_next`。先备份完整数据库与文件目录，再扫描、人工映射和演练。
+以指定生产旧版 SQL、真实库结构及最终 ERP V1 为依据。仅最终完整版从最初生产旧版 server 迁移；ERP Next 的开发测试版本全部重新部署，不作为迁移来源。旧库实况可能与初始化 SQL 不同，扫描结果不能用代码清单替代。迁移只针对离线副本，生产 `server` 不执行 UPDATE/INSERT/DDL；目标必须为独立 `erp_next`。先备份完整数据库与文件目录，再扫描、人工映射和演练。
 
 | 旧数据 | 新数据 / 处理策略 | 必须核对 |
 |---|---|---|
@@ -41,7 +41,7 @@ python scripts/erp-next-legacy-export.py verify --archive /secure/erp-legacy-arc
 
 每个可见实体表保留原 DDL 和逐行 JSONL（Decimal、日期、二进制显式编码，不能丢精度），视图保留定义；所有文件（包含孤儿/暂缓业务文件）按相对路径逐字复制并核验长度、SHA256；生成清单和校验和。失败保留 .partial，不会覆盖已存在档案或把未完成档案当作完成。文件备份保留旧路径关系，拒绝符号链接。清单不代表加密或数字签名，必须存放于权限受控、加密的备份介质，不提交 Git、不上传公共网盘。源库账号密码哈希、系统配置等敏感数据不进入普通业务页面；经过确认的兼容 BCrypt 哈希可迁入新版身份表。另需保留标准 MySQL 全量备份（包括过程、触发器、事件、授权等非表对象）及旧部署配置，确保可恢复整个旧系统。
 
-V15 增加旧 ID→新 ID 映射与已提交迁移批次账本，为后续显式映射、重复导入防重与审计提供基础。它不会自动执行任何迁移。
+最终初始 Schema 包含旧 ID→新 ID 映射与已提交迁移批次账本，为后续显式映射、重复导入防重与审计提供基础。它不会自动执行任何迁移。
 
 ## 核心业务隔离试迁移（M03/M05 初版）
 
@@ -75,15 +75,15 @@ unset ERP_NEXT_DB_PASSWORD ERP_NEXT_DB_ROOT_PASSWORD ERP_BOOTSTRAP_TOKEN
 - 文件须明确对应归档文件相对路径、媒体类型、原始 SHA256/大小；未知格式、孤儿或未选记录继续留在离线档案。旧报告不自动签发。现有映射目标、旧行哈希和决策哈希不一致时终止，不覆盖。
 - preview 在一个事务内演练然后回滚，不复制文件、不提交业务记录；可能消耗 AUTO_INCREMENT 序号，故必须是隔离库。apply 使用同一个事务，失败清理本次复制文件；提交结果不明时保留文件以供核对。使用数据库命名锁防止并发迁移；不要同时运行新版业务。备份回滚为恢复试迁移前数据库与私有卷，而非按猜测删除共享业务记录。脚本输出已插入、已映射、剩余保全统计。实际旧库试迁移和完整核对待执行。
 
-### 关系和历史编号补充（V16）
+### 关系和历史编号
 
 - customerContacts：`{"key":"contact-1","customerKey":"customer-1","name":"明确核实联系人","phone":"...","primary":true}`。
 - contractLinks：`{"contractSourceTable":"zj_contract_maintenance","contractSourceId":11,"projectSourceId":20,"relationType":"renewal"}`，用于补充已确认跨年度合同。禁止甲方不一致和覆盖既有关系类型。
 - materialArchives：`{"key":"mat-archive-1","projectSourceId":20,"contractSourceId":10,"materialSourceId":1}`，以材料 PDF 原件归档，不重新生成。
-- 所有旧卡号（包括未关联或已删除的保留编号）和旧序列上界自动写入新版编号保留表；新卡生成不得使用已保留编号。若目标已经存在无对应旧 ID 映射的同号卡，迁移直接中止。V16 只新增表，不改历史迁移。
+- 所有旧卡号（包括未关联或已删除的保留编号）和旧序列上界自动写入新版编号保留表；新卡生成不得使用已保留编号。若目标已经存在无对应旧 ID 映射的同号卡，迁移直接中止。初始 Schema 直接包含对应表。
 - 迁移控制台展示目标提交批次、来源和已映射数量；未映射清单按全部归档表计数。旧资料的原件和未映射行仍必须保留在离线档案中。
 
-### 旧报告与原件关联（V17）
+### 旧报告与原件关联
 
 - rawFiles：旧文件不存在 sys_file 记录但在完整档案中有原件时，用 `{"key":"old-orphan-file","archivePath":"reports/old.docx","filename":"旧报告.docx","mediaType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}` 明确映射；之后引用 `{"rawFileKey":"old-orphan-file"}`（或 `{"fileSourceId":1}`）。不重新生成原文件。
 - projectDocuments：`{"sourceTable":"zj_inspection_report","sourceId":2,"projectSourceId":20,"files":[{"rawFileKey":"old-orphan-file"}],"originalStatus":"原报告状态经人工确认"}`，支持 zj_report / zj_inspection_report / zj_project_document；未找到原件必须明示 missingOriginalConfirmed=true。历史档案显示于项目档案，旧版状态不等同于新版签发，原件下载同时要求 project:read、report:read、file:read（上传人仍按现有权限规则）。

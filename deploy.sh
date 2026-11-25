@@ -7,8 +7,9 @@ cd "$ROOT"
 action="${1:-start}"
 shift || true
 usage(){ cat <<'EOF'
-Usage: bash deploy.sh [start|status|logs|stop|legacy-import SQL|legacy-shell|archive|plan|preview|apply PLAN_SHA256|reconcile|backup]
-默认 start：优先复用旧版 zjerp/mysql 容器；不存在时创建唯一 MySQL。
+Usage: bash deploy.sh [start|fresh|status|logs|stop|legacy-import SQL|legacy-shell|archive|plan|preview|apply PLAN_SHA256|reconcile|backup]
+默认 start：首次安装或重启同一开发版本，优先复用旧版 zjerp/mysql 容器；不存在时创建唯一 MySQL。
+fresh：明确重建新版测试库及私有附件；旧测试数据先备份，server/旧附件/MySQL 实例不变。不同候选版本必须 fresh，不做中间版本升级。
 ERP_MYSQL_CONTAINER 可显式指定已有 MySQL 容器（首次部署前）。
 已有数据库实例内仅初始化 erp_next；不会创建、导入或迁移 server。
 ERP_TRIAL_DIR 可指定独立状态目录；默认 ~/.local/share/zjerp-trial。
@@ -21,10 +22,10 @@ preview：停止新版 Web/API 后演练，生成唯一凭据。
 apply SHA256：执行明确确认的同一计划（停止新版服务）。
 reconcile：核对目标映射与附件；完成后 start 恢复 Web/API。
 backup：停止新版 Web/API，创建数据库和附件成对备份。
-stop：停止容器，保留全部数据和凭据。不提供删库命令。
+stop：停止容器，保留全部数据和凭据。
 EOF
 }
-case "$action" in help|-h|--help) usage; exit 0;; start|status|logs|stop|legacy-import|legacy-shell|archive|plan|preview|apply|reconcile|backup) ;; *) usage >&2; exit 2;; esac
+case "$action" in help|-h|--help) usage; exit 0;; start|fresh|status|logs|stop|legacy-import|legacy-shell|archive|plan|preview|apply|reconcile|backup) ;; *) usage >&2; exit 2;; esac
 case "$action" in legacy-import|apply) [[ $# == 1 ]] || { usage >&2; exit 2; };; *) [[ $# == 0 ]] || { usage >&2; exit 2; };; esac
 for cmd in docker python3 flock curl; do command -v "$cmd" >/dev/null || { echo "缺少 $cmd" >&2; exit 1; }; done
 docker compose version >/dev/null
@@ -33,7 +34,7 @@ source "$ROOT/scripts/erp-next-images.sh"
 STATE="$(python3 -c 'from pathlib import Path;import sys; print(Path(sys.argv[1]).expanduser().resolve())' "${ERP_TRIAL_DIR:-$HOME/.local/share/zjerp-trial}")"
 # State must not be stored in the Git checkout or a Windows-mounted filesystem.
 case "$STATE/" in "$ROOT/"*|/mnt/[a-zA-Z]/*) echo "请在 WSL Linux 文件系统的仓库外设置 ERP_TRIAL_DIR" >&2; exit 1;; esac
-if [[ "$action" != start && ! -f "$STATE/.env" ]]; then echo "先执行 bash deploy.sh"; exit 1; fi
+if [[ "$action" != start && "$action" != fresh && ! -f "$STATE/.env" ]]; then echo "先执行 bash deploy.sh"; exit 1; fi
 [[ "$STATE" != / && "$STATE" != "$HOME" && "$STATE" != /tmp && "$STATE" != /var && "$STATE" != /usr ]] || { echo "请指定专用状态目录"; exit 1; }
 mkdir -p "$STATE"
 [[ -O "$STATE" ]] || { echo "状态目录不属于当前用户"; exit 1; }
@@ -44,7 +45,7 @@ flock -n 9 || { echo "另一个部署/迁移命令正在运行"; exit 1; }
 web="${ERP_NEXT_WEB_PORT:-8089}"; api="${ERP_NEXT_API_PORT:-8090}"
 for key in ERP_NEXT_DB_ROOT_PASSWORD ERP_NEXT_DB_PASSWORD ERP_BOOTSTRAP_TOKEN ERP_LEGACY_ROOT_PASSWORD ERP_LEGACY_DB_PASSWORD ERP_LEGACY_LOADER_PASSWORD ERP_TRIAL_FILES ERP_TRIAL_UID ERP_TRIAL_GID ERP_NEXT_WEB_PORT ERP_NEXT_API_PORT COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES; do unset "$key"; done
 if [[ ! -e "$STATE/.env" ]]; then
- [[ "$action" == start ]] || exit 1
+ [[ "$action" == start || "$action" == fresh ]] || exit 1
  python3 - "$STATE" "$web" "$api" <<'PY'
 from pathlib import Path
 import os,secrets,sys,uuid
@@ -63,6 +64,7 @@ with (p/".env").open("x") as f:
 PY
 fi
 [[ ! -L "$STATE/.env" && ! -L "$STATE/files" && ! -L "$STATE/legacy-files" ]] || { echo "拒绝符号链接状态目录"; exit 1; }
+if [[ "$action" == fresh && -f "$STATE/schema-init-pending" && ! -e "$STATE/files" ]]; then mkdir -m 700 "$STATE/files"; fi
 # Only source the private configuration generated above, not a user-supplied SQL or arbitrary env file.
 set -a; source "$STATE/.env"; set +a
 [[ "$TRIAL_ID" =~ ^[0-9a-f]{32}$ && "$ERP_TRIAL_FILES" == "$STATE/files" && "$ERP_TRIAL_UID" == "$(id -u)" && "$ERP_TRIAL_GID" == "$(id -g)" ]] || { echo "状态目录与创建者不一致"; exit 1; }
@@ -77,7 +79,7 @@ if [[ -f "$binding" ]]; then
  db_mode="$(sed -n '1p' "$binding")"; db_name="$(sed -n '2p' "$binding")"
  if [[ -n "${ERP_MYSQL_CONTAINER:-}" && "$ERP_MYSQL_CONTAINER" != "$db_name" ]]; then echo "已绑定数据库，不允许自动切换"; exit 1; fi
 else
- [[ "$action" == start ]] || { echo "先启动 ERP"; exit 1; }
+ [[ "$action" == start || "$action" == fresh ]] || { echo "先启动 ERP"; exit 1; }
  # Previous versions may have created an isolated copy. Preserve it and require explicit backup.
  if [[ -n "$(docker ps -aq --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=legacy-mysql")" ]]; then
   echo "检测到旧脚本创建的独立旧库容器；请先备份其 SQL，再使用新的 ERP_TRIAL_DIR。原数据不会删除。" >&2
@@ -121,6 +123,21 @@ loader(){
  local id; id="$(db_container)"
  docker exec "$@" -e MYSQL_PWD="$ERP_LEGACY_LOADER_PASSWORD" "$id" mysql --protocol=TCP -h 127.0.0.1 -u erp_legacy_loader server
 }
+# Explicit initialization receipt, bound to the pinned server and trial.
+pending="$STATE/schema-init-pending"
+build_stamp="$STATE/schema-build"
+verify_pending(){
+ [[ -f "$pending" && ! -L "$pending" ]] || return 1
+ local server
+ server="$(root_sql <<< 'SELECT @@server_uuid;')"
+ [[ "$(cat "$pending")" == "$TRIAL_ID:$server" ]] || { echo "初始化标识与数据库实例不一致" >&2; return 1; }
+}
+mark_pending(){
+ local server
+ server="$(root_sql <<< 'SELECT @@server_uuid;')"
+ [[ "$server" =~ ^[0-9a-fA-F-]{36}$ ]] || return 1
+ printf '%s:%s\n' "$TRIAL_ID" "$server" > "$pending"
+}
 prepare_mysql(){
  if [[ "$db_mode" == managed ]]; then
   dc up -d --wait --wait-timeout 180 erp-next-mysql
@@ -140,10 +157,14 @@ prepare_mysql(){
  # Never adopt a pre-existing erp_next database without our persisted identity.
  local exists
  exists="$(root_sql <<< "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='erp_next';")"
- if [[ "$exists" == 1 && "$db_mode" == shared && ! -f "$STATE/files/.erp-next-trial.json" ]]; then
-  echo "共享实例已有 erp_next，但没有本部署标识（也可能是首次初始化中断）；拒绝自动接管或清库，请核对备份和状态目录"; exit 1
+ if [[ -e "$pending" ]]; then
+  [[ "$action" == fresh ]] || { echo "初始化尚未完成，请使用 bash deploy.sh fresh 重新部署测试库" >&2; exit 1; }
+  verify_pending
+ elif [[ -f "$STATE/files/.erp-next-trial.json" ]]; then
+  verify_marker
+ elif [[ "$exists" == 1 && "$db_mode" == shared ]]; then
+  echo "共享实例已有 erp_next，但没有本部署标识；拒绝自动接管或清库，请人工核对" >&2; exit 1
  fi
- if [[ -f "$STATE/files/.erp-next-trial.json" ]]; then verify_marker; fi
  # Scoped users, no changes to old account credentials or old tables. CREATE USER
  # fails safely on unexpected pre-existing names rather than resetting passwords.
  if [[ ! -f "$STATE/mysql-users-ready" ]]; then
@@ -170,32 +191,59 @@ ensure_databases(){
  dc config --quiet
  echo "[1/3] 初始化新版 MySQL（不要求旧库存在）"
  prepare_mysql
- # Stop application writes before applying or checking schema changes.
- dc stop erp-next-web erp-next-api
- if [[ -f "$STATE/files/.erp-next-trial.json" ]]; then
-   verify_marker
-   if [[ -f "$STATE/last-successful-commit" && "$(cat "$STATE/last-successful-commit")" != "$(git rev-parse HEAD)" ]]; then
-     backup_target
-   fi
- fi
- echo "[2/3] 初始化或升级新版数据库表结构（不导入旧业务数据）"
- dc up --no-deps --force-recreate --exit-code-from erp-next-schema erp-next-schema
- # Only create the target marker on an empty new target. Never repair a mismatch silently.
- server="$(nextsql <<< 'SELECT @@server_uuid;')"
- count="$(nextsql <<< "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='erp_next' AND table_name='erp_trial_isolation_marker';")"
+ pause_app
+ local fingerprint count server marker previous
+ fingerprint="$(git rev-parse HEAD):$(sha256sum "$ROOT/erp-next/db/migration/V1__initial_schema.sql" | cut -d ' ' -f1)"
  marker="$STATE/files/.erp-next-trial.json"
- if [[ "$count" == 0 && ! -e "$marker" ]]; then
-   [[ "$(nextsql <<< 'SELECT COUNT(*) FROM erp_identity;')" == 0 ]] || { echo "目标非空且无试迁移标识，停止"; exit 1; }
-   [[ -z "$(find "$STATE/files" -mindepth 1 -maxdepth 1 -print -quit)" ]] || { echo "附件目录非空且无标识"; exit 1; }
+ count="$(root_sql <<< "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='erp_next';")"
+ if [[ "$action" == fresh ]]; then
+   if [[ -e "$pending" ]]; then
+     verify_pending
+   elif [[ -f "$marker" ]]; then
+     verify_marker
+     backup_target
+     mark_pending
+   else
+     [[ "$count" == 0 && -z "$(find "$STATE/files" -mindepth 1 -maxdepth 1 -print -quit)" ]] || { echo "非空新版库缺少隔离标识，拒绝重建" >&2; exit 1; }
+     mark_pending
+   fi
+   # Preserve prior test attachments/mappings, never delete legacy files or archives.
+   previous="$(mktemp -d "$STATE/backups-reset-XXXXXX")"
+   mv -- "$STATE/files" "$previous/files"
+   mkdir -m 700 "$STATE/files"
+   for item in review.json latest-preview schema-build last-successful-commit; do
+     if [[ -e "$STATE/$item" ]]; then mv -- "$STATE/$item" "$previous/$item"; fi
+   done
+   echo "旧测试附件及映射已保留：$previous"
+   root_sql <<'SQL'
+DROP DATABASE IF EXISTS erp_next;
+CREATE DATABASE erp_next CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+SQL
+ elif [[ -f "$marker" ]]; then
+   verify_marker
+   [[ -f "$build_stamp" && "$(cat "$build_stamp")" == "$fingerprint" ]] || { echo "开发候选版本变更：请执行 bash deploy.sh fresh 全新部署，不支持中间版本升级" >&2; exit 1; }
+ else
+   [[ "$count" == 0 && -z "$(find "$STATE/files" -mindepth 1 -maxdepth 1 -print -quit)" ]] || { echo "非空新版库缺少隔离标识，拒绝接管" >&2; exit 1; }
+   mark_pending
+ fi
+ echo "[2/3] 初始化或校验最终新版数据库结构（不导入旧业务数据）"
+ dc up --no-deps --force-recreate --exit-code-from erp-next-schema erp-next-schema
+ if [[ -e "$pending" ]]; then
+   verify_pending
+   server="$(nextsql <<< 'SELECT @@server_uuid;')"
+   [[ "$(nextsql <<< 'SELECT COUNT(*) FROM erp_identity;')" == 0 ]] || { echo "全新目标不应含账户" >&2; exit 1; }
    nextsql <<SQL
 CREATE TABLE erp_trial_isolation_marker(id INT PRIMARY KEY,trial_id CHAR(32) NOT NULL,server_uuid CHAR(36) NOT NULL);
-INSERT INTO erp_trial_isolation_marker VALUES(1,'$TRIAL_ID',@@server_uuid);
+INSERT INTO erp_trial_isolation_marker VALUES(1,'$TRIAL_ID','$server');
 SQL
    python3 - "$marker" "$TRIAL_ID" "$server" <<'PY'
 import json,sys
 from pathlib import Path
 with Path(sys.argv[1]).open("x") as f:json.dump({"format":"erp-next-trial-v1","trialId":sys.argv[2],"serverUuid":sys.argv[3]},f)
 PY
+   verify_marker
+   printf '%s\n' "$fingerprint" > "$build_stamp"
+   rm -- "$pending"
  fi
  verify_marker
 }
@@ -248,20 +296,21 @@ backup_target(){
  [[ -s "$dest/database.sql" ]] || { echo "数据库备份为空"; exit 1; }
  tar -C "$STATE/files" -czf "$dest/files.tar.gz" .
  (cd "$dest" && sha256sum database.sql files.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS)
- printf '%s\n' "$(git rev-parse HEAD)" > "$dest/commit"
+ if [[ -f "$build_stamp" ]]; then cut -d : -f1 "$build_stamp" > "$dest/commit"; else printf 'unknown-pre-release\n' > "$dest/commit"; fi
  touch "$dest/COMPLETE"
  echo "备份已完成：$dest（敏感数据，请勿分享）"
 }
 actor(){ nextsql <<< "SELECT id FROM erp_identity WHERE username='admin';"; }
 migration(){
  verify_marker
+ [[ ! -e "$pending" && -f "$build_stamp" && "$(cat "$build_stamp")" == "$(git rev-parse HEAD):$(sha256sum "$ROOT/erp-next/db/migration/V1__initial_schema.sql" | cut -d ' ' -f1)" ]] || { echo "请先部署当前完整候选版，再进行旧库试迁移" >&2; exit 1; }
  pause_app
  local id
  id="$(actor)"; [[ "$id" =~ ^[1-9][0-9]*$ ]] || { echo "试迁移管理员不存在"; exit 1; }
  pytrial /scripts/erp-next-legacy-import.py "$1" --archive /state/archive --plan /state/review.json --host erp-next-mysql --user erp_next --actor "$id" --files-root /state/files --isolated-trial "${@:2}"
 }
 case "$action" in
- start)
+ start|fresh)
    erp_build_images
    ensure_databases
    echo "[3/3] 构建并启动新版 API 和 Web"
@@ -287,7 +336,6 @@ if not status["initialized"]:
         if r.status!=201:raise SystemExit("管理员初始化失败")
 PY
    [[ "$(actor)" =~ ^[1-9][0-9]*$ ]] || { echo "缺少试迁移管理员"; exit 1; }
-   git rev-parse HEAD > "$STATE/last-successful-commit"
    dc ps -a
    echo "访问：http://localhost:$ERP_NEXT_WEB_PORT/next.html"
    echo "账号：admin；初始密码文件：$STATE/admin-password"

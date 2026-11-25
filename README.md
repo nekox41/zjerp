@@ -41,10 +41,11 @@ Ubuntu 22.04 / Docker Compose v2，仓库建议克隆到 WSL Linux 文件系统�
 
 ```bash
 bash test.sh        # 完整构建与隔离 Smoke，日志在 test-results/
-bash deploy.sh      # 持久化本地验收环境，优先复用旧版 MySQL，默认仅回环端口
+bash deploy.sh      # 首次全新部署或重启同一版本，优先复用旧版 MySQL
+bash deploy.sh fresh # 测试新候选版本：备份并重建仅新版测试库及私有附件
 ```
 
-部署后访问 http://localhost:8089/next.html，账号 admin，初始密码文件 ~/.local/share/zjerp-trial/admin-password。该目录保留数据库的隔离标识、凭据、旧附件副本及迁移档案。测试与部署不共享容器或数据卷。详见 [WSL2 验收与迁移](erp-next/WSL_ACCEPTANCE.md)。
+部署后访问 http://localhost:8089/next.html，账号 admin，初始密码文件 ~/.local/share/zjerp-trial/admin-password。该目录保留数据库的隔离标识、凭据、旧附件副本及迁移档案。自动测试与持久化验收部署不共享容器或数据卷。开发候选版本一律全新部署；仅最终完整版从最初生产旧版 server 迁移。详见 [WSL2 验收与迁移](erp-next/WSL_ACCEPTANCE.md)。
 
 ## Codespaces 一键启动新版 ERP（普通空库）
 

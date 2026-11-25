@@ -14,7 +14,8 @@ Usage: bash start.sh [start|status|logs|stop|help]
   logs    follow application logs
   stop    stop containers, preserving database and private files
 All commands operate ONLY on erp-next/compose.yaml.
-For WSL2 legacy-data acceptance and migration, use bash deploy.sh instead.
+For every new pre-release test version use bash deploy.sh fresh (isolated trial).
+This quickstart is non-destructive; it does not upgrade development schemas.
 EOF
 }
 command_name="${1:-start}"
@@ -86,7 +87,7 @@ fi
 compose stop erp-next-web erp-next-api
 echo "[3/4] Running Flyway migration (live output; do not interrupt active SQL)..."
 if ! compose up --no-deps --force-recreate --exit-code-from erp-next-schema erp-next-schema; then
-  echo "Flyway failed. Existing database and private files are preserved. Do not delete volumes or repair migration history blindly." >&2
+  echo "Schema initialization/validation failed. Existing database and private files are preserved. For a new test version use the isolated deploy.sh fresh workflow; do not repair old development histories or delete volumes blindly." >&2
   compose ps -a >&2
   compose logs --tail=100 erp-next-schema >&2
   exit 1
