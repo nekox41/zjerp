@@ -54,6 +54,6 @@ public class AuthController {
     public void logout(Authentication authentication) { auth.logout((CurrentUser) authentication.getPrincipal()); }
 
     public record BootstrapRequest(@NotBlank @Size(max=100) String username,
-        @NotBlank @Size(max=200) String displayName, @NotBlank @Size(min=12,max=128) String password) { }
+        @NotBlank @Size(max=200) String displayName, @NotBlank @Size(max=128) String password) { }
     public record LoginRequest(@NotBlank @Size(max=100) String username, @NotBlank String password) { }
 }

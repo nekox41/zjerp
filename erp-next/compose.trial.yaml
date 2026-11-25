@@ -1,4 +1,4 @@
-# Persistent ERP acceptance: either existing MySQL or a single managed MySQL.
+# Disposable loopback-only ERP development test stack. No production data.
 services:
   erp-next-mysql:
     profiles: ["managed-db"]
@@ -50,11 +50,8 @@ services:
       ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
       ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
       ERP_FILES_ROOT: /var/lib/erp-next/files
-      ERP_LEGACY_SCAN_ENABLED: "true"
-      ERP_LEGACY_DB_URL: jdbc:mysql://erp-next-mysql:3306/server?useSSL=false&allowPublicKeyRetrieval=true
-      ERP_LEGACY_DB_USER: erp_legacy_readonly
-      ERP_LEGACY_DB_PASSWORD: ${ERP_LEGACY_DB_PASSWORD:?Set ERP_LEGACY_DB_PASSWORD}
-      ERP_LEGACY_DB_SCHEMA: server
+      ERP_LOCAL_TEST_BOOTSTRAP: "true"
+      ERP_LEGACY_SCAN_ENABLED: "false"
     ports:
       - "127.0.0.1:${ERP_NEXT_API_PORT:-8090}:8090"
     depends_on:

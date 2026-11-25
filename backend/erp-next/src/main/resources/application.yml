@@ -30,6 +30,7 @@ management:
 erp:
   bootstrap:
     token: ${ERP_BOOTSTRAP_TOKEN:}
+    local-test: ${ERP_LOCAL_TEST_BOOTSTRAP:false}
   files:
     root: ${ERP_FILES_ROOT:/var/lib/erp-next/files}
   auth:

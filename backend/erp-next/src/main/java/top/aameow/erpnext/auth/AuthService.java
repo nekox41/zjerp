@@ -21,13 +21,15 @@ public class AuthService {
     private final int sessionHours;
     private final int maxFailedLogins;
     private final int lockMinutes;
+    private final boolean localTestBootstrap;
 
     public AuthService(JdbcTemplate jdbc, PasswordEncoder passwords,
         @Value("${erp.auth.session-hours:12}") int sessionHours,
         @Value("${erp.auth.max-failed-logins:5}") int maxFailedLogins,
-        @Value("${erp.auth.lock-minutes:10}") int lockMinutes) {
+        @Value("${erp.auth.lock-minutes:10}") int lockMinutes,
+        @Value("${erp.bootstrap.local-test:false}") boolean localTestBootstrap) {
         this.jdbc = jdbc; this.passwords = passwords; this.sessionHours = sessionHours;
-        this.maxFailedLogins = maxFailedLogins; this.lockMinutes = lockMinutes;
+        this.maxFailedLogins = maxFailedLogins; this.lockMinutes = lockMinutes; this.localTestBootstrap=localTestBootstrap;
     }
 
     public boolean isInitialized() {
@@ -45,7 +47,10 @@ public class AuthService {
     }
     @Transactional
     public void bootstrapAdmin(String username, String displayName, String password) {
-        username=username.trim();displayName=displayName.trim();validateNewPassword(password);
+        username=username.trim();displayName=displayName.trim();
+        // The disposable, loopback-only trial stack may use exactly this test password.
+        // All other bootstrap and account password operations retain the production policy.
+        if(!(localTestBootstrap && "123456".equals(password)))validateNewPassword(password);
         if(!"admin".equals(username)||displayName.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"唯一超级账户必须为 admin，姓名不能为空");
         Long roleId = jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE", Long.class);
         if (isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT, "管理员已初始化");

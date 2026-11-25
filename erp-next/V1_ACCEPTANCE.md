@@ -39,7 +39,7 @@
 
 大文件专项：DOCX 生成与人工最终稿上传均以100MB为硬上限，其他上传文件仍为25MB。默认按300 DPI压缩，不能为达到上限而自动降低质量或删除照片；超过限制提示用户调整。确认目标机器在实际大报告生成时内存、耗时和打印清晰度满足需求。
 
-WSL2 用户推荐直接运行仓库根目录 `bash test.sh`（Docker 提供 Maven/JDK、Node），再 `bash deploy.sh` 建立持久化隔离验收环境；后续候选版本使用 `bash deploy.sh fresh` 全新部署。具体命令见 [WSL_ACCEPTANCE.md](WSL_ACCEPTANCE.md)。
+WSL2 用户推荐直接运行仓库根目录 `bash test.sh`（Docker 提供 Maven/JDK、Node），再 `bash deploy.sh` 全新部署；每次部署清空新版测试数据，测试账号 admin/123456，仅本机访问。旧生产迁移延至完整版开发完成后单独验收。具体命令见 [WSL_ACCEPTANCE.md](WSL_ACCEPTANCE.md)。
 
 ## 账户与交互规范
 

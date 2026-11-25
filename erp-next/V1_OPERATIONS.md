@@ -14,7 +14,7 @@
 
 ## 开发候选版本测试
 
-每个新候选版本使用 `bash deploy.sh fresh` 重建隔离测试目标；只备份保全旧测试数据，不迁移开发中间版本。最终 V1 只从指定生产旧版 server 导入业务数据。
+开发期间每次 `bash deploy.sh` 直接清空独立新版测试库和附件，重新初始化；不备份、不迁移。生产数据迁移待正式完整版开发完成后单独设计。
 
 ## 正式发布后的升级（不适用于开发候选版本）
 
@@ -94,4 +94,4 @@ sha256sum "backups/erp_next_$STAMP.sql" "backups/erp_next_files_$STAMP.tar.gz" >
 
 ## WSL2 候选版一键验收
 
-`bash test.sh` 使用容器提供构建工具并记录日志；`bash deploy.sh` 启动专用持久化验收环境（含隔离旧库），与本页普通部署及生产卷分离。参见 [WSL_ACCEPTANCE.md](WSL_ACCEPTANCE.md)。
+`bash test.sh` 使用容器提供构建工具并记录日志；`bash deploy.sh` 重建专用一次性体验环境（不含旧库），与本页普通部署及生产卷分离。参见 [WSL_ACCEPTANCE.md](WSL_ACCEPTANCE.md)。

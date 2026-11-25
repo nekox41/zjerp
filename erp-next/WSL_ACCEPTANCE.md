@@ -1,47 +1,21 @@
-# WSL2 本地部署与迁移
-
-在仓库根目录运行 `bash test.sh`（完整测试，日志 test-results/）或 `bash test.sh --smoke`。测试仍使用隔离临时 MySQL，不连接业务数据库。
-
-## 部署
+# WSL2 / Linux 本地体验测试
 
 ```bash
-bash deploy.sh          # 首次全新部署，或重启同一候选版本
-bash deploy.sh fresh    # 测试新候选版本时执行
-```
-
-首次部署识别旧版 Compose 项目 zjerp 的 mysql 服务；也可在首次部署前设置 `ERP_MYSQL_CONTAINER=实际容器名 bash deploy.sh`。无旧版容器则创建一个 MySQL 8.4。旧版 MySQL 8.0 不自动升级、不停止、不重建、不改旧账号密码。复用要求原容器运行、容器内 MYSQL_ROOT_PASSWORD 有效，专用用户名未冲突；脚本只初始化 erp_next 和专用最小范围账号。已绑定实例不自动切换；已有 erp_next 却没有本地标识时停止，请人工核对。之前版本建立过独立旧库容器时保留数据，需先备份并人工安排迁移。
-
-打开 http://localhost:8089/next.html，用户名 admin，初始密码文件 ~/.local/share/zjerp-trial/admin-password。状态目录可通过 ERP_TRIAL_DIR 指定，首次端口 ERP_NEXT_WEB_PORT / ERP_NEXT_API_PORT。stop 只停止新版服务及自管 MySQL，不停止共享实例。原 start.sh 快速启动是独立旧入口，不用于共享实例部署；不要同时占用端口。
-
-## 测试版本重建
-
-`fresh` 仅重建经隔离标识确认的新版 `erp_next`；保留 MySQL 实例、`server`、旧附件及归档。原测试数据库/私有附件先成对备份，测试附件及旧映射另行留存；新版账号和业务记录重新初始化，使用原初始 admin 密码文件。普通 `start` 拒绝跨候选版本升级；初始化中断可再次执行 `fresh`。不使用 Flyway repair、不删除 Docker 卷、不清理旧库。正式环境不使用 `fresh`。
-
-## 最终版旧库迁移
-
-仅在完整 V1 最终验收及正式切换时，迁移 Issue #8 指定的最初生产旧版；测试中间版本不是迁移来源。正式验收先核实生产 commit/tag 与实际数据库结构。
-打开数据迁移页自动检测同一 MySQL 的 server：不存在或空库可跳过。已有旧库只读扫描；迁移前停止旧应用写入、完整备份 SQL 和附件。对于全新自管实例，可使用单 schema SQL：
-
-```bash
-bash deploy.sh legacy-import ~/legacy.sql
-cp -a ~/legacy-uploads/. ~/.local/share/zjerp-trial/legacy-files/
-```
-
-SQL 不含 CREATE DATABASE、账户授权或其他 schema 操作。共享旧版实例禁止 SQL 导入及 legacy-shell，避免覆盖真实 server。导入后页面重新检测。原始文件须人工复制，保留相对路径。
-
-```bash
-# 共享实例须确认旧应用已停止写入，附件已备份
-ERP_LEGACY_SOURCE_FROZEN=yes bash deploy.sh archive
-bash deploy.sh plan
-# 人工确认 review.json，参见 LEGACY_MIGRATION.md
-bash deploy.sh preview
-bash deploy.sh apply 完整计划SHA256
-bash deploy.sh reconcile
+git pull --ff-only
 bash deploy.sh
 ```
 
-archive 使用专用只读账号和一致性事务；未映射的行保留在归档。apply 之前自动备份 erp_next 及私有附件，禁止自动改动 server。网页目前支持检测、扫描、冲突清单，不支持直接执行 SQL 或无审核一键转换。不能将不明确的甲方、合同归属、权限、签发状态自动猜测。共享实例的正式数据迁移需要维护窗口、备份恢复演练和授权。
+每一次执行都重新构建并部署新版 API/Web、清空独立 MySQL 中的 erp_next 数据库及新版私有附件，重新初始化唯一 V1 Schema 和 admin。即使代码未变化也是全新部署，不备份、不升级、不恢复旧测试数据。fresh 是兼容别名。镜像与构建缓存可复用。旧生产 server、旧附件和以前已保存的归档不参与此过程。
 
-日志：bash deploy.sh status / logs；备份：bash deploy.sh backup（停止新版写入）；启动：bash deploy.sh。不要分享密码、SQL、业务附件或真实数据日志。Docker 网络超时时参见 Docker daemon 代理配置说明 https://docs.docker.com/engine/daemon/proxy/ ，可使用可信 ERP_IMAGE_PREFIX。 
+访问 http://localhost:8089/next.html，账号 admin，密码 123456。仅绑定本机回环端口；禁止用于生产或将端口转发至公网。正式账号密码策略保持不变。
 
+- 状态：bash deploy.sh status
+- 日志：bash deploy.sh logs
+- 停止：bash deploy.sh stop
+- 再次部署：bash deploy.sh（清空测试数据）
 
+默认专用状态目录 ~/.local/share/zjerp-trial；可设置 ERP_TRIAL_DIR，首次创建时可设置 ERP_NEXT_WEB_PORT / ERP_NEXT_API_PORT。已绑定共享 MySQL 的旧状态目录拒绝接管，改用新的独立目录；不探测、修改、停止旧生产数据库或旧容器。
+
+自动化测试运行 bash test.sh（默认新版构建和隔离 API smoke，日志 test-results/），或 bash test.sh --smoke。测试不使用体验部署的容器、卷或业务数据。
+
+生产迁移暂停：旧版迁移代码暂时保留，测试部署不再提供旧库检测、导入、归档、映射、预演和迁移命令。完成正式版后，单独制定生产数据迁移与备份方案。生产部署不得使用本页脚本。

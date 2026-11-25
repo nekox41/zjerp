@@ -4,7 +4,7 @@ set -Eeuo pipefail
 umask 077
 ROOT="$(cd -- "$(dirname -- "$0")" && pwd)"
 cd "$ROOT"
-mode="${1:---full}"
+mode="${1:---new-only}"
 case "$mode" in --full|--new-only|--smoke|--static) ;; *) echo "Usage: bash test.sh [--full|--new-only|--smoke|--static]"; exit 2;; esac
 mkdir -p test-results
 log="$(mktemp "$ROOT/test-results/test-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")"

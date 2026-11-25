@@ -24,6 +24,9 @@ done
 grep -q 'next-app' /tmp/erp-next-page.html || { echo 'New frontend entry missing:'; head -c 1000 /tmp/erp-next-page.html; exit 1; }
 curl -fsS ${SMOKE_WEB_URL}/next-api/bootstrap/status -o /tmp/erp-next-bootstrap.json
 grep -q '"initialized":false' /tmp/erp-next-bootstrap.json || { cat /tmp/erp-next-bootstrap.json; exit 1; }
+# Standard stack must reject the disposable trial password even with a valid bootstrap token.
+WEAK_BOOTSTRAP=$(curl -sS -o /tmp/erp-weak-bootstrap.json -w '%{http_code}' -X POST "${SMOKE_WEB_URL}/next-api/bootstrap/admin" -H 'Content-Type: application/json' -H "X-Bootstrap-Token: $ERP_BOOTSTRAP_TOKEN" -d '{"username":"admin","displayName":"CI Admin","password":"123456"}')
+test "$WEAK_BOOTSTRAP" = 400
 curl -fsS -X POST ${SMOKE_WEB_URL}/next-api/bootstrap/admin \
   -H 'Content-Type: application/json' -H "X-Bootstrap-Token: $ERP_BOOTSTRAP_TOKEN" \
   -d '{"username":"admin","displayName":"CI Admin","password":"ci-only-password-123"}' >/dev/null
