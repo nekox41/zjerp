@@ -23,7 +23,7 @@ public class PartnerMaintenanceController {
     @GetMapping("/partners") @PreAuthorize("hasAuthority('partner:read')")
     public List<Map<String,Object>> partners(@RequestParam(defaultValue="") String q){
         String keyword=q==null?"":q.trim();
-        return jdbc.queryForList("SELECT p.*,(SELECT COUNT(*) FROM erp_contract_partner cp WHERE cp.partner_id=p.id) contract_count FROM erp_partner p WHERE ?='' OR p.name ILIKE CONCAT('%',?,'%') OR COALESCE(p.contact,'') ILIKE CONCAT('%',?,'%') OR COALESCE(p.region,'') ILIKE CONCAT('%',?,'%') ORDER BY p.name,p.id",keyword,keyword,keyword,keyword);
+        return jdbc.queryForList("SELECT p.*,(SELECT COUNT(*) FROM erp_contract_partner cp WHERE cp.partner_id=p.id) contract_count FROM erp_partner p WHERE CAST(? AS TEXT)='' OR p.name ILIKE CONCAT('%',CAST(? AS TEXT),'%') OR COALESCE(p.contact,'') ILIKE CONCAT('%',CAST(? AS TEXT),'%') OR COALESCE(p.region,'') ILIKE CONCAT('%',CAST(? AS TEXT),'%') ORDER BY p.name,p.id LIMIT 500",keyword,keyword,keyword,keyword);
     }
     @GetMapping("/partners/{id}") @PreAuthorize("hasAuthority('partner:read')")
     public Map<String,Object> partner(@PathVariable long id){
