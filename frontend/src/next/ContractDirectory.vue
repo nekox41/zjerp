@@ -1,5 +1,5 @@
 <script setup>
-import {computed,onMounted,ref,watch} from 'vue'
+import {computed,onBeforeUnmount,onMounted,ref,watch} from 'vue'
 import FormDialog from './FormDialog.vue'
 import ModalDialog from './ModalDialog.vue'
 import FileDropzone from './FileDropzone.vue'
@@ -20,11 +20,13 @@ const activeType=ref(initialType),q=ref(''),rows=ref([]),customers=ref([]),partn
 const loading=ref(false),busy=ref(false),error=ref(''),notice=ref('')
 const selected=ref(null),origin=ref(null),createOpen=ref(false),editOpen=ref(false)
 const files=ref([]),uploadedFileIds=ref([])
+const numberReservation=ref(null),reservingNumber=ref(false)
+let disposed=false
 const blank=()=>({title:'',externalContractNo:'',customerId:'',partnerId:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',existingProjectId:''})
 const form=ref(blank())
 const editForm=ref({title:'',externalContractNo:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',status:'draft'})
 const category=computed(()=>categories.find(x=>x.id===activeType.value)||categories[0])
-const generatedHint=computed(()=>category.value.prefix+'-YYYY-自动分配')
+const generatedHint=computed(()=>numberReservation.value?.number||'')
 const availableProjects=computed(()=>projects.value.filter(p=>String(p.customer_id)===String(form.value.customerId)&&p.service_type===activeType.value))
 const statusNames={draft:'草稿',pending:'待生效',active:'履行中',completed:'已完成',terminated:'已终止'}
 const serviceNames={maintenance:'维保',fire_inspection:'检测',fire_assessment:'评定',fire_evaluation:'评估',other:'其他'}
@@ -54,10 +56,30 @@ async function show(id,event){
   if(record.service_type&&record.service_type!==activeType.value)activeType.value=record.service_type
  }catch(e){error.value=e.message}
 }
-function beginCreate(){
- error.value='';notice.value='';form.value=blank();files.value=[];uploadedFileIds.value=[];createOpen.value=true
+async function releaseNumberReservation(reservation=numberReservation.value){
+ if(!reservation?.id)return
+ try{await api('/business/number-reservations/'+encodeURIComponent(reservation.id),{method:'DELETE'})}catch{}
 }
-function closeCreate(){if(!busy.value){createOpen.value=false;form.value=blank();files.value=[];uploadedFileIds.value=[]}}
+async function beginCreate(){
+ if(reservingNumber.value||busy.value||createOpen.value)return
+ error.value='';notice.value='';form.value=blank();files.value=[];uploadedFileIds.value=[]
+ reservingNumber.value=true
+ try{
+  const reservation=await api('/business/number-reservations',{method:'POST',body:JSON.stringify({serviceType:activeType.value,purpose:'contract'})})
+  if(disposed){await releaseNumberReservation(reservation);return}
+  numberReservation.value=reservation
+  createOpen.value=true
+ }catch(e){if(!disposed)error.value=e.message}
+ finally{reservingNumber.value=false}
+}
+async function closeCreate(){
+ if(busy.value)return
+ createOpen.value=false
+ const reservation=numberReservation.value
+ numberReservation.value=null
+ await releaseNumberReservation(reservation)
+ form.value=blank();files.value=[];uploadedFileIds.value=[]
+}
 function updateFiles(next){files.value=next;uploadedFileIds.value=[]}
 async function save(){
  if(busy.value)return
@@ -72,10 +94,12 @@ async function save(){
    }
    uploadedFileIds.value=[...fileIds]
   }
-  const body={...form.value,serviceType:activeType.value,fileIds,createProject:!form.value.existingProjectId}
+  if(!numberReservation.value?.id)throw new Error('编号预留已失效，请关闭窗口后重新新建合同')
+  const body={...form.value,serviceType:activeType.value,fileIds,createProject:!form.value.existingProjectId,numberReservationId:numberReservation.value.id}
   for(const key of Object.keys(body))if(body[key]==='')body[key]=null
   const created=await api('/business/contracts',{method:'POST',body:JSON.stringify(body)})
-  createOpen.value=false;files.value=[];uploadedFileIds.value=[];form.value=blank()
+  numberReservation.value=null
+  files.value=[];uploadedFileIds.value=[];form.value=blank()
   await load();await show(created.id)
   notice.value=created.projectId?'合同已创建，项目已同步建立':'合同已创建并关联已有项目'
  }catch(e){error.value=e.message}finally{busy.value=false}
@@ -109,18 +133,19 @@ async function download(file){
 function openProject(project){emit('navigate','business','projects',project.id,project.service_type)}
 watch(activeType,()=>{q.value='';if(selected.value?.service_type!==activeType.value)selected.value=null;load()})
 watch(()=>form.value.customerId,()=>{if(form.value.existingProjectId&&!availableProjects.value.some(p=>String(p.id)===String(form.value.existingProjectId)))form.value.existingProjectId=''})
+onBeforeUnmount(()=>{disposed=true;if(numberReservation.value?.id)void releaseNumberReservation(numberReservation.value)})
 onMounted(async()=>{await load();if(props.destination?.id)await show(props.destination.id)})
 </script>
 <template>
 <section class="contract-directory">
  <div class="contract-top">
   <div class="contract-category-tabs" role="tablist" aria-label="合同服务类别">
-   <button v-for="t in categories" :key="t.id" type="button" role="tab" :aria-selected="activeType===t.id" :class="{active:activeType===t.id}" @click="activeType=t.id">{{t.name}}</button>
+   <button v-for="t in categories" :key="t.id" type="button" role="tab" :disabled="reservingNumber" :aria-selected="activeType===t.id" :class="{active:activeType===t.id}" @click="activeType=t.id">{{t.name}}</button>
   </div>
   <div class="contract-tools">
    <input v-model="q" aria-label="搜索合同" placeholder="搜索合同名称、编号或甲方" @keyup.enter="load">
    <button type="button" class="secondary-button" :disabled="loading" @click="load">搜索</button>
-   <button v-if="can('contract:write')" type="button" class="primary-button" @click="beginCreate">＋ 新建合同</button>
+   <button v-if="can('contract:write')" type="button" class="primary-button" :disabled="reservingNumber" @click="beginCreate">{{reservingNumber?'正在预留编号…':'＋ 新建合同'}}</button>
   </div>
  </div>
  <p v-if="error&&!createOpen&&!editOpen" class="message error" role="alert">{{error}}</p>

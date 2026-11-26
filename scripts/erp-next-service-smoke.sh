@@ -1,9 +1,11 @@
 set -euo pipefail
 
 # V4 service-delivery acceptance checks; source this file from the authenticated smoke-test shell.
+SERVICE_PROJECT_RESERVATION=$(reserve_business_number other project)
+SERVICE_PROJECT_RESERVATION_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$SERVICE_PROJECT_RESERVATION")
 curl -fsS -X POST ${SMOKE_API_URL}/api/business/projects \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"projectNo\":\"CI-P-NC\",\"name\":\"CI 无合同项目\",\"customerId\":$CUSTOMER_ID}" | grep -q 'CI 无合同项目'
+  -d "{\"numberReservationId\":\"$SERVICE_PROJECT_RESERVATION_ID\",\"name\":\"CI 无合同项目\",\"customerId\":$CUSTOMER_ID,\"serviceType\":\"other\"}" | grep -q 'CI 无合同项目'
 
 
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/projects/$PROJECT_ID/issues" \

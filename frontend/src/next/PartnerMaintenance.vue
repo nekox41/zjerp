@@ -1,7 +1,7 @@
 <script setup>
 import FormDialog from './FormDialog.vue'
 import FileDropzone from './FileDropzone.vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api, downloadFile } from './api'
 import MaintenanceDocuments from './MaintenanceDocuments.vue'
 import PartnerDirectory from './PartnerDirectory.vue'
@@ -24,13 +24,43 @@ const maintenanceForm=ref({projectId:'',currentContractId:'',honeybeeContractUpl
 const visitForm=ref({visitDate:new Date().toISOString().slice(0,10),contractId:'',employeeIds:[],notes:''})
 const renewalForm=ref({externalContractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''})
 const renewalFiles=ref([])
+const renewalReservation=ref(null),renewalOpen=ref(false),renewalReserving=ref(false)
+let disposed=false
 const renewalHistoryDetail=ref(null)
 const documentContractId=ref(null)
 async function openRenewalHistory(contractId){
   try{renewalHistoryDetail.value=await api('/business/contracts/'+contractId)}catch(e){error.value=e.message}
 }
+async function releaseRenewalReservation(reservation=renewalReservation.value){
+  if(!reservation?.id)return
+  try{await api('/business/number-reservations/'+encodeURIComponent(reservation.id),{method:'DELETE'})}catch{}
+}
+async function beginRenewal(){
+  if(!maintenanceForm.value.projectId||renewalReserving.value||busy.value||renewalOpen.value)return
+  error.value=''
+  renewalForm.value={externalContractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''}
+  renewalFiles.value=[]
+  renewalReserving.value=true
+  try{
+    const reservation=await api('/business/number-reservations',{method:'POST',body:JSON.stringify({serviceType:'maintenance',purpose:'maintenance_renewal'})})
+    if(disposed){await releaseRenewalReservation(reservation);return}
+    renewalReservation.value=reservation
+    renewalOpen.value=true
+  }catch(e){if(!disposed)error.value=e.message}
+  finally{renewalReserving.value=false}
+}
+async function closeRenewal(){
+  if(busy.value)return
+  renewalOpen.value=false
+  const reservation=renewalReservation.value
+  renewalReservation.value=null
+  await releaseRenewalReservation(reservation)
+  renewalForm.value={externalContractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''}
+  renewalFiles.value=[]
+}
 async function createRenewal(){
   if(!maintenanceForm.value.projectId)return
+  if(!renewalReservation.value?.id)throw new Error('编号预留已失效，请关闭窗口后重新新建续签合同')
   busy.value=true;error.value=''
   try{
     const fileIds=[]
@@ -39,8 +69,9 @@ async function createRenewal(){
       fileIds.push((await api('/files',{method:'POST',body:fd})).id)
     }
     const contract=await api('/business/projects/'+maintenanceForm.value.projectId+'/maintenance-renewals',{
-      method:'POST',body:JSON.stringify({...renewalForm.value,fileIds})
+      method:'POST',body:JSON.stringify({...renewalForm.value,fileIds,numberReservationId:renewalReservation.value.id})
     })
+    renewalReservation.value=null
     renewalForm.value={externalContractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''}
     renewalFiles.value=[]
     await load()
@@ -145,6 +176,7 @@ async function uploadContractFile(event){
   try{const fd=new FormData();fd.append('file',file);const uploaded=await api('/files',{method:'POST',body:fd});await api('/business/contracts/'+linkForm.value.contractId+'/files',{method:'POST',body:JSON.stringify({fileId:uploaded.id,fileType:linkForm.value.fileType})});notice.value='合同附件已保存';await openContractDetail(Number(linkForm.value.contractId))}
   catch(e){error.value=e.message}
 }
+onBeforeUnmount(()=>{disposed=true;if(renewalReservation.value?.id)void releaseRenewalReservation(renewalReservation.value)})
 onMounted(async ()=>{
   const target=props.destination
   tab.value=visibleTabs.value.some(t=>t.id===target?.section)?target.section:(visibleTabs.value[0]?.id||'')
@@ -220,10 +252,11 @@ onMounted(async ()=>{
 </form></template></FormDialog>
       <div class="pm-divider"></div><h3>年度维保合同续签</h3>
       <p class="pm-note">续签沿用原项目，新合同独立保存合同期限及维保卡附件。新建的是草稿，不会自动替换当前有效合同。</p>
-      <FormDialog v-if="maintenance.contractHistory?.length&&can('maintenance:write')&&can('contract:write')" title="新建续签合同" :steps="['合同信息','合同日期与备注']" :busy="busy" :error="error" @clear-error="error=''" save-label="创建续签">
+      <button v-if="maintenance.contractHistory?.length&&can('maintenance:write')&&can('contract:write')" type="button" class="primary" :disabled="busy||renewalReserving" @click="beginRenewal">{{renewalReserving?'正在预留编号…':'＋ 新建续签合同'}}</button>
+      <FormDialog v-if="renewalOpen" title="新建续签合同" :steps="['合同信息','合同日期与备注']" :busy="busy" :error="error" @clear-error="error=''" save-label="创建续签" auto-open @close="closeRenewal">
 <template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>createRenewal())">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
-<label>系统合同编号<input :value="'ZJWB-YYYY-自动分配'" disabled></label>
+<label>系统合同编号<input :value="renewalReservation?.number||''" disabled></label>
 <label>其他编号（选填）<input v-model.trim="renewalForm.externalContractNo" maxlength="160" placeholder="甲方指定的合同编号"></label>
 <label>合同名称<input v-model.trim="renewalForm.title" required></label>
 <label>金额<input v-model="renewalForm.amount" type="number" min="0" step="0.01" required></label>

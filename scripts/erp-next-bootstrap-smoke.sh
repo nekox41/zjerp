@@ -34,6 +34,16 @@ LOGIN=$(curl -fsS -X POST ${SMOKE_WEB_URL}/next-api/auth/login \
   -H 'Content-Type: application/json' -d '{"username":"admin","password":"ci-only-password-123"}')
 TOKEN=$(python -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<< "$LOGIN")
 test -n "$TOKEN"
+
+reserve_business_number() {
+  curl -fsS -X POST "$SMOKE_API_URL/api/business/number-reservations" \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    -d "{\"serviceType\":\"$1\",\"purpose\":\"$2\"}"
+}
+release_business_number() {
+  curl -fsS -X DELETE "$SMOKE_API_URL/api/business/number-reservations/$1" \
+    -H "Authorization: Bearer $TOKEN"
+}
 curl -fsS ${SMOKE_WEB_URL}/next-api/auth/me -H "Authorization: Bearer $TOKEN" | grep -q 'CI Admin'
 
 ORG=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/organizations -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 业务部"}')
@@ -58,10 +68,15 @@ export EMP_ID EMP_DOC
 CUSTOMER=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"customerCode\":\"CI-C-001\",\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
 CUSTOMER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CUSTOMER")
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 联系人","phone":"123456"}' >/dev/null
-CONTRACT=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/contracts -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractNo\":\"CI-CT-001\",\"title\":\"CI 合同\",\"customerId\":$CUSTOMER_ID,\"amount\":1000}")
+CONTRACT_RESERVATION=$(reserve_business_number maintenance contract)
+CONTRACT_RESERVATION_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CONTRACT_RESERVATION")
+CONTRACT=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/contracts -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"numberReservationId\":\"$CONTRACT_RESERVATION_ID\",\"title\":\"CI 合同\",\"customerId\":$CUSTOMER_ID,\"serviceType\":\"maintenance\",\"startsOn\":\"2026-01-01\",\"endsOn\":\"2026-12-31\",\"amount\":1000}")
 CONTRACT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CONTRACT")
-PROJECT=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"projectNo\":\"CI-P-001\",\"name\":\"CI 项目\",\"customerId\":$CUSTOMER_ID,\"contractId\":$CONTRACT_ID,\"managerEmployeeId\":$EMP_ID}")
-PROJECT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$PROJECT")
+CONTRACT_NO=$(python -c 'import json,sys; print(json.load(sys.stdin)["contract_no"])' <<< "$CONTRACT")
+PROJECT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["projectId"])' <<< "$CONTRACT")
+PROJECT=$(curl -fsS "$SMOKE_API_URL/api/business/projects/$PROJECT_ID" -H "Authorization: Bearer $TOKEN")
+python -c 'import json,sys; c=json.loads(sys.argv[1]); p=json.loads(sys.argv[2]); r=json.loads(sys.argv[3]); assert c["contract_no"]==r["number"] and p["project_no"]==c["contract_no"]' "$CONTRACT" "$PROJECT" "$CONTRACT_RESERVATION"
+curl -fsS -X PUT "$SMOKE_API_URL/api/business/projects/$PROJECT_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"managerEmployeeId\":$EMP_ID}" >/dev/null
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"title":"CI 里程碑"}' >/dev/null
 curl -fsS "${SMOKE_API_URL}/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 里程碑'
 MILESTONE_ID=$(curl -fsS "${SMOKE_API_URL}/api/business/projects/$PROJECT_ID/milestones" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')

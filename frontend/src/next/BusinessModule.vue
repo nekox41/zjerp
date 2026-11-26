@@ -3,7 +3,7 @@ import FormDialog from './FormDialog.vue'
 import FileDropzone from './FileDropzone.vue'
 import EmployeeDirectory from './EmployeeDirectory.vue'
 import ContractDirectory from './ContractDirectory.vue'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api, downloadFile } from './api'
 import CustomerHistory from './CustomerHistory.vue'
 import LegacyProjectDocuments from './LegacyProjectDocuments.vue'
@@ -17,6 +17,8 @@ const typeTitles={maintenance:'维保项目',fire_inspection:'检测项目',fire
 const contractFile=ref(null), uploadedFileId=ref(null), fileKey=ref(0)
 function chooseContractFile(files){contractFile.value=files[0]||null;uploadedFileId.value=null}
 const busy = ref(false)
+const projectReservation=ref(null),projectCreateOpen=ref(false),projectReserving=ref(false)
+let disposed=false
 const error = ref('')
 const notice = ref('')
 const q = ref('')
@@ -91,6 +93,31 @@ async function load() {
   } catch(e) { error.value=e.message }
 }
 const initialForms=Object.fromEntries(Object.entries(forms).map(([k,v])=>[k,{...v.value}]))
+async function releaseProjectReservation(reservation=projectReservation.value){
+  if(!reservation?.id)return
+  try{await api('/business/number-reservations/'+encodeURIComponent(reservation.id),{method:'DELETE'})}catch{}
+}
+async function beginProjectCreate(){
+  if(projectReserving.value||busy.value||projectCreateOpen.value)return
+  error.value='';notice.value=''
+  projectReserving.value=true
+  try{
+    const reservation=await api('/business/number-reservations',{method:'POST',body:JSON.stringify({serviceType:serviceType.value,purpose:'project'})})
+    if(disposed){await releaseProjectReservation(reservation);return}
+    projectReservation.value=reservation
+    forms.project.value={...initialForms.project}
+    projectCreateOpen.value=true
+  }catch(e){if(!disposed)error.value=e.message}
+  finally{projectReserving.value=false}
+}
+async function closeProjectCreate(){
+  if(busy.value)return
+  projectCreateOpen.value=false
+  const reservation=projectReservation.value
+  projectReservation.value=null
+  await releaseProjectReservation(reservation)
+  forms.project.value={...initialForms.project}
+}
 async function submit(kind) {
   busy.value=true; error.value=''; notice.value=''
   try {
@@ -106,7 +133,11 @@ async function submit(kind) {
     const required={customer:'customer:write',contact:'customer:write',contract:'contract:write',amendment:'contract:write',project:'project:write'}[kind]
     if(!required||!can(required))throw new Error('当前账号没有此项修改权限')
     if(kind==='project'&&section.value!=='projects')throw new Error('请在对应项目页面新建项目')
-    if(kind==='project')data.serviceType=serviceType.value
+    if(kind==='project'){
+      data.serviceType=serviceType.value
+      if(!projectReservation.value?.id)throw new Error('编号预留已失效，请关闭窗口后重新新建项目')
+      data.numberReservationId=projectReservation.value.id
+    }
     if(kind==='contract'){
       data.createProject=true
       if(contractFile.value){
@@ -116,6 +147,7 @@ async function submit(kind) {
       }
     }
     const created=await api('/business'+endpoint,{method:'POST',body:JSON.stringify(data)})
+    if(kind==='project')projectReservation.value=null
     forms[kind].value={...initialForms[kind]}
     if(kind==='contract'){contractFile.value=null;uploadedFileId.value=null;fileKey.value++}
     await load()
@@ -212,6 +244,7 @@ async function saveProject(){
 }
 watch(section,()=>{q.value='';load()})
 watch(()=>props.permissions,()=>{ensureSection();load()})
+onBeforeUnmount(()=>{disposed=true;if(projectReservation.value?.id)void releaseProjectReservation(projectReservation.value)})
 onMounted(async ()=>{
   const target=props.destination
   if(target?.section&&config.value[target.section])section.value=target.section
@@ -376,10 +409,11 @@ onMounted(async ()=>{
       </template>
       <template v-else-if="section==='projects'">
         <h3 v-if="can('project:write')">新增项目</h3>
-        <FormDialog v-if="can('project:write')" title="新建项目" :steps="['项目基本信息','人员与计划日期']" :busy="busy" :error="error" @clear-error="error=''">
+        <button v-if="can('project:write')" type="button" class="primary-button" :disabled="projectReserving||busy" @click="beginProjectCreate">{{projectReserving?'正在预留编号…':'＋ 新建项目'}}</button>
+        <FormDialog v-if="projectCreateOpen" title="新建项目" :steps="['项目基本信息','人员与计划日期']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="closeProjectCreate">
 <template #default="{step,finish}"><form class="create-grid" @submit.prevent="finish(()=>submit('project'))">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
-<label>项目编号<input value="系统自动分配" disabled></label>
+<label>项目编号<input :value="projectReservation?.number||''" disabled></label>
 <label>项目名称<input v-model="forms.project.value.name" required></label>
 <label>所属甲方<select v-model="forms.project.value.customerId" required><option value="">请选择客户</option><option v-for="x in customers" :value="x.id">{{x.name}}</option></select></label>
 <label>初始关联合同（可选）<select v-model="forms.project.value.contractId"><option value="">无合同项目</option><option v-for="x in contracts.filter(c=>c.service_type===serviceType)" :value="x.id">{{x.contract_no}} · {{x.title}}</option></select></label>

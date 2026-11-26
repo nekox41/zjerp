@@ -1,16 +1,23 @@
 set -euo pipefail
+year=$(TZ=Asia/Shanghai date +%Y)
 
 # Partner, contract-project scope, project leadership and maintenance acceptance checks.
-# Draft contracts may be staged; activation requires at least one real project.
+# New contracts create their matching project in the same transaction.
+UNLINKED_RESERVATION=$(reserve_business_number other contract)
+UNLINKED_RESERVATION_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$UNLINKED_RESERVATION")
 UNLINKED_DRAFT=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/contracts \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"contractNo\":\"CI-UNLINKED-DRAFT\",\"title\":\"CI 待分配项目的合同草稿\",\"customerId\":$CUSTOMER_ID}")
+  -d "{\"numberReservationId\":\"$UNLINKED_RESERVATION_ID\",\"title\":\"CI 待分配项目的合同草稿\",\"customerId\":$CUSTOMER_ID,\"serviceType\":\"other\"}")
 UNLINKED_DRAFT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$UNLINKED_DRAFT")
+UNLINKED_DRAFT_PROJECT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["projectId"])' <<< "$UNLINKED_DRAFT")
+UNLINKED_DRAFT_NO=$(python -c 'import json,sys; print(json.load(sys.stdin)["contract_no"])' <<< "$UNLINKED_DRAFT")
+curl -fsS "${SMOKE_API_URL}/api/business/projects/$UNLINKED_DRAFT_PROJECT_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; p=json.load(sys.stdin); assert p["project_no"]==sys.argv[1]' "$UNLINKED_DRAFT_NO"
+# New contracts are linked to their matching project atomically.
 NO_PROJECT_ACTIVE=$(curl -sS -o /tmp/erp-contract-no-project.json -w '%{http_code}' -X PUT "${SMOKE_API_URL}/api/business/contracts/$UNLINKED_DRAFT_ID" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"status":"active"}')
-test "$NO_PROJECT_ACTIVE" = "400"
-# Contract create cannot bypass the project relationship prerequisite.
+test "$NO_PROJECT_ACTIVE" = "200"
+# Creating a contract directly in an active state is still rejected.
 NO_PROJECT_CREATE=$(curl -sS -o /tmp/erp-active-create.json -w '%{http_code}' -X POST ${SMOKE_API_URL}/api/business/contracts \
  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"contractNo\":\"CI-ACTIVE-CREATE\",\"title\":\"无项目生效\",\"customerId\":$CUSTOMER_ID,\"status\":\"active\"}")
 test "$NO_PROJECT_CREATE" = "400"
@@ -60,14 +67,16 @@ curl -fsS -X DELETE "${SMOKE_API_URL}/api/business/contacts/$CI_CONTACT_ID" -H "
 curl -fsS "${SMOKE_API_URL}/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" | grep -qv 'CI 已更新联系人'
 
 # A project may exist before a contract is linked; a later contract can cover it.
+UNCOVERED_RESERVATION=$(reserve_business_number maintenance project)
+UNCOVERED_RESERVATION_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$UNCOVERED_RESERVATION")
 UNCOVERED=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/projects \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"projectNo\":\"CI-P-MAINT-1\",\"name\":\"CI 维保项目\",\"customerId\":$CUSTOMER_ID}")
+  -d "{\"numberReservationId\":\"$UNCOVERED_RESERVATION_ID\",\"name\":\"CI 维保项目\",\"customerId\":$CUSTOMER_ID,\"serviceType\":\"maintenance\"}")
 UNCOVERED_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$UNCOVERED")
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/contracts/$CONTRACT_ID/projects" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"projectId\":$UNCOVERED_ID,\"relationType\":\"renewal\"}" | grep -q 'renewal'
-curl -fsS "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/contracts" -H "Authorization: Bearer $TOKEN" | grep -q 'CI-CT-001'
+curl -fsS "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/contracts" -H "Authorization: Bearer $TOKEN" | grep -q "$CONTRACT_NO"
 # Both directions must retain the same identifiers for workspace navigation.
 curl -fsS "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; p=json.load(sys.stdin); assert p["customer_id"]==int(sys.argv[1]); assert any(c["id"]==int(sys.argv[2]) for c in p["contracts"])' "$CUSTOMER_ID" "$CONTRACT_ID"
 curl -fsS "${SMOKE_API_URL}/api/business/contracts/$CONTRACT_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; c=json.load(sys.stdin); assert c["customer_id"]==int(sys.argv[1]); assert any(p["id"]==int(sys.argv[2]) for p in c["projects"])' "$CUSTOMER_ID" "$UNCOVERED_ID"
@@ -94,10 +103,10 @@ SAME_LEAD=$(curl -sS -o /tmp/erp-project-same-lead.json -w '%{http_code}' -X PUT
   -d "{\"managerEmployeeId\":$EMP_ID,\"technicalLeadEmployeeId\":$EMP_ID}")
 test "$SAME_LEAD" = "400"
 
-# Switch this contract to a maintenance contract and track project status and visits.
+# Activate the maintenance contract and track project status and visits.
 curl -fsS -X PUT "${SMOKE_API_URL}/api/business/contracts/$CONTRACT_ID" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"serviceType":"maintenance","status":"active","startsOn":"2026-01-01","endsOn":"2026-12-31"}' >/dev/null
+  -d '{"status":"active","startsOn":"2026-01-01","endsOn":"2026-12-31"}' >/dev/null
 curl -fsS -X PUT "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/maintenance" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"currentContractId\":$CONTRACT_ID,\"honeybeeContractUploaded\":true,\"honeybeeProjectCreated\":true,\"projectMaterialsCompleted\":true,\"publicCardStatus\":\"preparing\",\"notes\":\"CI 维保状态\"}" | grep -q 'preparing'
@@ -108,19 +117,26 @@ VISIT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$
 curl -fsS "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/maintenance" -H "Authorization: Bearer $TOKEN" | grep -q 'CI 技术负责人'
 
 # Renew on the existing project, retaining original contract and project history.
+BAD_RENEWAL_RESERVATION=$(reserve_business_number maintenance maintenance_renewal)
+BAD_RENEWAL_RESERVATION_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$BAD_RENEWAL_RESERVATION")
 BAD_RENEWAL=$(curl -sS -o /tmp/erp-invalid-renewal.json -w '%{http_code}' -X POST "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/maintenance-renewals" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"contractNo":"CI-RENEWAL-INVALID","title":"CI 无效续签","amount":100,"startsOn":"2028-01-01","endsOn":"2027-12-31"}')
+  -d "{\"numberReservationId\":\"$BAD_RENEWAL_RESERVATION_ID\",\"externalContractNo\":\"CI-RENEWAL-INVALID\",\"title\":\"CI 无效续签\",\"amount\":100,\"startsOn\":\"2028-01-01\",\"endsOn\":\"2027-12-31\"}")
 test "$BAD_RENEWAL" = "400"
+release_business_number "$BAD_RENEWAL_RESERVATION_ID" >/dev/null
+RENEWAL_RESERVATION=$(reserve_business_number maintenance maintenance_renewal)
+RENEWAL_RESERVATION_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$RENEWAL_RESERVATION")
 RENEWAL=$(curl -fsS -X POST "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/maintenance-renewals" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"contractNo":"CI-RENEWAL-001","title":"CI 第二年度续签","amount":1200,"signedOn":"2026-11-23","startsOn":"2027-01-01","endsOn":"2027-12-31"}')
+  -d "{\"numberReservationId\":\"$RENEWAL_RESERVATION_ID\",\"externalContractNo\":\"CI-RENEWAL-001\",\"title\":\"CI 第二年度续签\",\"amount\":1200,\"signedOn\":\"2026-11-23\",\"startsOn\":\"2027-01-01\",\"endsOn\":\"2027-12-31\"}")
 RENEWAL_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$RENEWAL")
+RENEWAL_NO=$(python -c 'import json,sys; print(json.load(sys.stdin)["contract_no"])' <<< "$RENEWAL")
 test -n "$RENEWAL_ID"
+python -c 'import json,sys; c=json.loads(sys.argv[1]); assert c["contract_no"].startswith("ZJWB-"+sys.argv[2]+"-"); assert c["contract_no"]!=sys.argv[3]; assert c["external_contract_no"]=="CI-RENEWAL-001"' "$RENEWAL" "$year" "$CONTRACT_NO"
 echo "$RENEWAL" | grep -q '"status":"draft"'
 echo "$RENEWAL" | grep -q '"service_type":"maintenance"'
 PROJECT_HISTORY=$(curl -fsS "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/contracts" -H "Authorization: Bearer $TOKEN")
-echo "$PROJECT_HISTORY" | grep -q 'CI-CT-001'
+echo "$PROJECT_HISTORY" | grep -q "$CONTRACT_NO"
 echo "$PROJECT_HISTORY" | grep -q 'CI-RENEWAL-001'
 curl -fsS "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/maintenance" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; data=json.load(sys.stdin); assert len(data["contractHistory"])>=2; assert data["current_contract_id"]==int(sys.argv[1])' "$CONTRACT_ID"
 # Draft renewals cannot silently become the active maintenance contract.
@@ -131,7 +147,7 @@ test "$DRAFT_CURRENT" = "400"
 curl -fsS -X PUT "${SMOKE_API_URL}/api/business/contracts/$RENEWAL_ID" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"active"}' >/dev/null
 curl -fsS -X PUT "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID/maintenance" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"currentContractId\":$RENEWAL_ID,\"publicCardStatus\":\"preparing\"}" | grep -q 'CI-RENEWAL-001'
+  -d "{\"currentContractId\":$RENEWAL_ID,\"publicCardStatus\":\"preparing\"}" | grep -q "$RENEWAL_NO"
 curl -fsS "${SMOKE_API_URL}/api/business/projects/$UNCOVERED_ID" -H "Authorization: Bearer $TOKEN" | python -c 'import json,sys; p=json.load(sys.stdin); assert str(p["planned_start"])=="2027-01-01"; assert str(p["planned_end"])=="2027-12-31"'
 
 
