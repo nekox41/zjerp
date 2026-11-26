@@ -29,6 +29,26 @@ assert any(x["id"]==partner_id and x["contract_count"]==0 for x in rows)
 # Bind a real draft contract as admin, then verify an ordinary employee can see
 # its identity in the intermediary detail without receiving contract:read.
 customer=call("/business/customers",{"customerCode":"CI-PARTNER-CUSTOMER","name":"CI 中间人测试甲方"},token)
+# Verify all service prefixes and that a maintenance renewal receives a new
+# contract number while preserving the original project's number.
+for service_type,prefix in [("maintenance","ZJWB"),("fire_inspection","ZJJC"),("fire_assessment","ZJPD"),("fire_evaluation","ZJPG")]:
+    payload={"title":"CI "+service_type,"customerId":customer["id"],"serviceType":service_type,"amount":"100.00"}
+    if service_type=="maintenance":
+        payload.update({"startsOn":f"{year}-01-01","endsOn":f"{year}-12-31"})
+    created=call("/business/contracts",payload,token)
+    assert created["contract_no"]==f"{prefix}-{year}-001",created
+    project_id=created["projectId"]
+    project=call("/business/projects/"+str(project_id),token=token)
+    assert project["project_no"]==created["contract_no"] and project["name"]==created["title"]
+    if service_type=="maintenance":
+        renewal=call("/business/projects/"+str(project_id)+"/maintenance-renewals",{
+            "title":"CI 维保续签","amount":"100.00","startsOn":f"{year}-01-01",
+            "endsOn":f"{year}-12-31","externalContractNo":"CI-RENEWAL-EXT"
+        },token)
+        assert renewal["contract_no"]==f"ZJWB-{year}-002",renewal
+        renewal_detail=call("/business/contracts/"+str(renewal["id"]),token=token)
+        assert len(renewal_detail["projects"])==1 and renewal_detail["projects"][0]["id"]==project_id
+        assert call("/business/projects/"+str(project_id),token=token)["project_no"]==f"ZJWB-{year}-001"
 from datetime import datetime
 from zoneinfo import ZoneInfo
 year=datetime.now(ZoneInfo("Asia/Shanghai")).year
