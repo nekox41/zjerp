@@ -126,7 +126,7 @@ onMounted(async()=>{await load();if(props.destination?.id)await show(props.desti
  <p v-if="error&&!createOpen&&!editOpen" class="message error" role="alert">{{error}}</p>
  <p v-if="notice" class="message success" role="status">{{notice}}</p>
  <section class="panel contract-table-panel">
-  <div class="contract-table-heading"><div><h3>{{category.name}}合同</h3><p>{{rows.length}} 份合同 · 编号由统一编号池自动分配</p></div><button type="button" class="secondary-button" :disabled="loading" @click="load">刷新</button></div>
+  <div class="contract-table-heading"><h3>{{category.name}}合同</h3><button type="button" class="secondary-button" :disabled="loading" @click="load">刷新</button></div>
   <div class="table-wrap"><table class="contract-table">
    <thead><tr><th>系统编号</th><th>其他编号</th><th>合同名称</th><th>甲方</th><th>签订日期</th><th>服务日期</th><th>合同金额</th><th>中间人</th><th>附件</th><th>操作</th></tr></thead>
    <tbody><tr v-for="r in rows" :key="r.id">
@@ -220,8 +220,8 @@ onMounted(async()=>{await load();if(props.destination?.id)await show(props.desti
 .contract-category-tabs button.active{background:var(--erp-accent-soft);color:var(--erp-accent);border-color:color-mix(in srgb,var(--erp-accent) 22%,transparent)}
 .contract-tools{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-left:auto}
 .contract-tools input{min-width:240px;border:1px solid var(--erp-border);border-radius:10px;background:var(--erp-surface);color:var(--erp-text);padding:10px 12px;font-size:13px}
-.contract-table-panel{padding:22px;display:grid;gap:15px;min-height:calc(100dvh - 185px)}
-.contract-table-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.contract-table-heading h3{font-size:17px;margin:0 0 5px}.contract-table-heading p{font-size:12px;color:var(--erp-muted);margin:0}
+.contract-table-panel{padding:22px;display:grid;gap:15px;min-height:calc(100dvh - 185px);align-content:start}
+.contract-table-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.contract-table-heading h3{font-size:17px;margin:0}
 .contract-table{width:100%;min-width:1120px;border-collapse:separate;border-spacing:0}
 .contract-table th,.contract-table td{padding:14px 11px;text-align:left;border-bottom:1px solid var(--erp-border);font-size:12px;white-space:nowrap}
 .contract-table th{font-size:11px;color:var(--erp-muted);font-weight:650;background:var(--erp-subtle)}
