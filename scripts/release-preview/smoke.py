@@ -1,10 +1,10 @@
 import json,sys
 from urllib.request import Request,urlopen
 base="http://127.0.0.1:8089/next-api"
-def call(path,data=None,token=None):
+def call(path,data=None,token=None,method=None):
     h={"Content-Type":"application/json"}
     if token:h["Authorization"]="Bearer "+token
-    with urlopen(Request(base+path,data=None if data is None else json.dumps(data).encode(),headers=h),timeout=15) as r:return json.load(r)
+    with urlopen(Request(base+path,data=None if data is None else json.dumps(data).encode(),headers=h,method=method),timeout=15) as r:return json.load(r)
 assert b"next-app" in urlopen("http://127.0.0.1:8089/next.html",timeout=15).read()
 token=call("/auth/login",{"username":"admin","password":"123456"})["token"]
 rows=call("/business/employees",token=token)
@@ -38,6 +38,6 @@ assert detail["contracts"][0]["id"]==contract["id"]
 assert detail["contracts"][0]["contract_no"]=="CI-PARTNER-CONTRACT"
 assert detail["contracts"][0]["title"]=="CI 中间人绑定合同"
 assert set(detail["contracts"][0])=={"id","contract_no","title"}
-updated=call("/business/partners/"+str(partner_id),{"name":"CI 中间人更新","contact":"13900000000","region":"杭州市"},partner_token)
+updated=call("/business/partners/"+str(partner_id),{"name":"CI 中间人更新","contact":"13900000000","region":"杭州市"},partner_token,"PUT")
 assert updated["name"]=="CI 中间人更新" and updated["contact"]=="13900000000" and updated["region"]=="杭州市"
 assert call("/business/partners?q="+quote("上海市"),token=partner_token)==[]
