@@ -47,8 +47,12 @@ async function load(){
 }
 async function show(id,event){
  origin.value=event?.currentTarget?.getBoundingClientRect?.()||null
- try{error.value='';selected.value=await api('/business/contracts/'+id)}
- catch(e){error.value=e.message}
+ try{
+  error.value=''
+  const record=await api('/business/contracts/'+id)
+  selected.value=record
+  if(record.service_type&&record.service_type!==activeType.value)activeType.value=record.service_type
+ }catch(e){error.value=e.message}
 }
 function beginCreate(){
  error.value='';notice.value='';form.value=blank();files.value=[];uploadedFileIds.value=[];createOpen.value=true
@@ -103,7 +107,7 @@ async function download(file){
  try{await downloadFile(file.file_id,file.original_name)}catch(e){error.value=e.message}
 }
 function openProject(project){emit('navigate','business','projects',project.id,project.service_type)}
-watch(activeType,()=>{q.value='';selected.value=null;load()})
+watch(activeType,()=>{q.value='';if(selected.value?.service_type!==activeType.value)selected.value=null;load()})
 watch(()=>form.value.customerId,()=>{if(form.value.existingProjectId&&!availableProjects.value.some(p=>String(p.id)===String(form.value.existingProjectId)))form.value.existingProjectId=''})
 onMounted(async()=>{await load();if(props.destination?.id)await show(props.destination.id)})
 </script>
