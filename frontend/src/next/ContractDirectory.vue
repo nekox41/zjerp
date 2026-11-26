@@ -21,6 +21,10 @@ const loading=ref(false),busy=ref(false),error=ref(''),notice=ref('')
 const selected=ref(null),origin=ref(null),createOpen=ref(false),editOpen=ref(false)
 const files=ref([]),uploadedFileIds=ref([])
 const numberReservation=ref(null),reservingNumber=ref(false)
+const customerCreateOpen=ref(false),partnerCreateOpen=ref(false),creatingRelated=ref(false)
+const relatedError=ref('')
+const newCustomer=ref({name:'',creditCode:'',customerType:'enterprise',phone:'',address:''})
+const newPartner=ref({name:'',contact:'',region:''})
 let disposed=false
 const blank=()=>({title:'',externalContractNo:'',customerId:'',partnerId:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',existingProjectId:''})
 const form=ref(blank())
@@ -81,6 +85,28 @@ async function closeCreate(){
  form.value=blank();files.value=[];uploadedFileIds.value=[]
 }
 function updateFiles(next){files.value=next;uploadedFileIds.value=[]}
+async function createCustomer(){
+ if(creatingRelated.value)return
+ creatingRelated.value=true;relatedError.value=''
+ try{
+  const created=await api('/business/customers',{method:'POST',body:JSON.stringify(newCustomer.value)})
+  customers.value=[created,...customers.value]
+  form.value.customerId=String(created.id)
+  customerCreateOpen.value=false
+  newCustomer.value={name:'',creditCode:'',customerType:'enterprise',phone:'',address:''}
+ }catch(e){relatedError.value=e.message}finally{creatingRelated.value=false}
+}
+async function createPartner(){
+ if(creatingRelated.value)return
+ creatingRelated.value=true;relatedError.value=''
+ try{
+  const created=await api('/business/partners',{method:'POST',body:JSON.stringify(newPartner.value)})
+  partners.value=[created,...partners.value]
+  form.value.partnerId=String(created.id)
+  partnerCreateOpen.value=false
+  newPartner.value={name:'',contact:'',region:''}
+ }catch(e){relatedError.value=e.message}finally{creatingRelated.value=false}
+}
 async function save(){
  if(busy.value)return
  busy.value=true;error.value=''
@@ -171,16 +197,16 @@ onMounted(async()=>{await load();if(props.destination?.id)await show(props.desti
    <label>系统合同编号<input :value="generatedHint" disabled></label>
    <label>其他编号（选填）<input v-model.trim="form.externalContractNo" maxlength="160" placeholder="甲方指定的合同编号"></label>
    <label class="wide">合同名称<input v-model.trim="form.title" required maxlength="240" autocomplete="off"></label>
-   <label>甲方<select v-model="form.customerId" required><option value="">请选择甲方</option><option v-for="x in customers" :key="x.id" :value="String(x.id)">{{x.name}}</option></select></label>
-   <label v-if="can('partner:read')">中间人（选填）<select v-model="form.partnerId"><option value="">无（公司自主签订）</option><option v-for="x in partners" :key="x.id" :value="String(x.id)">{{x.name}}</option></select></label>
+   <div class="wide"><label>甲方</label><div class="contract-select-with-action"><select v-model="form.customerId" required class="contract-related-select"><option value="">请选择甲方</option><option v-for="x in customers" :key="x.id" :value="String(x.id)">{{x.name}}</option></select><button v-if="can('customer:write')" type="button" class="secondary-button" @click="relatedError='';customerCreateOpen=true">＋ 新建甲方</button></div></div>
+   <div v-if="can('partner:read')" class="wide"><label>中间人（选填）</label><div class="contract-select-with-action"><select v-model="form.partnerId" class="contract-related-select"><option value="">无（公司自主签订）</option><option v-for="x in partners" :key="x.id" :value="String(x.id)">{{x.name}}</option></select><button v-if="can('partner:write')" type="button" class="secondary-button" @click="relatedError='';partnerCreateOpen=true">＋ 新建中间人</button></div></div>
    <p class="wide muted">不选择中间人时，合同记录为公司自主签订。</p>
   </div>
   <div v-show="step===1" class="wizard-fields" data-wizard-step="1">
-   <label>合同签订日期<input v-model="form.signedOn" type="date"></label>
+   <label>合同签订日期<el-date-picker v-model="form.signedOn" type="date" value-format="YYYY-MM-DD" format="YYYY年MM月DD日" placeholder="选择签订日期" :clearable="true" /></label>
    <label>合同金额<input v-model="form.amount" type="number" min="0" step="0.01" required></label>
    <template v-if="activeType==='maintenance'">
-    <label>服务开始日期<input v-model="form.startsOn" type="date" required></label>
-    <label>服务结束日期<input v-model="form.endsOn" type="date" required></label>
+    <label>服务开始日期<el-date-picker v-model="form.startsOn" type="date" value-format="YYYY-MM-DD" format="YYYY年MM月DD日" placeholder="选择开始日期" :clearable="false" required /></label>
+    <label>服务结束日期<el-date-picker v-model="form.endsOn" type="date" value-format="YYYY-MM-DD" format="YYYY年MM月DD日" placeholder="选择结束日期" :clearable="false" required /></label>
    </template>
    <p v-else class="wide muted">检测、评定、评估及其他合同不填写维保服务期限。</p>
   </div>
@@ -191,6 +217,24 @@ onMounted(async()=>{await load();if(props.destination?.id)await show(props.desti
    <button type="submit" class="primary-button" :disabled="busy">保存合同</button>
   </div>
  </form></template>
+</FormDialog>
+<FormDialog v-if="customerCreateOpen" title="快速新建甲方" :steps="['甲方资料']" :busy="creatingRelated" :error="relatedError" @clear-error="relatedError=''" auto-open @close="customerCreateOpen=false">
+ <template #default="{step,finish}"><form @submit.prevent="finish(createCustomer)"><div v-show="step===0" class="wizard-fields" data-wizard-step="0">
+  <label>甲方名称<input v-model.trim="newCustomer.name" required maxlength="240"></label>
+  <label>统一社会信用代码（选填）<input v-model.trim="newCustomer.creditCode" maxlength="32"></label>
+  <label>客户类型<select v-model="newCustomer.customerType"><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="individual">个人</option></select></label>
+  <label>联系电话<input v-model.trim="newCustomer.phone" maxlength="40"></label>
+  <label class="wide">地址<input v-model.trim="newCustomer.address" maxlength="500"></label>
+  <button type="submit" class="primary-button">创建并选中甲方</button>
+ </div></form></template>
+</FormDialog>
+<FormDialog v-if="partnerCreateOpen" title="快速新建中间人" :steps="['基本信息']" :busy="creatingRelated" :error="relatedError" @clear-error="relatedError=''" auto-open @close="partnerCreateOpen=false">
+ <template #default="{step,finish}"><form @submit.prevent="finish(createPartner)"><div v-show="step===0" class="wizard-fields" data-wizard-step="0">
+  <label>姓名<input v-model.trim="newPartner.name" required maxlength="240"></label>
+  <label>联系方式<input v-model.trim="newPartner.contact" maxlength="240" placeholder="电话、手机或微信"></label>
+  <label>地区<input v-model.trim="newPartner.region" maxlength="160"></label>
+  <button type="submit" class="primary-button">创建并选中中间人</button>
+ </div></form></template>
 </FormDialog>
 <ModalDialog v-if="selected" :title="selected.contract_no+' · 合同详情'" :origin="origin" wide :busy="busy" @close="selected=null">
  <div class="contract-detail">
@@ -224,11 +268,11 @@ onMounted(async()=>{await load();if(props.destination?.id)await show(props.desti
    <label class="wide">合同名称<input v-model.trim="editForm.title" required maxlength="240"></label>
   </div>
   <div v-show="step===1" class="wizard-fields" data-wizard-step="1">
-   <label>合同签订日期<input v-model="editForm.signedOn" type="date"></label>
+   <label>合同签订日期<el-date-picker v-model="editForm.signedOn" type="date" value-format="YYYY-MM-DD" format="YYYY年MM月DD日" placeholder="选择签订日期" clearable /></label>
    <label>合同金额<input v-model="editForm.amount" type="number" min="0" step="0.01" required></label>
    <template v-if="selected?.service_type==='maintenance'">
-    <label>服务开始日期<input v-model="editForm.startsOn" type="date" required></label>
-    <label>服务结束日期<input v-model="editForm.endsOn" type="date" required></label>
+    <label>服务开始日期<el-date-picker v-model="editForm.startsOn" type="date" value-format="YYYY-MM-DD" format="YYYY年MM月DD日" placeholder="选择开始日期" :clearable="false" /></label>
+    <label>服务结束日期<el-date-picker v-model="editForm.endsOn" type="date" value-format="YYYY-MM-DD" format="YYYY年MM月DD日" placeholder="选择结束日期" :clearable="false" /></label>
    </template>
    <label>合同状态<select v-model="editForm.status"><option value="draft">草稿</option><option value="pending">待生效</option><option value="active">履行中</option><option value="completed">已完成</option><option value="terminated">已终止</option></select></label>
    <button type="submit" class="primary-button" :disabled="busy">保存合同资料</button>
@@ -238,6 +282,7 @@ onMounted(async()=>{await load();if(props.destination?.id)await show(props.desti
 </template>
 <style scoped>
 .contract-directory{display:grid;gap:18px;min-width:0}
+.contract-select-with-action{display:flex;align-items:center;gap:9px}.contract-related-select{flex:1;min-width:0;border:1px solid var(--erp-border);border-radius:10px;background:var(--erp-surface);color:var(--erp-text);padding:11px 12px;font:inherit}
 .contract-top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .contract-category-tabs{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .contract-category-tabs button{border:1px solid transparent;border-radius:11px;background:transparent;color:var(--erp-muted);font-size:13px;font-weight:650;padding:10px 17px;cursor:pointer;transition:background .18s,color .18s,border-color .18s}

@@ -57,7 +57,7 @@ async function deleteContact(contact){
   }catch(e){error.value=e.message}finally{busy.value=false}
 }
 const forms = {
-  customer: ref({customerCode:'',name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',notes:''}),
+  customer: ref({name:'',creditCode:'',customerType:'enterprise',phone:'',address:'',ownerEmployeeId:'',notes:''}),
   contact: ref({name:'',positionName:'',phone:'',email:'',isPrimary:false}),
   contract: ref({contractNo:'',title:'',customerId:'',existingProjectId:'',contractType:'',serviceType:'other',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',notes:''}),
   project: ref({name:'',customerId:'',contractId:'',managerEmployeeId:'',plannedStart:'',plannedEnd:'',description:''}),
@@ -164,8 +164,8 @@ async function openCustomer(id) {
     contacts.value=selectedCustomer.value.contacts||[]
     customerEditForm.value={
       name:selectedCustomer.value.name||'',creditCode:selectedCustomer.value.credit_code||'',
-      customerType:selectedCustomer.value.customer_type||'enterprise',industry:selectedCustomer.value.industry||'',
-      phone:selectedCustomer.value.phone||'',email:selectedCustomer.value.email||'',address:selectedCustomer.value.address||'',
+      customerType:selectedCustomer.value.customer_type||'enterprise',
+      phone:selectedCustomer.value.phone||'',address:selectedCustomer.value.address||'',
       ownerEmployeeId:selectedCustomer.value.owner_employee_id||'',status:selectedCustomer.value.status||'active',
       notes:selectedCustomer.value.notes||''
     }
@@ -185,7 +185,7 @@ const selectedProject=ref(null)
 const selectedContract=ref(null)
 const contractAmendments=ref([])
 const customerEditOpen=ref(false),contractEditOpen=ref(false)
-const customerEditForm=ref({name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',status:'active',notes:''})
+const customerEditForm=ref({name:'',creditCode:'',customerType:'enterprise',phone:'',address:'',ownerEmployeeId:'',status:'active',notes:''})
 const contractEditForm=ref({title:'',contractType:'',serviceType:'other',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',status:'draft',notes:''})
 const projectEditOpen=ref(false)
 const projectEditForm=ref({name:'',description:'',managerEmployeeId:'',plannedStart:'',plannedEnd:'',status:'planned'})
@@ -277,16 +277,13 @@ onMounted(async ()=>{
         <h3 v-if="can('customer:write')">新增甲方</h3><FormDialog v-if="can('customer:write')" title="新建甲方" :steps="['主体资料','联系与负责人']" :busy="busy" :error="error" @clear-error="error=''">
 <template #default="{step,finish}"><form class="create-grid" @submit.prevent="finish(()=>submit('customer'))">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
-<label>甲方编号<input v-model="forms.customer.value.customerCode" required></label>
 <label>甲方名称<input v-model="forms.customer.value.name" required></label>
 <label>统一社会信用代码<input v-model="forms.customer.value.creditCode"></label>
 <label>客户类型<select v-model="forms.customer.value.customerType"><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="individual">个人</option></select></label>
-<label>行业<input v-model="forms.customer.value.industry"></label>
 </div>
 <div v-show="step===1" data-wizard-step="1" class="wizard-fields">
 <label>负责人<select v-model="forms.customer.value.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label>
 <label>联系电话<input v-model="forms.customer.value.phone"></label>
-<label>电子邮箱<input v-model="forms.customer.value.email"></label>
 <label>地址<input v-model="forms.customer.value.address"></label>
 <label>备注<input v-model="forms.customer.value.notes"></label>
 <button class="primary-button">创建甲方</button>
@@ -300,12 +297,10 @@ onMounted(async ()=>{
 <label>甲方名称<input v-model="customerEditForm.name" required></label>
 <label>统一社会信用代码<input v-model="customerEditForm.creditCode"></label>
 <label>客户类型<select v-model="customerEditForm.customerType"><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="individual">个人</option></select></label>
-<label>行业<input v-model="customerEditForm.industry"></label>
 </div>
 <div v-show="step===1" data-wizard-step="1" class="wizard-fields">
 <label>负责人<select v-model="customerEditForm.ownerEmployeeId"><option value="">未分配</option><option v-for="x in employees" :value="x.id">{{x.full_name}}</option></select></label>
 <label>联系电话<input v-model="customerEditForm.phone"></label>
-<label>电子邮箱<input v-model="customerEditForm.email"></label>
 <label>地址<input v-model="customerEditForm.address"></label>
 <label>状态<select v-model="customerEditForm.status"><option value="active">正常</option><option value="disabled">停用</option></select></label>
 <label>备注<input v-model="customerEditForm.notes"></label>

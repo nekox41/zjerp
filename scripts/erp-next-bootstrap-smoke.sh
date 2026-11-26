@@ -65,8 +65,9 @@ BAD_EMP=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$SMOKE_API_URL/api/bu
 test "$BAD_EMP" = 400
 rm -rf -- "$EMP_TEST_DIR"
 export EMP_ID EMP_DOC
-CUSTOMER=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"customerCode\":\"CI-C-001\",\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
+CUSTOMER=$(curl -fsS -X POST ${SMOKE_API_URL}/api/business/customers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"name\":\"CI 客户\",\"ownerEmployeeId\":$EMP_ID}")
 CUSTOMER_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CUSTOMER")
+echo "$CUSTOMER" | python -c 'import json,sys; c=json.load(sys.stdin); assert c["name"]=="CI 客户" and c.get("customer_code") is None and c.get("credit_code") is None'
 curl -fsS -X POST "${SMOKE_API_URL}/api/business/customers/$CUSTOMER_ID/contacts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"CI 联系人","phone":"123456"}' >/dev/null
 CONTRACT_RESERVATION=$(reserve_business_number maintenance contract)
 CONTRACT_RESERVATION_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$CONTRACT_RESERVATION")

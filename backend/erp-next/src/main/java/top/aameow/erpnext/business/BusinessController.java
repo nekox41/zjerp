@@ -84,12 +84,12 @@ public class BusinessController {
     }
     @PostMapping("/customers") @PreAuthorize("hasAuthority('customer:write')") @Transactional
     public Map<String,Object> createCustomer(@RequestBody Map<String,Object>b,Authentication a) {
-        String code=required(b,"customerCode"), name=required(b,"name"); Long owner=optionalLong(b,"ownerEmployeeId");
+        String name=required(b,"name"); Long owner=optionalLong(b,"ownerEmployeeId");
         if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
         jdbc.update("""
-          INSERT INTO erp_customer(customer_code,name,credit_code,customer_type,industry,phone,email,address,status,owner_employee_id,notes)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?)
-          """,code,name,b.get("creditCode"),val(b,"customerType","enterprise"),b.get("industry"),b.get("phone"),b.get("email"),b.get("address"),val(b,"status","active"),owner,b.get("notes"));
+          INSERT INTO erp_customer(customer_code,name,credit_code,customer_type,phone,address,status,owner_employee_id,notes)
+          VALUES(NULL,?,?,?,?,?,?,?,?)
+          """,name,optionalText(b,"creditCode"),val(b,"customerType","enterprise"),b.get("phone"),b.get("address"),val(b,"status","active"),owner,b.get("notes"));
         long id=jdbc.queryForObject("SELECT lastval()",Long.class); 
         return customer(id);
     }
@@ -98,8 +98,8 @@ public class BusinessController {
         one("SELECT id FROM erp_customer WHERE id=?",id);
         Long owner=optionalLong(b,"ownerEmployeeId");
         if(b.containsKey("ownerEmployeeId")&&owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
-        jdbc.update("UPDATE erp_customer SET name=COALESCE(?,name),credit_code=COALESCE(?,credit_code),customer_type=COALESCE(?,customer_type),industry=COALESCE(?,industry),phone=COALESCE(?,phone),email=COALESCE(?,email),address=COALESCE(?,address),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE id=?",
-            b.get("name"),b.get("creditCode"),b.get("customerType"),b.get("industry"),b.get("phone"),b.get("email"),b.get("address"),b.get("status"),b.get("notes"),id);
+        jdbc.update("UPDATE erp_customer SET name=COALESCE(?,name),credit_code=COALESCE(?,credit_code),customer_type=COALESCE(?,customer_type),phone=COALESCE(?,phone),address=COALESCE(?,address),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE id=?",
+            b.get("name"),optionalText(b,"creditCode"),b.get("customerType"),b.get("phone"),b.get("address"),b.get("status"),b.get("notes"),id);
         if(b.containsKey("ownerEmployeeId")) jdbc.update("UPDATE erp_customer SET owner_employee_id=? WHERE id=?",owner,id);
          return customer(id);
     }
