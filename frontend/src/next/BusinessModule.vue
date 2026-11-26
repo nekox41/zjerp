@@ -2,6 +2,7 @@
 import FormDialog from './FormDialog.vue'
 import FileDropzone from './FileDropzone.vue'
 import EmployeeDirectory from './EmployeeDirectory.vue'
+import ContractDirectory from './ContractDirectory.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { api, downloadFile } from './api'
 import CustomerHistory from './CustomerHistory.vue'
@@ -57,7 +58,7 @@ const forms = {
   customer: ref({customerCode:'',name:'',creditCode:'',customerType:'enterprise',industry:'',phone:'',email:'',address:'',ownerEmployeeId:'',notes:''}),
   contact: ref({name:'',positionName:'',phone:'',email:'',isPrimary:false}),
   contract: ref({contractNo:'',title:'',customerId:'',existingProjectId:'',contractType:'',serviceType:'other',amount:'0',currency:'CNY',signedOn:'',startsOn:'',endsOn:'',ownerEmployeeId:'',notes:''}),
-  project: ref({projectNo:'',name:'',customerId:'',contractId:'',managerEmployeeId:'',plannedStart:'',plannedEnd:'',description:''}),
+  project: ref({name:'',customerId:'',contractId:'',managerEmployeeId:'',plannedStart:'',plannedEnd:'',description:''}),
   amendment: ref({amendmentNo:'',title:'',changeSummary:'',revisedAmount:'',effectiveOn:''})
 }
 const rows = ref([])
@@ -76,7 +77,7 @@ async function load() {
   error.value=''; notice.value=''
   try {
     ensureSection()
-    if(section.value==='employees')return
+    if(section.value==='employees'||section.value==='contracts')return
     const [e,c,ct,p,ids] = await Promise.all([
       can('employee:read')?api('/business/employees'):Promise.resolve([]),
       can('customer:read')?api('/business/customers'):Promise.resolve([]),
@@ -217,7 +218,6 @@ onMounted(async ()=>{
   await load()
   if(!target?.id||section.value!==target.section)return
   if(section.value==='projects')await openProject(target.id)
-  else if(section.value==='contracts')await openContract(target.id)
   else if(section.value==='customers')await openCustomer(target.id)
 })
 </script>
@@ -226,6 +226,7 @@ onMounted(async ()=>{
 <section class="business-module">
   <p v-if="error" class="message error">{{error}}</p><p v-if="notice" class="message success">{{notice}}</p>
   <EmployeeDirectory v-if="section==='employees'" :permissions="permissions" :destination="destination"/>
+  <ContractDirectory v-else-if="section==='contracts'" :permissions="permissions" :destination="destination" @navigate="(...args)=>emit('navigate',...args)"/>
   <div v-else class="business-layout">
     <div class="business-list panel">
       <div class="business-list-head"><div><h3>{{section==='projects'?typeTitles[serviceType]:config[section]?.title||'业务管理'}}</h3><p>统一维护业务主数据与关联记录</p></div><input v-model="q" placeholder="搜索名称或编号" @keyup.enter="load"><button class="secondary-button" @click="load">搜索</button></div>
@@ -378,7 +379,7 @@ onMounted(async ()=>{
         <FormDialog v-if="can('project:write')" title="新建项目" :steps="['项目基本信息','人员与计划日期']" :busy="busy" :error="error" @clear-error="error=''">
 <template #default="{step,finish}"><form class="create-grid" @submit.prevent="finish(()=>submit('project'))">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
-<label>项目编号<input v-model="forms.project.value.projectNo" required></label>
+<label>项目编号<input value="系统自动分配" disabled></label>
 <label>项目名称<input v-model="forms.project.value.name" required></label>
 <label>所属甲方<select v-model="forms.project.value.customerId" required><option value="">请选择客户</option><option v-for="x in customers" :value="x.id">{{x.name}}</option></select></label>
 <label>初始关联合同（可选）<select v-model="forms.project.value.contractId"><option value="">无合同项目</option><option v-for="x in contracts.filter(c=>c.service_type===serviceType)" :value="x.id">{{x.contract_no}} · {{x.title}}</option></select></label>

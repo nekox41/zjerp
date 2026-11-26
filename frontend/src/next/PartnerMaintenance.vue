@@ -1,5 +1,6 @@
 <script setup>
 import FormDialog from './FormDialog.vue'
+import FileDropzone from './FileDropzone.vue'
 import { computed, onMounted, ref } from 'vue'
 import { api, downloadFile } from './api'
 import MaintenanceDocuments from './MaintenanceDocuments.vue'
@@ -21,7 +22,8 @@ const projectLink=ref({projectId:'',contractId:'',relationType:'service'})
 const leadership=ref({projectId:'',managerEmployeeId:'',technicalLeadEmployeeId:''})
 const maintenanceForm=ref({projectId:'',currentContractId:'',honeybeeContractUploaded:false,honeybeeProjectCreated:false,projectMaterialsCompleted:false,publicCardStatus:'not_started',notes:''})
 const visitForm=ref({visitDate:new Date().toISOString().slice(0,10),contractId:'',employeeIds:[],notes:''})
-const renewalForm=ref({contractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''})
+const renewalForm=ref({externalContractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''})
+const renewalFiles=ref([])
 const renewalHistoryDetail=ref(null)
 const documentContractId=ref(null)
 async function openRenewalHistory(contractId){
@@ -31,10 +33,16 @@ async function createRenewal(){
   if(!maintenanceForm.value.projectId)return
   busy.value=true;error.value=''
   try{
+    const fileIds=[]
+    for(const file of renewalFiles.value){
+      const fd=new FormData();fd.append('file',file)
+      fileIds.push((await api('/files',{method:'POST',body:fd})).id)
+    }
     const contract=await api('/business/projects/'+maintenanceForm.value.projectId+'/maintenance-renewals',{
-      method:'POST',body:JSON.stringify(renewalForm.value)
+      method:'POST',body:JSON.stringify({...renewalForm.value,fileIds})
     })
-    renewalForm.value={contractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''}
+    renewalForm.value={externalContractNo:'',title:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',notes:''}
+    renewalFiles.value=[]
     await load()
     await openMaintenance(Number(maintenanceForm.value.projectId))
     notice.value='续签合同草稿已创建并关联原项目，旧合同与维保卡已保留。新合同需要确认后手动指定为当前有效合同。'
@@ -215,8 +223,9 @@ onMounted(async ()=>{
       <FormDialog v-if="maintenance.contractHistory?.length&&can('maintenance:write')&&can('contract:write')" title="新建续签合同" :steps="['合同信息','合同日期与备注']" :busy="busy" :error="error" @clear-error="error=''" save-label="创建续签">
 <template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>createRenewal())">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
-<label>新合同编号<input v-model="renewalForm.contractNo" required></label>
-<label>合同名称<input v-model="renewalForm.title" required></label>
+<label>系统合同编号<input :value="'ZJWB-'+new Date().getFullYear()+'-自动分配'" disabled></label>
+<label>其他编号（选填）<input v-model.trim="renewalForm.externalContractNo" maxlength="160" placeholder="甲方指定的合同编号"></label>
+<label>合同名称<input v-model.trim="renewalForm.title" required></label>
 <label>金额<input v-model="renewalForm.amount" type="number" min="0" step="0.01" required></label>
 </div>
 <div v-show="step===1" data-wizard-step="1" class="wizard-fields">
@@ -224,6 +233,7 @@ onMounted(async ()=>{
 <label>新合同开始日期<input v-model="renewalForm.startsOn" type="date" required></label>
 <label>新合同结束日期<input v-model="renewalForm.endsOn" type="date" required></label>
 <label class="wide">备注<input v-model="renewalForm.notes"></label>
+<FileDropzone class="wide" label="续签合同附件" :model-value="renewalFiles" :multiple="true" :max-files="10" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" hint="最多10个文件；单文件默认25 MB，DOCX最大100 MB" :max-bytes="25*1024*1024" :file-limit="file=>file.name.toLowerCase().endsWith('.docx')?100*1024*1024:25*1024*1024" :disabled="busy" @update:model-value="renewalFiles=$event"/>
 <button class="primary" :disabled="busy||!can('contract:write')">创建续签合同</button>
 </div>
 </form></template></FormDialog>
