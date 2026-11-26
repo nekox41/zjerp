@@ -233,7 +233,7 @@ onMounted(async ()=>{
 <label>新合同开始日期<input v-model="renewalForm.startsOn" type="date" required></label>
 <label>新合同结束日期<input v-model="renewalForm.endsOn" type="date" required></label>
 <label class="wide">备注<input v-model="renewalForm.notes"></label>
-<FileDropzone class="wide" label="续签合同附件" :model-value="renewalFiles" :multiple="true" :max-files="10" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" hint="最多10个文件；单文件默认25 MB，DOCX最大100 MB" :max-bytes="25*1024*1024" :file-limit="file=>file.name.toLowerCase().endsWith('.docx')?100*1024*1024:25*1024*1024" :disabled="busy" @update:model-value="renewalFiles=$event"/>
+<FileDropzone v-if="can('file:upload')" class="wide" label="续签合同附件" :model-value="renewalFiles" :multiple="true" :max-files="10" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" hint="最多10个文件；单文件默认25 MB，DOCX最大100 MB" :max-bytes="25*1024*1024" :file-limit="file=>file.name.toLowerCase().endsWith('.docx')?100*1024*1024:25*1024*1024" :disabled="busy" @update:model-value="renewalFiles=$event"/>
 <button class="primary" :disabled="busy||!can('contract:write')">创建续签合同</button>
 </div>
 </form></template></FormDialog>
