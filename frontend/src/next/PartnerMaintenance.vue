@@ -223,7 +223,7 @@ onMounted(async ()=>{
       <FormDialog v-if="maintenance.contractHistory?.length&&can('maintenance:write')&&can('contract:write')" title="新建续签合同" :steps="['合同信息','合同日期与备注']" :busy="busy" :error="error" @clear-error="error=''" save-label="创建续签">
 <template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>createRenewal())">
 <div v-show="step===0" data-wizard-step="0" class="wizard-fields">
-<label>系统合同编号<input :value="'ZJWB-'+new Date().getFullYear()+'-自动分配'" disabled></label>
+<label>系统合同编号<input :value="'ZJWB-YYYY-自动分配'" disabled></label>
 <label>其他编号（选填）<input v-model.trim="renewalForm.externalContractNo" maxlength="160" placeholder="甲方指定的合同编号"></label>
 <label>合同名称<input v-model.trim="renewalForm.title" required></label>
 <label>金额<input v-model="renewalForm.amount" type="number" min="0" step="0.01" required></label>
