@@ -53,11 +53,11 @@ def process(name):
         stat=Path(f"/proc/{pid}/stat").read_text().rsplit(")",1)[1].split()
         if stat[0]=="Z" or stat[19]!=r["start"]: return None
         if Path(f"/proc/{pid}").stat().st_uid!=os.getuid(): raise RuntimeError("进程归属不符")
-        # nginx rewrites its process title and may overwrite the original environment.
-        # PID start time, owner and the unique absolute configuration/JAR path identify our process.
-        cmd=Path(f"/proc/{pid}/cmdline").read_bytes()
-        expected=str(STATE/("nginx.conf" if name=="web" else "app/app.jar")).encode()
-        if expected not in cmd: raise RuntimeError("进程标记不符")
+        # Nginx rewrites argv[0]/cmdline with its process title. Use the
+        # per-process random environment token instead; it survives title changes.
+        environ=Path(f"/proc/{pid}/environ").read_bytes().split(b"\\0")
+        expected=("ZJERP_PREVIEW_PROCESS="+str(r["token"])).encode()
+        if expected not in environ: raise RuntimeError("进程标记不符")
         return pid
     except FileNotFoundError: return None
 def stop_proc(name):
@@ -188,5 +188,9 @@ http {{
     print(f"\n部署成功：http://localhost:{web}/next.html\nadmin / 123456（仅本机测试）")
 except BaseException:
     print("部署失败，诊断日志位于 "+str(STATE),file=sys.stderr)
-    stop_all()
+    try:
+        stop_all()
+    except BaseException as cleanup_error:
+        # Preserve the original startup failure; cleanup problems are secondary.
+        print("清理预览服务时出现附加错误："+str(cleanup_error),file=sys.stderr)
     raise
