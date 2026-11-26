@@ -160,7 +160,11 @@ public class PartnerMaintenanceController {
         if(previous==null||previous==0)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"此项目尚无维保合同，首次签约请使用普通合同流程");
 
-        String contractNo=req(b,"contractNo"),title=req(b,"title"),startsOn=req(b,"startsOn"),endsOn=req(b,"endsOn");
+        String title=req(b,"title"),startsOn=req(b,"startsOn"),endsOn=req(b,"endsOn");
+        String contractNo=BusinessNumberPool.allocate(jdbc,"maintenance");
+        Object externalValue=b.get("externalContractNo");
+        String externalNo=externalValue==null||externalValue.toString().isBlank()?null:externalValue.toString().trim();
+        if(externalNo!=null&&externalNo.length()>160)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"外部合同编号不能超过160个字符");
         java.time.LocalDate start,end;
         try{
             start=java.time.LocalDate.parse(startsOn);
@@ -179,11 +183,26 @@ public class PartnerMaintenanceController {
             catch(java.time.format.DateTimeParseException ex){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"签订日期格式错误");}
         }
         jdbc.update("""
-            INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,service_type,amount,currency,signed_on,starts_on,ends_on,status,notes,signing_source,partner_share_percent)
-            VALUES(?,?,?,'renewal','maintenance',?,'CNY',?,?,?,'draft',?,'direct',0)
-            """,contractNo,title,project.get("customer_id"),amount,
+            INSERT INTO erp_contract(contract_no,external_contract_no,title,customer_id,contract_type,service_type,amount,currency,signed_on,starts_on,ends_on,status,notes,signing_source,partner_share_percent)
+            VALUES(?,?,?,?,'renewal','maintenance',?,'CNY',?,?,?,'draft',?,'direct',0)
+            """,contractNo,externalNo,title,project.get("customer_id"),amount,
             signedOn==null||signedOn.toString().isBlank()?null:signedOn,start,end,b.get("notes"));
         long contractId=jdbc.queryForObject("SELECT lastval()",Long.class);
+        Object rawFiles=b.get("fileIds");
+        LinkedHashSet<Long> fileIds=new LinkedHashSet<>();
+        if(rawFiles instanceof Collection<?> collection){
+            for(Object value:collection)if(value!=null&&!value.toString().isBlank())fileIds.add(Long.valueOf(value.toString()));
+        }
+        if(!fileIds.isEmpty()){
+            if(a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("file:upload")))
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有上传合同文件权限");
+            for(Long fileId:fileIds){
+                Map<String,Object> f=one("SELECT id,uploaded_by FROM erp_file_object WHERE id=? FOR UPDATE",fileId);
+                if(!(f.get("uploaded_by") instanceof Number owner)||owner.longValue()!=actor(a))
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能关联自己上传的文件");
+                jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,created_by) VALUES(?,?,'contract',?)",contractId,fileId,actor(a));
+            }
+        }
         jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'renewal')",contractId,id);
         
         return one("SELECT * FROM erp_contract WHERE id=?",contractId);

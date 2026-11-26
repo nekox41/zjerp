@@ -138,16 +138,28 @@ public class BusinessController {
     }
 
     @GetMapping("/contracts") @PreAuthorize("hasAuthority('contract:read')")
-    public List<Map<String,Object>> contracts(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String status) {
-        String term="%"+q.trim()+"%";
+    public List<Map<String,Object>> contracts(@RequestParam(defaultValue="") String q,
+                                               @RequestParam(defaultValue="") String status,
+                                               @RequestParam(defaultValue="") String serviceType) {
+        if(!serviceType.isBlank()) ContractProjectCreation.requireType(serviceType);
+        String keyword=q==null?"":q.trim();
         return jdbc.queryForList("""
           SELECT ct.*,c.name customer_name,e.full_name owner_name,
+                 COALESCE((SELECT string_agg(p.name,'、' ORDER BY p.name)
+                           FROM erp_contract_partner cp JOIN erp_partner p ON p.id=cp.partner_id
+                           WHERE cp.contract_id=ct.id),'公司自主签订') intermediary_names,
+                 (SELECT COUNT(*) FROM erp_contract_file cf WHERE cf.contract_id=ct.id) file_count,
                  CASE WHEN ct.status='active' AND ct.ends_on IS NOT NULL THEN (ct.ends_on - CURRENT_DATE) ELSE NULL END days_until_expiry
           FROM erp_contract ct
           JOIN erp_customer c ON c.id=ct.customer_id LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id
-          WHERE (?='' OR ct.title ILIKE ? OR ct.contract_no ILIKE ? OR c.name ILIKE ?)
-            AND (?='' OR ct.status=?) ORDER BY ct.id DESC LIMIT 500
-          """,q.trim(),term,term,term,status,status);
+          WHERE (CAST(? AS TEXT)='' OR ct.title ILIKE CONCAT('%',CAST(? AS TEXT),'%')
+                 OR ct.contract_no ILIKE CONCAT('%',CAST(? AS TEXT),'%')
+                 OR COALESCE(ct.external_contract_no,'') ILIKE CONCAT('%',CAST(? AS TEXT),'%')
+                 OR c.name ILIKE CONCAT('%',CAST(? AS TEXT),'%'))
+            AND (CAST(? AS TEXT)='' OR ct.status=CAST(? AS TEXT))
+            AND (CAST(? AS TEXT)='' OR ct.service_type=CAST(? AS TEXT))
+          ORDER BY ct.id DESC LIMIT 500
+          """,keyword,keyword,keyword,keyword,keyword,status,status,serviceType,serviceType);
     }
     private void validateContractFields(Map<String,Object> b,Map<String,Object> current){
         String status=Objects.toString(b.get("status"),Objects.toString(current.get("status"),"draft"));
@@ -168,6 +180,9 @@ public class BusinessController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"维保合同必须填写起止日期");
         if(start!=null&&end!=null&&end.isBefore(start))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同结束日期不能早于开始日期");
+        Object external=b.get("externalContractNo");
+        if(external!=null&&external.toString().trim().length()>160)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"外部合同编号不能超过160个字符");
     }
 
     private java.time.LocalDate contractDate(Map<String,Object>b,Map<String,Object>current,String key,String column){
@@ -182,37 +197,66 @@ public class BusinessController {
         validateContractFields(b,Map.of());
         if(!Set.of("draft","pending").contains(val(b,"status","draft")))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请先创建草稿或待生效合同，关联项目后再生效");
-        String no=required(b,"contractNo"), title=required(b,"title"); Long customer=Long.valueOf(required(b,"customerId")), owner=optionalLong(b,"ownerEmployeeId");
-        one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
-        BigDecimal amount=new BigDecimal(val(b,"amount","0")); if(amount.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
+        String serviceType=val(b,"serviceType","other");
+        ContractProjectCreation.requireType(serviceType);
+        String no=BusinessNumberPool.allocate(jdbc,serviceType), title=required(b,"title");
+        Long customer=Long.valueOf(required(b,"customerId")), owner=optionalLong(b,"ownerEmployeeId");
+        one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer);
+        if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
+        BigDecimal amount=new BigDecimal(val(b,"amount","0"));
+        if(amount.signum()<0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同金额不能为负数");
+        String externalNo=optionalText(b,"externalContractNo");
         jdbc.update("""
-          INSERT INTO erp_contract(contract_no,title,customer_id,contract_type,service_type,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
-          """,no,title,customer,b.get("contractType"),val(b,"serviceType","other"),amount,val(b,"currency","CNY"),contractDate(b,Map.of(),"signedOn","signed_on"),contractDate(b,Map.of(),"startsOn","starts_on"),contractDate(b,Map.of(),"endsOn","ends_on"),val(b,"status","draft"),owner,b.get("notes"));
+          INSERT INTO erp_contract(contract_no,external_contract_no,title,customer_id,contract_type,service_type,amount,currency,signed_on,starts_on,ends_on,status,owner_employee_id,notes)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          """,no,externalNo,title,customer,b.get("contractType"),serviceType,amount,val(b,"currency","CNY"),
+          contractDate(b,Map.of(),"signedOn","signed_on"),contractDate(b,Map.of(),"startsOn","starts_on"),
+          contractDate(b,Map.of(),"endsOn","ends_on"),val(b,"status","draft"),owner,b.get("notes"));
         long id=jdbc.queryForObject("SELECT lastval()",Long.class);
-        Long file=optionalLong(b,"fileId"), existing=optionalLong(b,"existingProjectId");
-        if(file!=null) {
+        Long partnerId=optionalLong(b,"partnerId");
+        if(partnerId!=null){
+            one("SELECT id FROM erp_partner WHERE id=?",partnerId);
+            jdbc.update("INSERT INTO erp_contract_partner(contract_id,partner_id,share_percent) VALUES(?,?,0) ON CONFLICT (contract_id,partner_id) DO NOTHING",id,partnerId);
+            jdbc.update("UPDATE erp_contract SET signing_source='partner',partner_share_percent=0 WHERE id=?",id);
+        }
+        LinkedHashSet<Long> fileIds=new LinkedHashSet<>();
+        Long singleFile=optionalLong(b,"fileId");
+        if(singleFile!=null)fileIds.add(singleFile);
+        Object rawFiles=b.get("fileIds");
+        if(rawFiles instanceof Collection<?> collection){
+            for(Object value:collection)if(value!=null&&!value.toString().isBlank())fileIds.add(Long.valueOf(value.toString()));
+        }
+        if(!fileIds.isEmpty()){
             if(a.getAuthorities().stream().noneMatch(x->x.getAuthority().equals("file:upload")))
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有上传合同文件权限");
-            Map<String,Object> f=one("SELECT id,uploaded_by FROM erp_file_object WHERE id=? FOR UPDATE",file);
-            if(!(f.get("uploaded_by") instanceof Number n)||n.longValue()!=actor(a))
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能关联自己上传的文件");
-            jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,created_by) VALUES(?,?,'contract',?)",id,file,actor(a));
+            for(Long fileId:fileIds){
+                Map<String,Object> f=one("SELECT id,uploaded_by FROM erp_file_object WHERE id=? FOR UPDATE",fileId);
+                if(!(f.get("uploaded_by") instanceof Number n)||n.longValue()!=actor(a))
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只能关联自己上传的文件");
+                jdbc.update("INSERT INTO erp_contract_file(contract_id,file_id,file_type,created_by) VALUES(?,?,'contract',?)",id,fileId,actor(a));
+            }
         }
-        Long projectId=null;
+        Long projectId=null, existing=optionalLong(b,"existingProjectId");
         if(existing!=null){
             Map<String,Object> p=one("SELECT * FROM erp_project WHERE id=? FOR UPDATE",existing);
-            if(((Number)p.get("customer_id")).longValue()!=customer||!Objects.equals(p.get("service_type"),val(b,"serviceType","other")))
+            if(((Number)p.get("customer_id")).longValue()!=customer||!Objects.equals(p.get("service_type"),serviceType))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"已有项目必须与合同的甲方及服务类型一致");
-            jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",id,existing);
+            String relation="maintenance".equals(serviceType)?"renewal":"service";
+            jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,?)",id,existing,relation);
             jdbc.update("UPDATE erp_project SET contract_id=? WHERE id=? AND contract_id IS NULL",id,existing);
             projectId=existing;
-        }else if(file!=null||Boolean.TRUE.equals(b.get("createProject"))){
+        }else{
             projectId=ContractProjectCreation.createIfUnlinked(jdbc,id,actor(a));
         }
         Map<String,Object> result=new LinkedHashMap<>(one("SELECT ct.*,c.name customer_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id WHERE ct.id=?",id));
         if(projectId!=null)result.put("projectId",projectId);
         return result;
+    }
+    private String optionalText(Map<String,Object>b,String key){
+        Object value=b.get(key);
+        if(value==null)return null;
+        String text=value.toString().trim();
+        return text.isEmpty()?null:text;
     }
     @PutMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> updateContract(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a) {
@@ -225,22 +269,18 @@ public class BusinessController {
         }
         Long owner=optionalLong(b,"ownerEmployeeId");
         if(b.containsKey("ownerEmployeeId")&&owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
-        if(b.containsKey("serviceType")) {
-            String serviceType=Objects.toString(b.get("serviceType"),"");
-            if(!Set.of("maintenance","fire_inspection","fire_assessment","fire_evaluation","other").contains(serviceType))
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同服务类型无效");
-        }
+        if(b.containsKey("serviceType")&&!Objects.equals(b.get("serviceType"),current.get("service_type")))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同类别决定合同编号前缀，创建后不能修改");
         if("active".equals(b.get("status"))||"completed".equals(b.get("status"))) {
             Integer projects=jdbc.queryForObject("SELECT COUNT(*) FROM erp_contract_project WHERE contract_id=?",Integer.class,id);
             if(projects==null||projects==0)
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"合同生效前至少应关联一个项目");
         }
-        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),contract_type=COALESCE(?,contract_type),service_type=COALESCE(?,service_type),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=?,starts_on=?,ends_on=?,notes=COALESCE(?,notes) WHERE id=?",
-            b.get("title"),b.get("contractType"),b.get("serviceType"),b.get("amount"),b.get("currency"),b.get("status"),contractDate(b,current,"signedOn","signed_on"),contractDate(b,current,"startsOn","starts_on"),contractDate(b,current,"endsOn","ends_on"),b.get("notes"),id);
+        jdbc.update("UPDATE erp_contract SET title=COALESCE(?,title),contract_type=COALESCE(?,contract_type),amount=COALESCE(?,amount),currency=COALESCE(?,currency),status=COALESCE(?,status),signed_on=?,starts_on=?,ends_on=?,notes=COALESCE(?,notes) WHERE id=?",
+            b.get("title"),b.get("contractType"),b.get("amount"),b.get("currency"),b.get("status"),contractDate(b,current,"signedOn","signed_on"),contractDate(b,current,"startsOn","starts_on"),contractDate(b,current,"endsOn","ends_on"),b.get("notes"),id);
         if(b.containsKey("ownerEmployeeId")) jdbc.update("UPDATE erp_contract SET owner_employee_id=? WHERE id=?",owner,id);
-        String service=val(b,"serviceType",current.get("service_type").toString());
-        if(!service.equals(current.get("service_type")))
-            jdbc.update("UPDATE erp_project SET service_type=? WHERE contract_id=? AND service_type=?",service,id,current.get("service_type"));
+        if(b.containsKey("externalContractNo")) jdbc.update("UPDATE erp_contract SET external_contract_no=? WHERE id=?",optionalText(b,"externalContractNo"),id);
+        String service=current.get("service_type").toString();
         // Synchronize automatically created projects and the selected current annual maintenance contract.
         jdbc.update("""
             UPDATE erp_project p SET planned_start=?,planned_end=?
@@ -264,7 +304,7 @@ public class BusinessController {
     }
     @PostMapping("/projects") @PreAuthorize("hasAuthority('project:write')") @Transactional
     public Map<String,Object> createProject(@RequestBody Map<String,Object>b,Authentication a) {
-        String no=required(b,"projectNo"), name=required(b,"name"); long customer=Long.parseLong(required(b,"customerId"));
+        String name=required(b,"name"); long customer=Long.parseLong(required(b,"customerId"));
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer); Long contract=optionalLong(b,"contractId");
         String service=val(b,"serviceType","other");
         if(contract!=null) {
@@ -277,6 +317,7 @@ public class BusinessController {
         java.time.LocalDate start=contractDate(b,Map.of(),"plannedStart","planned_start"),end=contractDate(b,Map.of(),"plannedEnd","planned_end");
         if(start!=null&&end!=null&&end.isBefore(start))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目结束日期不能早于开始日期");
         Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) requireEngineer(manager);
+        String no=BusinessNumberPool.allocate(jdbc,service);
         jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,service_type,progress,status) VALUES(?,?,?,?,?,?,?,?,?,0,'planned')",
             no,name,contract,customer,b.get("description"),manager,start,end,service);
         long id=jdbc.queryForObject("SELECT lastval()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contract,id); 
@@ -313,7 +354,7 @@ public class BusinessController {
     @GetMapping("/contracts/{id}") @PreAuthorize("hasAuthority('contract:read')")
     public Map<String,Object> contract(@PathVariable long id) {
         Map<String,Object> result=new LinkedHashMap<>(one("SELECT ct.*,c.name customer_name,e.full_name owner_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id LEFT JOIN erp_employee e ON e.id=ct.owner_employee_id WHERE ct.id=?",id));
-        result.put("partners",jdbc.queryForList("SELECT p.id,p.partner_code,p.name,cp.share_percent,cp.notes FROM erp_contract_partner cp JOIN erp_partner p ON p.id=cp.partner_id WHERE cp.contract_id=? ORDER BY p.name",id));
+        result.put("partners",jdbc.queryForList("SELECT p.id,p.name,cp.share_percent,cp.notes FROM erp_contract_partner cp JOIN erp_partner p ON p.id=cp.partner_id WHERE cp.contract_id=? ORDER BY p.name",id));
         result.put("projects",jdbc.queryForList("SELECT p.id,p.project_no,p.name,p.status,p.service_type,cp.relation_type FROM erp_contract_project cp JOIN erp_project p ON p.id=cp.project_id WHERE cp.contract_id=? ORDER BY p.id DESC",id));
         result.put("files",jdbc.queryForList("SELECT cf.id,cf.file_id,cf.file_type,cf.title,f.original_name,f.byte_size,f.sha256 FROM erp_contract_file cf JOIN erp_file_object f ON f.id=cf.file_id WHERE cf.contract_id=? ORDER BY cf.id DESC",id));
         return result;

@@ -5,7 +5,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 /** Invoked only from a transactional contract create or attachment operation. */
 final class ContractProjectCreation {
@@ -25,7 +24,7 @@ final class ContractProjectCreation {
         jdbc.update("""
             INSERT INTO erp_project(project_no,name,contract_id,customer_id,service_type,auto_from_contract,planned_start,planned_end)
             VALUES(?,?,?,?,?,TRUE,?,?)
-            ""","P-"+UUID.randomUUID(),c.get("title"),contractId,c.get("customer_id"),type,c.get("starts_on"),c.get("ends_on"));
+            """,c.get("contract_no"),c.get("title"),contractId,c.get("customer_id"),type,c.get("starts_on"),c.get("ends_on"));
         long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contractId,id);
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor,"由新合同自动创建项目");
