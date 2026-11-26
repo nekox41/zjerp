@@ -29,15 +29,27 @@ assert any(x["id"]==partner_id and x["contract_count"]==0 for x in rows)
 # Bind a real draft contract as admin, then verify an ordinary employee can see
 # its identity in the intermediary detail without receiving contract:read.
 customer=call("/business/customers",{"customerCode":"CI-PARTNER-CUSTOMER","name":"CI 中间人测试甲方"},token)
-contract=call("/business/contracts",{"contractNo":"CI-PARTNER-CONTRACT","title":"CI 中间人绑定合同","customerId":customer["id"],"serviceType":"other"},token)
+from datetime import datetime
+from zoneinfo import ZoneInfo
+year=datetime.now(ZoneInfo("Asia/Shanghai")).year
+contract=call("/business/contracts",{"contractNo":"CI-PARTNER-CONTRACT","title":"CI 中间人绑定合同","customerId":customer["id"],"serviceType":"other","externalContractNo":"甲方-EXT-001","partnerId":partner_id},token)
+assert contract["contract_no"]==f"ZJFW-{year}-001",contract
+assert contract["external_contract_no"]=="甲方-EXT-001"
+project=call("/business/projects/"+str(contract["projectId"]),token=token)
+assert project["project_no"]==contract["contract_no"] and project["name"]==contract["title"]
 call("/business/contracts/"+str(contract["id"])+"/partners",{"partnerId":partner_id,"sharePercent":"20"},token)
 detail=call("/business/partners/"+str(partner_id),token=partner_token)
 assert detail["contact"]=="13800000000 / 微信 ci-partner"
 assert len(detail["contracts"])==1
 assert detail["contracts"][0]["id"]==contract["id"]
-assert detail["contracts"][0]["contract_no"]=="CI-PARTNER-CONTRACT"
+assert detail["contracts"][0]["contract_no"]==contract["contract_no"]
 assert detail["contracts"][0]["title"]=="CI 中间人绑定合同"
 assert set(detail["contracts"][0])=={"id","contract_no","title"}
+filtered=call("/business/contracts?serviceType=other&q="+quote("甲方-EXT-001"),token=token)
+assert len(filtered)==1 and filtered[0]["id"]==contract["id"]
+standalone=call("/business/projects",{"name":"CI 无合同项目","customerId":customer["id"],"serviceType":"other"},token)
+assert standalone["project_no"]==f"ZJFW-{year}-002",standalone
+assert standalone["contract_id"] is None
 updated=call("/business/partners/"+str(partner_id),{"name":"CI 中间人更新","contact":"13900000000","region":"杭州市"},partner_token,"PUT")
 assert updated["name"]=="CI 中间人更新" and updated["contact"]=="13900000000" and updated["region"]=="杭州市"
 assert call("/business/partners?q="+quote("上海市"),token=partner_token)==[]
