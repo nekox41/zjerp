@@ -21,29 +21,48 @@ public class PartnerMaintenanceController {
     private Long opt(Map<String,Object>b,String k){Object v=b.get(k);return v==null||v.toString().isBlank()?null:Long.valueOf(v.toString());}
 
     @GetMapping("/partners") @PreAuthorize("hasAuthority('partner:read')")
-    public List<Map<String,Object>> partners(){return jdbc.queryForList("SELECT p.*,(SELECT COUNT(*) FROM erp_contract_partner cp WHERE cp.partner_id=p.id) contract_count FROM erp_partner p ORDER BY p.name");}
+    public List<Map<String,Object>> partners(@RequestParam(defaultValue="") String q){
+        String keyword=q==null?"":q.trim();
+        return jdbc.queryForList("SELECT p.*,(SELECT COUNT(*) FROM erp_contract_partner cp WHERE cp.partner_id=p.id) contract_count FROM erp_partner p WHERE ?='' OR p.name ILIKE CONCAT('%',?,'%') OR COALESCE(p.contact,'') ILIKE CONCAT('%',?,'%') OR COALESCE(p.region,'') ILIKE CONCAT('%',?,'%') ORDER BY p.name,p.id",keyword,keyword,keyword,keyword);
+    }
     @GetMapping("/partners/{id}") @PreAuthorize("hasAuthority('partner:read')")
     public Map<String,Object> partner(@PathVariable long id){
         Map<String,Object> p=new LinkedHashMap<>(one("SELECT * FROM erp_partner WHERE id=?",id));
-        p.put("contracts",jdbc.queryForList("SELECT c.id,c.contract_no,c.title,c.service_type,c.amount,cp.share_percent,c.status FROM erp_contract_partner cp JOIN erp_contract c ON c.id=cp.contract_id WHERE cp.partner_id=? ORDER BY c.created_at DESC",id));
+        p.put("contracts",jdbc.queryForList("SELECT c.id,c.contract_no,c.title,c.service_type,c.amount,c.signed_on,c.starts_on,c.ends_on,cp.share_percent,c.status FROM erp_contract_partner cp JOIN erp_contract c ON c.id=cp.contract_id WHERE cp.partner_id=? ORDER BY c.created_at DESC,c.id DESC",id));
         return p;
     }
     @PostMapping("/partners") @PreAuthorize("hasAuthority('partner:write')") @Transactional
-    public Map<String,Object> createPartner(@RequestBody Map<String,Object>b,Authentication a){
-        String code=req(b,"partnerCode"),name=req(b,"name"),type=b.get("partnerType")==null?"introducer":b.get("partnerType").toString();
-        jdbc.update("INSERT INTO erp_partner(partner_code,name,partner_type,contact_name,phone,email,address,notes) VALUES(?,?,?,?,?,?,?,?)",code,name,type,b.get("contactName"),b.get("phone"),b.get("email"),b.get("address"),b.get("notes"));
-        long id=jdbc.queryForObject("SELECT lastval()",Long.class);return one("SELECT * FROM erp_partner WHERE id=?",id);
+    public Map<String,Object> createPartner(@RequestBody Map<String,Object>b){
+        String name=req(b,"name");
+        String contact=optional(b,"contact"),region=optional(b,"region");
+        validatePartnerFields(name,contact,region);
+        jdbc.update("INSERT INTO erp_partner(name,contact,region) VALUES(?,?,?)",name,contact,region);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
+        return partner(id);
     }
     @PutMapping("/partners/{id}") @PreAuthorize("hasAuthority('partner:write')") @Transactional
-    public Map<String,Object> updatePartner(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
+    public Map<String,Object> updatePartner(@PathVariable long id,@RequestBody Map<String,Object>b){
         one("SELECT id FROM erp_partner WHERE id=?",id);
-        jdbc.update("UPDATE erp_partner SET name=COALESCE(?,name),partner_type=COALESCE(?,partner_type),contact_name=COALESCE(?,contact_name),phone=COALESCE(?,phone),email=COALESCE(?,email),address=COALESCE(?,address),notes=COALESCE(?,notes),status=COALESCE(?,status) WHERE id=?",
-            b.get("name"),b.get("partnerType"),b.get("contactName"),b.get("phone"),b.get("email"),b.get("address"),b.get("notes"),b.get("status"),id);
+        String name=req(b,"name");
+        String contact=optional(b,"contact"),region=optional(b,"region");
+        validatePartnerFields(name,contact,region);
+        jdbc.update("UPDATE erp_partner SET name=?,contact=?,region=? WHERE id=?",name,contact,region,id);
         return partner(id);
+    }
+    private String optional(Map<String,Object>b,String key){
+        Object value=b.get(key);
+        if(value==null)return null;
+        String text=value.toString().trim();
+        return text.isEmpty()?null:text;
+    }
+    private void validatePartnerFields(String name,String contact,String region){
+        if(name.length()>240)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"中间人姓名不能超过240个字符");
+        if(contact!=null&&contact.length()>240)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"联系方式不能超过240个字符");
+        if(region!=null&&region.length()>160)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"地区不能超过160个字符");
     }
     @PostMapping("/contracts/{id}/partners") @PreAuthorize("hasAuthority('contract:write')") @Transactional
     public Map<String,Object> linkPartner(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){
-        one("SELECT id FROM erp_contract WHERE id=? FOR UPDATE",id);long partner=Long.parseLong(req(b,"partnerId"));one("SELECT id FROM erp_partner WHERE id=? AND status='active'",partner);
+        one("SELECT id FROM erp_contract WHERE id=? FOR UPDATE",id);long partner=Long.parseLong(req(b,"partnerId"));one("SELECT id FROM erp_partner WHERE id=?",partner);
         java.math.BigDecimal share=new java.math.BigDecimal(req(b,"sharePercent"));
         if(share.signum()<0||share.compareTo(java.math.BigDecimal.valueOf(100))>0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"分成比例必须在 0 到 100 之间");
         java.math.BigDecimal existing=jdbc.queryForObject("SELECT COALESCE(SUM(share_percent),0) FROM erp_contract_partner WHERE contract_id=? AND partner_id<>?",java.math.BigDecimal.class,id,partner);

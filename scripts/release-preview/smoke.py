@@ -13,3 +13,21 @@ if sys.argv[1]=="first":
     call("/business/employees",{"fullName":"CI Preview","employeeType":"operator"},token)
     assert len(call("/business/employees",token=token))==1
 print("Native preview smoke passed:",sys.argv[1])
+
+# Ordinary employees can maintain intermediary records; details show linked contracts.
+call("/admin/identities",{"username":"ci-partner-employee","displayName":"CI Partner Employee","password":"ci-partner-password-123","role":"employee"},token)
+partner_login=call("/auth/login",{"username":"ci-partner-employee","password":"ci-partner-password-123"})
+partner_token=partner_login["token"]
+partner_me=call("/auth/me",token=partner_token)
+assert "partner:read" in partner_me["permissions"] and "partner:write" in partner_me["permissions"]
+partner=call("/business/partners",{"name":"CI 中间人","contact":"13800000000 / 微信 ci-partner","region":"上海市"},partner_token)
+assert partner["name"]=="CI 中间人" and partner["contact"]=="13800000000 / 微信 ci-partner" and partner["region"]=="上海市"
+partner_id=partner["id"]
+from urllib.parse import quote
+rows=call("/business/partners?q="+quote("上海市"),token=partner_token)
+assert any(x["id"]==partner_id and x["contract_count"]==0 for x in rows)
+detail=call("/business/partners/"+str(partner_id),token=partner_token)
+assert detail["contracts"]==[] and detail["contact"]=="13800000000 / 微信 ci-partner"
+updated=call("/business/partners/"+str(partner_id),{"name":"CI 中间人更新","contact":"13900000000","region":"杭州市"},partner_token)
+assert updated["name"]=="CI 中间人更新" and updated["contact"]=="13900000000" and updated["region"]=="杭州市"
+assert call("/business/partners?q="+quote("上海市"),token=partner_token)==[]

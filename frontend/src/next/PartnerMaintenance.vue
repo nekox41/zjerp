@@ -3,6 +3,7 @@ import FormDialog from './FormDialog.vue'
 import { computed, onMounted, ref } from 'vue'
 import { api, downloadFile } from './api'
 import MaintenanceDocuments from './MaintenanceDocuments.vue'
+import PartnerDirectory from './PartnerDirectory.vue'
 const props=defineProps({permissions:{type:Array,default:()=>[]},destination:{type:Object,default:null}})
 const emit=defineEmits(['navigate'])
 const can=p=>props.permissions.includes(p)
@@ -14,10 +15,7 @@ const visibleTabs=computed(()=>[
 ].filter(t=>t.allowed))
 const tab=ref(props.destination?.section||'partners'),busy=ref(false),error=ref(''),notice=ref('')
 const partners=ref([]),contracts=ref([]),projects=ref([]),employees=ref([])
-const partner=ref(null),maintenance=ref(null),contractDetail=ref(null)
-const partnerForm=ref({partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''})
-const partnerEditOpen=ref(false)
-const partnerEditForm=ref({name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:'',status:'active'})
+const maintenance=ref(null),contractDetail=ref(null)
 const linkForm=ref({contractId:'',partnerId:'',sharePercent:'',notes:'',fileType:'contract'})
 const projectLink=ref({projectId:'',contractId:'',relationType:'service'})
 const leadership=ref({projectId:'',managerEmployeeId:'',technicalLeadEmployeeId:''})
@@ -50,7 +48,7 @@ async function load(){
   error.value=''
   try{
     const [p,c,pr,e]=await Promise.all([
-      can('partner:read')?api('/business/partners'):Promise.resolve([]),
+      (can('partner:read')&&tab.value!=='partners')?api('/business/partners'):Promise.resolve([]),
       can('contract:read')?api('/business/contracts'):Promise.resolve([]),
       can('project:read')?api('/business/projects'):Promise.resolve([]),
       can('employee:read')?api('/business/employees'):Promise.resolve([])
@@ -58,40 +56,12 @@ async function load(){
     partners.value=p;contracts.value=c;projects.value=pr;employees.value=e
   }catch(e){error.value=e.message}
 }
-async function createPartner(){
-  busy.value=true;error.value=''
-  try{await api('/business/partners',{method:'POST',body:JSON.stringify(partnerForm.value)});partnerForm.value={partnerCode:'',name:'',partnerType:'introducer',contactName:'',phone:'',email:'',address:'',notes:''};await load();notice.value='中间人档案已创建'}
-  catch(e){error.value=e.message}finally{busy.value=false}
-}
-async function openPartner(id){
-  try{
-    partner.value=await api('/business/partners/'+id)
-    partnerEditForm.value={
-      name:partner.value.name||'',partnerType:partner.value.partner_type||'introducer',
-      contactName:partner.value.contact_name||'',phone:partner.value.phone||'',
-      email:partner.value.email||'',address:partner.value.address||'',
-      notes:partner.value.notes||'',status:partner.value.status||'active'
-    }
-    partnerEditOpen.value=false
-  }catch(e){error.value=e.message}
-}
-async function savePartner(){
-  if(!partner.value)return
-  busy.value=true;error.value=''
-  try{
-    partner.value=await api('/business/partners/'+partner.value.id,{method:'PUT',body:JSON.stringify(partnerEditForm.value)})
-    partnerEditOpen.value=false
-    await load()
-    await openPartner(partner.value.id)
-    notice.value='中间人档案已更新'
-  }catch(e){error.value=e.message}finally{busy.value=false}
-}
 async function openContractDetail(id){
   if(!id){contractDetail.value=null;return}
   try{contractDetail.value=await api('/business/contracts/'+id)}catch(e){error.value=e.message}
 }
 async function linkPartner(){
-  try{await api('/business/contracts/'+linkForm.value.contractId+'/partners',{method:'POST',body:JSON.stringify({partnerId:linkForm.value.partnerId,sharePercent:linkForm.value.sharePercent,notes:linkForm.value.notes})});notice.value='合同合作方及分成比例已保存';await load();await openContractDetail(Number(linkForm.value.contractId));if(partner.value)await openPartner(partner.value.id)}
+  try{await api('/business/contracts/'+linkForm.value.contractId+'/partners',{method:'POST',body:JSON.stringify({partnerId:linkForm.value.partnerId,sharePercent:linkForm.value.sharePercent,notes:linkForm.value.notes})});notice.value='合同合作方及分成比例已保存';await load();await openContractDetail(Number(linkForm.value.contractId))}
   catch(e){error.value=e.message}
 }
 async function unlinkPartner(partnerId){
@@ -101,7 +71,6 @@ async function unlinkPartner(partnerId){
   try{
     await api('/business/contracts/'+contractId+'/partners/'+partnerId,{method:'DELETE'})
     await openContractDetail(contractId)
-    if(partner.value)await openPartner(partner.value.id)
     await load()
     notice.value='已解除合作关系，并重新计算合同分成'
   }catch(e){error.value=e.message}finally{busy.value=false}
@@ -181,50 +150,10 @@ onMounted(async ()=>{
 
 <template>
 <section class="pm-module">
-  <div class="pm-head"><div><h2>{{({partners:"中间人管理",links:"合同关联与附件",leadership:"项目人员",maintenance:"维保项目详情"})[tab]}}</h2></div><button @click="load">刷新</button></div>
+  <div v-if="tab!=='partners'" class="pm-head"><div><h2>{{({links:"合同关联与附件",leadership:"项目人员",maintenance:"维保项目详情"})[tab]}}</h2></div><button @click="load">刷新</button></div>
   <p v-if="error" class="pm-msg error">{{error}}</p><p v-if="notice" class="pm-msg success">{{notice}}</p>
 
-  <div v-if="tab==='partners'" class="pm-layout">
-    <div v-if="can('partner:write')" class="pm-panel"><h3>新增中间人</h3><FormDialog title="新建中间人" :steps="['主体资料','联系人与联系方式']" :busy="busy" :error="error" @clear-error="error=''">
-<template #default="{step,finish}"><form @submit.prevent="finish(()=>createPartner())" class="pm-form">
-<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
-<label>合作方编号<input v-model="partnerForm.partnerCode" required></label>
-<label>名称<input v-model="partnerForm.name" required></label>
-<label>类型<select v-model="partnerForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label>
-</div>
-<div v-show="step===1" data-wizard-step="1" class="wizard-fields">
-<label>联系人<input v-model="partnerForm.contactName"></label>
-<label>电话<input v-model="partnerForm.phone"></label>
-<label>邮箱<input v-model="partnerForm.email"></label>
-<label class="wide">地址<input v-model="partnerForm.address"></label>
-<label class="wide">备注<textarea v-model="partnerForm.notes"></textarea></label>
-<button class="primary" :disabled="busy">创建中间人</button>
-</div>
-</form></template></FormDialog></div>
-    <div class="pm-panel"><h3>中间人列表</h3><div class="pm-list"><button v-for="p in partners" :key="p.id" @click="openPartner(p.id)" :class="{selected:partner?.id===p.id}"><b>{{p.name}}</b><small>{{p.partner_code}} · {{p.contract_count}} 份关联合同</small></button><p v-if="!partners.length" class="pm-empty">暂无中间人</p></div>
-      <div v-if="partner" class="pm-detail">
-        <div class="pm-detail-head"><h4>{{partner.name}} · 中间人档案</h4><button v-if="can('partner:write')" class="secondary-button" @click="partnerEditOpen=!partnerEditOpen">{{partnerEditOpen?'收起编辑':'编辑档案'}}</button></div>
-        <p>编号：{{partner.partner_code}} · 状态：{{partner.status==='active'?'启用':'停用'}}</p>
-        <FormDialog v-if="partnerEditOpen" title="编辑中间人" :steps="['主体资料','联系人与状态']" :busy="busy" :error="error" @clear-error="error=''" auto-open @close="partnerEditOpen=false">
-<template #default="{step,finish}"><form class="pm-form" @submit.prevent="finish(()=>savePartner())">
-<div v-show="step===0" data-wizard-step="0" class="wizard-fields">
-<label>名称<input v-model="partnerEditForm.name" required></label>
-<label>类型<select v-model="partnerEditForm.partnerType"><option value="introducer">业务介绍人</option><option value="agency">合作机构</option><option value="other">其他</option></select></label>
-</div>
-<div v-show="step===1" data-wizard-step="1" class="wizard-fields">
-<label>联系人<input v-model="partnerEditForm.contactName"></label>
-<label>电话<input v-model="partnerEditForm.phone"></label>
-<label>邮箱<input v-model="partnerEditForm.email"></label>
-<label>状态<select v-model="partnerEditForm.status"><option value="active">启用</option><option value="disabled">停用</option></select></label>
-<label class="wide">地址<input v-model="partnerEditForm.address"></label>
-<label class="wide">备注<textarea v-model="partnerEditForm.notes"></textarea></label>
-<button class="primary" :disabled="busy">保存档案</button>
-</div>
-</form></template></FormDialog>
-        <h4>关联合同</h4><div v-for="c in partner.contracts||[]" :key="c.id" class="pm-contract"><b>{{c.title}}</b><small>{{c.contract_no}} · 分成 {{c.share_percent}}% · {{c.status}}</small><button v-if="can('contract:read')" class="secondary-button" @click="emit('navigate','business','contracts',c.id)">合同档案</button></div><p v-if="!partner.contracts?.length" class="pm-empty">尚未关联合同</p>
-      </div>
-    </div>
-  </div>
+  <PartnerDirectory v-if="tab==='partners'" :permissions="props.permissions" @navigate="id=>emit('navigate','business','contracts',id)" />
 
   <div v-if="tab==='links'" class="pm-layout">
     <div class="pm-panel"><h3>合同介绍来源与分成</h3><FormDialog v-if="(can('contract:write')&&can('partner:read'))" title="关联合同中间人" :steps="['合同与分成']" :busy="busy" :error="error" @clear-error="error=''" save-label="保存">
