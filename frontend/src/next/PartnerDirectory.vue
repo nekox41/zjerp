@@ -9,8 +9,6 @@ const can=p=>props.permissions.includes(p)
 const canEdit=computed(()=>can('partner:write'))
 const rows=ref([]),q=ref(''),loading=ref(false),busy=ref(false),error=ref(''),notice=ref('')
 const detail=ref(null),origin=ref(null),editor=ref(null),form=ref({name:'',contact:'',region:''})
-const statusLabels={draft:'草稿',pending:'待生效',active:'履行中',completed:'已完成',terminated:'已终止'}
-const serviceLabels={maintenance:'维保',fire_inspection:'检测',fire_assessment:'评定',fire_evaluation:'评估',other:'其他服务'}
 async function load(){
  loading.value=true;error.value=''
  try{rows.value=await api('/business/partners?q='+encodeURIComponent(q.value))}
@@ -66,8 +64,7 @@ onMounted(load)
   <div class="partner-contract-heading"><h4>关联合同</h4><span>{{detail.contracts?.length||0}} 份</span></div>
   <div v-if="detail.contracts?.length" class="partner-contracts">
    <article v-for="c in detail.contracts" :key="c.id" class="partner-contract">
-    <div class="partner-contract-main"><b>{{c.title}}</b><small>{{c.contract_no}} · {{serviceLabels[c.service_type]||'其他服务'}} · {{statusLabels[c.status]||c.status}}</small></div>
-    <div class="partner-contract-meta"><span>合同金额：¥{{Number(c.amount||0).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}}</span><span>约定分成：{{c.share_percent}}%</span></div>
+    <div class="partner-contract-main"><b>{{c.title}}</b><small>{{c.contract_no}}</small></div>
     <button v-if="can('contract:read')" type="button" class="secondary-button" @click="emit('navigate',c.id)">查看合同</button>
    </article>
   </div>
@@ -95,7 +92,7 @@ onMounted(load)
 .partner-empty{text-align:center;padding:70px 12px;color:var(--erp-muted)}.partner-empty p{font-size:13px}
 .partner-detail{padding:20px 26px}.partner-detail-heading,.partner-contract-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}.partner-detail h4{margin:12px 0;font-size:14px}.partner-contract-heading span{font-size:12px;color:var(--erp-muted)}
 .partner-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0 0 24px}.partner-fields dt{color:var(--erp-muted);font-size:12px;margin-bottom:5px}.partner-fields dd{margin:0;overflow-wrap:anywhere;font-size:14px;white-space:pre-wrap}
-.partner-contracts{display:grid;gap:10px}.partner-contract{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center;border:1px solid var(--erp-border);border-radius:12px;padding:13px}.partner-contract-main{display:grid;gap:5px;min-width:0}.partner-contract-main b{font-size:13px;overflow-wrap:anywhere}.partner-contract-main small{font-size:11px;color:var(--erp-muted)}.partner-contract-meta{display:flex;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--erp-muted)}.partner-contract button{grid-column:2;grid-row:1 / span 2}
+.partner-contracts{display:grid;gap:10px}.partner-contract{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center;border:1px solid var(--erp-border);border-radius:12px;padding:13px}.partner-contract-main{display:grid;gap:5px;min-width:0}.partner-contract-main b{font-size:13px;overflow-wrap:anywhere}.partner-contract-main small{font-size:11px;color:var(--erp-muted)}.partner-contract button{grid-column:2;grid-row:1 / span 2}
 .partner-empty-inline{font-size:13px;color:var(--erp-muted);padding:18px;border:1px dashed var(--erp-border);border-radius:12px;text-align:center}
 @media(max-width:700px){.partner-page{padding:16px;min-height:65dvh}.partner-fields{grid-template-columns:1fr}.partner-actions input{min-width:120px;max-width:100%}.partner-contract{grid-template-columns:1fr}.partner-contract button{grid-column:auto;grid-row:auto;justify-self:start}}
 </style>

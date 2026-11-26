@@ -28,7 +28,7 @@ public class PartnerMaintenanceController {
     @GetMapping("/partners/{id}") @PreAuthorize("hasAuthority('partner:read')")
     public Map<String,Object> partner(@PathVariable long id){
         Map<String,Object> p=new LinkedHashMap<>(one("SELECT * FROM erp_partner WHERE id=?",id));
-        p.put("contracts",jdbc.queryForList("SELECT c.id,c.contract_no,c.title,c.service_type,c.amount,c.signed_on,c.starts_on,c.ends_on,cp.share_percent,c.status FROM erp_contract_partner cp JOIN erp_contract c ON c.id=cp.contract_id WHERE cp.partner_id=? ORDER BY c.created_at DESC,c.id DESC",id));
+        p.put("contracts",jdbc.queryForList("SELECT c.id,c.contract_no,c.title FROM erp_contract_partner cp JOIN erp_contract c ON c.id=cp.contract_id WHERE cp.partner_id=? ORDER BY c.created_at DESC,c.id DESC",id));
         return p;
     }
     @PostMapping("/partners") @PreAuthorize("hasAuthority('partner:write')") @Transactional
