@@ -161,7 +161,8 @@ public class PartnerMaintenanceController {
             throw new ResponseStatusException(HttpStatus.CONFLICT,"此项目尚无维保合同，首次签约请使用普通合同流程");
 
         String title=req(b,"title"),startsOn=req(b,"startsOn"),endsOn=req(b,"endsOn");
-        String contractNo=BusinessNumberPool.allocate(jdbc,"maintenance");
+        String reservationId=req(b,"numberReservationId");
+        String contractNo=BusinessNumberPool.lock(jdbc,reservationId,"maintenance","maintenance_renewal",actor(a)).number();
         Object externalValue=b.get("externalContractNo");
         String externalNo=externalValue==null||externalValue.toString().isBlank()?null:externalValue.toString().trim();
         if(externalNo!=null&&externalNo.length()>160)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"外部合同编号不能超过160个字符");
@@ -204,7 +205,8 @@ public class PartnerMaintenanceController {
             }
         }
         jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'renewal')",contractId,id);
-        
+        BusinessNumberPool.consume(jdbc,reservationId,actor(a),contractId,id);
+
         return one("SELECT * FROM erp_contract WHERE id=?",contractId);
     }
 

@@ -199,7 +199,8 @@ public class BusinessController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请先创建草稿或待生效合同，关联项目后再生效");
         String serviceType=val(b,"serviceType","other");
         ContractProjectCreation.requireType(serviceType);
-        String no=BusinessNumberPool.allocate(jdbc,serviceType), title=required(b,"title");
+        String reservationId=required(b,"numberReservationId");
+        String no=BusinessNumberPool.lock(jdbc,reservationId,serviceType,"contract",actor(a)).number(), title=required(b,"title");
         Long customer=Long.valueOf(required(b,"customerId")), owner=optionalLong(b,"ownerEmployeeId");
         one("SELECT id FROM erp_customer WHERE id=? AND status='active'",customer);
         if(owner!=null) one("SELECT id FROM erp_employee WHERE id=?",owner);
@@ -248,6 +249,7 @@ public class BusinessController {
         }else{
             projectId=ContractProjectCreation.createIfUnlinked(jdbc,id,actor(a));
         }
+        BusinessNumberPool.consume(jdbc,reservationId,actor(a),id,projectId);
         Map<String,Object> result=new LinkedHashMap<>(one("SELECT ct.*,c.name customer_name FROM erp_contract ct JOIN erp_customer c ON c.id=ct.customer_id WHERE ct.id=?",id));
         if(projectId!=null)result.put("projectId",projectId);
         return result;
@@ -317,11 +319,13 @@ public class BusinessController {
         java.time.LocalDate start=contractDate(b,Map.of(),"plannedStart","planned_start"),end=contractDate(b,Map.of(),"plannedEnd","planned_end");
         if(start!=null&&end!=null&&end.isBefore(start))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"项目结束日期不能早于开始日期");
         Long manager=optionalLong(b,"managerEmployeeId"); if(manager!=null) requireEngineer(manager);
-        String no=BusinessNumberPool.allocate(jdbc,service);
+        String reservationId=required(b,"numberReservationId");
+        String no=BusinessNumberPool.lock(jdbc,reservationId,service,"project",actor(a)).number();
         jdbc.update("INSERT INTO erp_project(project_no,name,contract_id,customer_id,description,manager_employee_id,planned_start,planned_end,service_type,progress,status) VALUES(?,?,?,?,?,?,?,?,?,0,'planned')",
             no,name,contract,customer,b.get("description"),manager,start,end,service);
         long id=jdbc.queryForObject("SELECT lastval()",Long.class); if(contract!=null) jdbc.update("INSERT INTO erp_contract_project(contract_id,project_id,relation_type) VALUES(?,?,'service')",contract,id); 
         jdbc.update("INSERT INTO erp_project_log(project_id,actor_identity_id,log_type,content) VALUES(?,?,'created',?)",id,actor(a),"项目已创建");
+        BusinessNumberPool.consume(jdbc,reservationId,actor(a),contract,id);
         return one("SELECT * FROM erp_project WHERE id=?",id);
     }
     @PutMapping("/projects/{id}") @PreAuthorize("hasAuthority('project:write')") @Transactional
