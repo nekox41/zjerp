@@ -21,63 +21,78 @@ public class AuthService {
     private final int sessionHours;
     private final int maxFailedLogins;
     private final int lockMinutes;
+    private final boolean localTestBootstrap;
 
     public AuthService(JdbcTemplate jdbc, PasswordEncoder passwords,
         @Value("${erp.auth.session-hours:12}") int sessionHours,
         @Value("${erp.auth.max-failed-logins:5}") int maxFailedLogins,
-        @Value("${erp.auth.lock-minutes:10}") int lockMinutes) {
+        @Value("${erp.auth.lock-minutes:10}") int lockMinutes,
+        @Value("${erp.bootstrap.local-test:false}") boolean localTestBootstrap) {
         this.jdbc = jdbc; this.passwords = passwords; this.sessionHours = sessionHours;
-        this.maxFailedLogins = maxFailedLogins; this.lockMinutes = lockMinutes;
+        this.maxFailedLogins = maxFailedLogins; this.lockMinutes = lockMinutes; this.localTestBootstrap=localTestBootstrap;
     }
 
     public boolean isInitialized() {
         Integer count = jdbc.queryForObject("""
             SELECT COUNT(*) FROM erp_identity i
             JOIN erp_identity_role ir ON ir.identity_id=i.id
-            JOIN erp_role r ON r.id=ir.role_id WHERE r.code='admin'
+            JOIN erp_role r ON r.id=ir.role_id WHERE r.code='admin' AND i.username='admin' AND i.status='active'
             """, Integer.class);
         return count != null && count > 0;
     }
 
+    public static void validateNewPassword(String password){
+        if(password==null||password.length()<12||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72||password.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"密码至少12字符且不得超过72个UTF-8字节");
+    }
     @Transactional
     public void bootstrapAdmin(String username, String displayName, String password) {
+        username=username.trim();displayName=displayName.trim();
+        // The disposable, loopback-only trial stack may use exactly this test password.
+        // All other bootstrap and account password operations retain the production policy.
+        if(!(localTestBootstrap && "123456".equals(password)))validateNewPassword(password);
+        if(!"admin".equals(username)||displayName.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"唯一超级账户必须为 admin，姓名不能为空");
         Long roleId = jdbc.queryForObject("SELECT id FROM erp_role WHERE code='admin' FOR UPDATE", Long.class);
         if (isInitialized()) throw new ResponseStatusException(HttpStatus.CONFLICT, "管理员已初始化");
         jdbc.update("INSERT INTO erp_identity(username,password_hash,display_name,status) VALUES(?,?,?,'active')",
             username, passwords.encode(password), displayName);
-        Long identityId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        Long identityId = jdbc.queryForObject("SELECT lastval()", Long.class);
         jdbc.update("INSERT INTO erp_identity_role(identity_id,role_id) VALUES(?,?)", identityId, roleId);
-        audit(identityId, "identity.bootstrap", "erp_identity", identityId.toString(), "管理员初始化");
     }
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public LoginResult login(String username, String password) {
+        if(password==null||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号或密码错误");
+        username=username.trim();
         List<Map<String,Object>> rows = jdbc.queryForList("""
             SELECT id, username, password_hash, display_name, organization_id, status,
                    failed_login_count, locked_until
-            FROM erp_identity WHERE username=?
+            FROM erp_identity WHERE lower(username)=lower(?) FOR UPDATE
             """, username);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         Map<String,Object> row = rows.get(0);
         long id = ((Number) row.get("id")).longValue();
+        if (!"active".equals(row.get("status")))
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         Timestamp lockedUntil = (Timestamp) row.get("locked_until");
         if (lockedUntil != null && lockedUntil.toInstant().isAfter(Instant.now()))
             throw new ResponseStatusException(HttpStatus.LOCKED, "登录失败次数过多，请稍后再试");
-        if (!"active".equals(row.get("status")) || !passwords.matches(password, (String) row.get("password_hash"))) {
+        if(lockedUntil!=null&&!lockedUntil.toInstant().isAfter(Instant.now()))
+            jdbc.update("UPDATE erp_identity SET failed_login_count=0,locked_until=NULL WHERE id=?",id);
+        if (!passwords.matches(password, (String) row.get("password_hash"))) {
             jdbc.update("""
-                UPDATE erp_identity SET failed_login_count=failed_login_count+1,
-                  locked_until=CASE WHEN failed_login_count >= ? THEN DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? MINUTE) ELSE locked_until END
+                UPDATE erp_identity SET locked_until=CASE WHEN failed_login_count >= ? THEN (LOCALTIMESTAMP(3) + CAST(? AS integer) * INTERVAL '1 minute') ELSE NULL END,
+                  failed_login_count=LEAST(failed_login_count+1,?)
                 WHERE id=?
-                """, Math.max(0, maxFailedLogins - 1), lockMinutes, id);
-            audit(null, "auth.login.failed", "erp_identity", Long.toString(id), "登录失败");
+                """, Math.max(0, maxFailedLogins - 1), lockMinutes, Math.max(1,maxFailedLogins), id);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }
         jdbc.update("UPDATE erp_identity SET failed_login_count=0, locked_until=NULL WHERE id=?", id);
         String token = TokenUtil.newToken();
         String hash = TokenUtil.sha256(token);
-        jdbc.update("INSERT INTO erp_auth_session(identity_id,token_hash,expires_at) VALUES(?,?,DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ? HOUR))",
+        jdbc.update("INSERT INTO erp_auth_session(identity_id,token_hash,expires_at) VALUES(?,?,(LOCALTIMESTAMP(3) + CAST(? AS integer) * INTERVAL '1 hour'))",
             id, hash, sessionHours);
-        audit(id, "auth.login", "erp_auth_session", hash.substring(0, 12), "用户登录");
         List<String> permissions = permissions(id);
         return new LoginResult(token, id, (String) row.get("username"), (String) row.get("display_name"),
             row.get("organization_id") == null ? null : ((Number) row.get("organization_id")).longValue(), permissions);
@@ -85,17 +100,11 @@ public class AuthService {
 
     public void logout(CurrentUser user) {
         jdbc.update("UPDATE erp_auth_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE token_hash=? AND revoked_at IS NULL", user.tokenHash());
-        audit(user.id(), "auth.logout", "erp_auth_session", user.tokenHash().substring(0, 12), "用户退出");
     }
 
     public List<String> permissions(long identityId) {
         return jdbc.query("SELECT DISTINCT p.code FROM erp_identity_role ir JOIN erp_role_permission rp ON rp.role_id=ir.role_id JOIN erp_permission p ON p.id=rp.permission_id WHERE ir.identity_id=? ORDER BY p.code",
             (rs, row) -> rs.getString(1), identityId);
-    }
-
-    private void audit(Long actor, String action, String type, String id, String summary) {
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('summary',?))",
-            actor, action, type, id, UUID.randomUUID().toString(), summary);
     }
 
     public record LoginResult(String token, long id, String username, String displayName, Long organizationId, List<String> permissions) { }

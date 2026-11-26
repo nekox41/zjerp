@@ -26,7 +26,6 @@ public class InvoiceController {
     private Map<String,Object> one(String sql,Object... args){List<Map<String,Object>> rows=jdbc.queryForList(sql,args);if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"记录不存在");return rows.get(0);}
     private void event(long id,Authentication a,String action,String detail){
         jdbc.update("INSERT INTO erp_invoice_event(invoice_id,action,actor_identity_id,details) VALUES(?,?,?,?)",id,action,actor(a),detail);
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('detail',?))",actor(a),"invoice."+action,"erp_invoice",Long.toString(id),UUID.randomUUID().toString(),detail);
     }
     private void status(Map<String,Object>r,String... allowed){if(!Arrays.asList(allowed).contains(r.get("status").toString()))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前发票状态不允许此操作");}
     private void links(Long customer,Long contract,Long project){
@@ -63,7 +62,7 @@ public class InvoiceController {
         String currency=b.get("currency")==null?"CNY":b.get("currency").toString();
         if(!currency.matches("[A-Z]{3}"))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"币种代码无效");
         jdbc.update("INSERT INTO erp_invoice(invoice_no,direction,counterparty_name,customer_id,contract_id,project_id,title,currency,amount,issued_on,due_on,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",no,direction,name,customer,contract,project,title,currency,amount,issued,due,b.get("notes"),actor(a));
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);event(id,a,"created","发票登记");return detail(id);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);event(id,a,"created","发票登记");return detail(id);
     }
     @PutMapping("/{id}") @PreAuthorize("hasAuthority('invoice:write')") @Transactional
     public Map<String,Object> update(@PathVariable long id,@RequestBody Map<String,Object>b,Authentication a){

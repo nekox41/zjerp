@@ -22,3 +22,21 @@ export async function downloadFile(id,name='') {
   const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download=name||'attachment';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
 }
+
+export async function fetchPdf(path, options = {}) {
+  const token=sessionStorage.getItem('erp-next-token')
+  const headers=new Headers(options.headers||{})
+  if(options.body)headers.set('Content-Type','application/json')
+  if(token)headers.set('Authorization','Bearer '+token)
+  const response=await fetch(API_BASE+path,{...options,headers})
+  if(!response.ok){const payload=await response.json().catch(()=>({}));throw new Error(payload.detail||payload.message||'PDF 请求失败')}
+  if(!response.headers.get('content-type')?.includes('application/pdf'))throw new Error('服务器未返回 PDF')
+  return await response.blob()
+}
+
+export async function downloadEmployeeDocument(employeeId,documentId,name){
+  const token=sessionStorage.getItem('erp-next-token');
+  const response=await fetch(API_BASE+'/business/employees/'+employeeId+'/documents/'+documentId+'/download',{headers:token?{Authorization:'Bearer '+token}:{},cache:'no-store'});
+  if(!response.ok){const payload=await response.json().catch(()=>({}));throw new Error(payload.detail||payload.message||'证件下载失败')}
+  const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');a.href=url;a.download=name||'证件';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+}

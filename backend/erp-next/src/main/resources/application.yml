@@ -4,7 +4,7 @@ spring:
   application:
     name: erp-next-api
   datasource:
-    url: ${ERP_NEXT_DB_URL:jdbc:mysql://localhost:3306/erp_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    url: ${ERP_NEXT_DB_URL:jdbc:postgresql://localhost:5432/erp_next?stringtype=unspecified}
     username: ${ERP_NEXT_DB_USER:erp_next}
     password: ${ERP_NEXT_DB_PASSWORD}
     hikari:
@@ -16,7 +16,7 @@ spring:
     default-property-inclusion: non_null
   servlet:
     multipart:
-      max-file-size: 25MB
+      max-file-size: 100MB
       max-request-size: 250MB
 
 management:
@@ -30,6 +30,7 @@ management:
 erp:
   bootstrap:
     token: ${ERP_BOOTSTRAP_TOKEN:}
+    local-test: ${ERP_LOCAL_TEST_BOOTSTRAP:false}
   files:
     root: ${ERP_FILES_ROOT:/var/lib/erp-next/files}
   auth:

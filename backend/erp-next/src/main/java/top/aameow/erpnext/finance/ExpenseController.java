@@ -29,7 +29,6 @@ public class ExpenseController {
     private void requireStatus(Map<String,Object>r,String... allowed){if(!Arrays.asList(allowed).contains(r.get("status").toString()))throw new ResponseStatusException(HttpStatus.CONFLICT,"当前报账状态不允许此操作");}
     private void audit(long id,long who,String from,String to,String reason){
         jdbc.update("INSERT INTO erp_expense_event(claim_id,from_status,to_status,actor_identity_id,reason) VALUES(?,?,?,?,?)",id,from,to,who,reason);
-        jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('from',?,'to',?,'reason',?))",who,"expense."+to,"erp_expense_claim",Long.toString(id),UUID.randomUUID().toString(),from,to,reason);
     }
     private Map<String,Object> detail(long id){
         Map<String,Object> r=new LinkedHashMap<>(one("SELECT * FROM erp_expense_claim WHERE id=?",id));
@@ -80,7 +79,7 @@ public class ExpenseController {
         Long project=b.get("projectId")==null?null:Long.valueOf(b.get("projectId").toString());
         if(project!=null)one("SELECT id FROM erp_project WHERE id=?",project);
         jdbc.update("INSERT INTO erp_expense_claim(claim_no,title,applicant_identity_id,project_id) VALUES(?,?,?,?)",no,title,actor(a),project);
-        long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
+        long id=jdbc.queryForObject("SELECT lastval()",Long.class);
         replaceLines(id,b.get("lines"));audit(id,actor(a),null,"draft","创建费用报账单");return detail(id);
     }
     @PutMapping("/{id}") @PreAuthorize("hasAuthority('expense:write')") @Transactional

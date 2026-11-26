@@ -1,0 +1,97 @@
+# Disposable loopback-only ERP development test stack. No production data.
+services:
+  erp-next-postgres:
+    profiles: ["managed-db"]
+    image: ${ERP_IMAGE_PREFIX:-}postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: erp_next
+      POSTGRES_PASSWORD: ${ERP_NEXT_DB_ROOT_PASSWORD:?Set ERP_NEXT_DB_ROOT_PASSWORD}
+      ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - trial_postgres:/var/lib/postgresql/data
+      - ./db/postgres-init.sh:/docker-entrypoint-initdb.d/10-erp-user.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d erp_next"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    networks: [erp-next-internal]
+    restart: unless-stopped
+
+  erp-next-schema:
+    image: ${ERP_IMAGE_PREFIX:-}flyway/flyway:10.20.1
+    environment:
+      FLYWAY_URL: jdbc:postgresql://erp-next-postgres:5432/erp_next
+      FLYWAY_USER: erp_next
+      FLYWAY_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      FLYWAY_CONNECT_RETRIES: "30"
+      FLYWAY_LOCATIONS: "filesystem:/flyway/sql"
+      FLYWAY_VALIDATE_MIGRATION_NAMING: "true"
+      FLYWAY_CLEAN_DISABLED: "true"
+      FLYWAY_BASELINE_ON_MIGRATE: "false"
+    volumes:
+      - ./db/migration:/flyway/sql:ro
+    command: ["migrate"]
+    networks: [erp-next-internal]
+    restart: "no"
+
+  erp-next-api:
+    user: "${ERP_TRIAL_UID:?Set ERP_TRIAL_UID}:${ERP_TRIAL_GID:?Set ERP_TRIAL_GID}"
+    build:
+      context: ../backend/erp-next
+      dockerfile: Dockerfile.runtime
+      args:
+        ERP_IMAGE_PREFIX: ${ERP_IMAGE_PREFIX:-}
+    environment:
+      ERP_NEXT_PORT: "8090"
+      ERP_NEXT_DB_URL: jdbc:postgresql://erp-next-postgres:5432/erp_next?stringtype=unspecified
+      TZ: Asia/Shanghai
+      ERP_NEXT_DB_USER: erp_next
+      ERP_NEXT_DB_PASSWORD: ${ERP_NEXT_DB_PASSWORD:?Set ERP_NEXT_DB_PASSWORD}
+      ERP_BOOTSTRAP_TOKEN: ${ERP_BOOTSTRAP_TOKEN:?Set ERP_BOOTSTRAP_TOKEN}
+      ERP_FILES_ROOT: /var/lib/erp-next/files
+      ERP_LOCAL_TEST_BOOTSTRAP: "true"
+      ERP_LEGACY_SCAN_ENABLED: "false"
+    ports:
+      - "127.0.0.1:${ERP_NEXT_API_PORT:-8090}:8090"
+    depends_on:
+      erp-next-schema:
+        condition: service_completed_successfully
+    volumes:
+      - type: bind
+        source: ${ERP_TRIAL_FILES:?Set ERP_TRIAL_FILES}
+        target: /var/lib/erp-next/files
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    networks: [erp-next-internal, erp-next-published]
+    restart: unless-stopped
+
+  erp-next-web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.erp-next.runtime
+      args:
+        ERP_IMAGE_PREFIX: ${ERP_IMAGE_PREFIX:-}
+    ports:
+      - "127.0.0.1:${ERP_NEXT_WEB_PORT:-8089}:80"
+    depends_on:
+      erp-next-api:
+        condition: service_healthy
+    networks: [erp-next-internal, erp-next-published]
+    restart: unless-stopped
+
+
+volumes:
+  trial_postgres: {}
+
+networks:
+  erp-next-internal:
+    internal: true
+  erp-next-published: {}

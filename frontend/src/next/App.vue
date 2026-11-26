@@ -4,22 +4,65 @@ import { api } from './api'
 import BusinessModule from './BusinessModule.vue'
 import FinanceModule from './FinanceModule.vue'
 import InvoiceModule from './InvoiceModule.vue'
-import DashboardModule from './DashboardModule.vue'
-import PhotoWorkbench from './PhotoWorkbench.vue'
+import ServiceWorkflow from './ServiceWorkflow.vue'
+import InspectionTemplateLibrary from './InspectionTemplateLibrary.vue'
+import FireStandardLibrary from './FireStandardLibrary.vue'
+import PartnerMaintenance from './PartnerMaintenance.vue'
+import AccountManagement from './AccountManagement.vue'
+import ThemeSwitch from './ThemeSwitch.vue'
 
 const loading = ref(true)
 const submitting = ref(false)
 const initialized = ref(true)
 const user = ref(null)
-const roles = ref([])
 const identities = ref([])
-const audit = ref([])
 const error = ref('')
 const notice = ref('')
 const tab = ref('overview')
+const destination = ref(null)
+const navigationKey = ref(0)
+let navigationRequest=0
+const projectTypes = [
+  {type:'maintenance',title:'维保项目'},
+  {type:'fire_inspection',title:'检测项目'},
+  {type:'fire_assessment',title:'评定项目'},
+  {type:'fire_evaluation',title:'评估项目'},
+  {type:'other',title:'其他技术服务'}
+]
+const pageTitle = computed(()=>{
+  if(tab.value==='business')return destination.value?.section==='projects'
+    ? projectTypes.find(p=>p.type===destination.value?.serviceType)?.title||'项目档案'
+    : ({employees:'员工档案',customers:'甲方管理',contracts:'合同管理'})[destination.value?.section]||'业务档案'
+  if(tab.value==='partner-maintenance')return ({partners:'中间人管理',links:'合同关联与附件',leadership:'项目人员',maintenance:'维保项目详情'})[destination.value?.section]||'中间人管理'
+  return ({overview:'工作台',identities:'账户管理','service-workflow':'技术服务交付','inspection-templates':'检测报告模板','fire-standards':'消防规范资料库',invoices:'发票与应收应付',finance:'费用报账与审批'})[tab.value]||'工作台'
+})
+async function navigate(target, section=null, id=null, serviceType=null) {
+  const allowed = {
+    business: section ? can(({customers:'customer:read',contracts:'contract:read',projects:'project:read',employees:'employee:read'})[section]) : false,
+    'partner-maintenance': section==='maintenance' ? can('maintenance:read')&&can('project:read') : section==='leadership' ? can('project:read')&&can('project:write') : section==='links' ? can('contract:read') : can('partner:read'),
+    'service-workflow': can('service:read')
+  }
+  if (!allowed[target]) return
+  const request=++navigationRequest
+  if(target==='business'&&section==='projects'&&id&&!serviceType){
+    try{serviceType=(await api('/business/projects/'+id)).service_type}catch(e){if(request===navigationRequest)error.value=e.message;return}
+  }
+  if(request!==navigationRequest)return
+  navigationKey.value++
+  destination.value = {section,id,serviceType:section==='projects'?(serviceType||'other'):null}
+  tab.value = target
+}
+function sidebar(target) {
+  navigationRequest++
+  destination.value=null
+  navigationKey.value++
+  tab.value=target
+}
+function activeBusiness(section,type=null){
+  return tab.value==='business'&&destination.value?.section===section&&(type===null||destination.value?.serviceType===type)
+}
 const loginForm = ref({ username: '', password: '' })
 const bootstrapForm = ref({ token: '', username: 'admin', displayName: '系统管理员', password: '', confirm: '' })
-const createForm = ref({ username: '', displayName: '', password: '', roleIds: [] })
 const can = permission => user.value?.permissions?.includes(permission)
 const initials = computed(() => (user.value?.displayName || '管').slice(0, 1))
 
@@ -42,10 +85,12 @@ async function refresh() {
 }
 async function loadWorkspace() {
   const requests = []
-  if (can('identity:read')) requests.push(api('/admin/roles').then(v => { roles.value = v }))
+
   if (can('identity:read')) requests.push(api('/admin/identities').then(v => { identities.value = v }))
-  if (can('audit:read')) requests.push(api('/admin/audit?limit=30').then(v => { audit.value = v }))
-  await Promise.all(requests)
+
+  const results=await Promise.allSettled(requests)
+  const rejected=results.find(r=>r.status==='rejected')
+  if(rejected)error.value='部分工作台数据未加载：'+rejected.reason.message
 }
 async function bootstrap() {
   error.value = ''; notice.value = ''
@@ -75,17 +120,7 @@ async function login() {
 async function logout() {
   try { await api('/auth/logout', { method: 'POST' }) } catch { /* local session is still cleared */ }
   sessionStorage.removeItem('erp-next-token')
-  user.value = null; identities.value = []; audit.value = []; tab.value = 'overview'
-}
-async function createIdentity() {
-  error.value = ''; notice.value = ''; submitting.value = true
-  try {
-    await api('/admin/identities', { method: 'POST', body: JSON.stringify(createForm.value) })
-    notice.value = '账号创建成功。'
-    createForm.value = { username: '', displayName: '', password: '', roleIds: [] }
-    identities.value = await api('/admin/identities')
-  } catch (e) { error.value = e.message }
-  finally { submitting.value = false }
+  user.value = null; identities.value = []; tab.value = 'overview'; destination.value=null
 }
 onMounted(refresh)
 </script>
@@ -98,11 +133,11 @@ onMounted(refresh)
       <div class="aside-copy">
         <span class="eyebrow">A CLEARER WAY TO WORK</span>
         <h1>让业务关系清晰，<br>让每一步都有方向。</h1>
-        <p>新版 ERP 正在逐步构建。先从安全、清晰的工作空间开始。</p>
+        <p>统一管理客户、合同、项目与技术服务。</p>
       </div>
       <div class="aside-foot">ZJ ERP · NEXT GENERATION</div>
     </section>
-    <section class="auth-main">
+    <section class="auth-main"><div class="auth-theme"><ThemeSwitch /></div>
       <div class="auth-card">
         <div class="mobile-brand"><span class="brand-mark">众</span><b>众基 ERP</b></div>
         <template v-if="!initialized">
@@ -111,7 +146,7 @@ onMounted(refresh)
           <p class="muted">这是新系统首次初始化。请向部署管理员获取一次性初始化凭据。</p>
           <form @submit.prevent="bootstrap" class="form-stack">
             <label>初始化凭据<input v-model="bootstrapForm.token" type="password" autocomplete="off" required placeholder="输入部署时配置的初始化凭据"></label>
-            <label>管理员账号<input v-model="bootstrapForm.username" required maxlength="100" autocomplete="username"></label>
+            <label>管理员账号<input v-model="bootstrapForm.username" readonly autocomplete="username"></label>
             <label>显示名称<input v-model="bootstrapForm.displayName" required maxlength="200"></label>
             <label>设置密码<input v-model="bootstrapForm.password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位"></label>
             <label>确认密码<input v-model="bootstrapForm.confirm" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
@@ -140,43 +175,44 @@ onMounted(refresh)
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">众</span><span>众基 ERP</span></div>
       <div class="side-caption">工作空间</div>
-      <button :class="{active:tab==='overview'}" @click="tab='overview'"><span>⌂</span>工作台</button>
-      <button v-if="can('project:read')" :class="{active:tab==='dashboard'}" @click="tab='dashboard'"><span>◫</span>经营驾驶舱</button>
-      <div class="side-caption">业务管理</div>
-      <button v-if="can('customer:read') || can('contract:read') || can('project:read') || can('employee:read')" :class="{active:tab==='business'}" @click="tab='business'"><span>▦</span>业务全生命周期</button>
-      <button v-if="can('report:write')" :class="{active:tab==='photo-workbench'}" @click="tab='photo-workbench'"><span>▧</span>现场照片整理</button>
+      <button :class="{active:tab==='overview'}" @click="sidebar('overview')"><span>⌂</span>工作台</button>
+      <div v-if="['employee:read','partner:read','customer:read','report:read','report:standard:write','report:template:write'].some(can)" class="side-caption">基础资料</div>
+      <button v-if="can('employee:read')" :class="{active:activeBusiness('employees')}" @click="navigate('business','employees')"><span>♙</span>员工档案</button>
+      <button v-if="can('partner:read')" :class="{active:tab==='partner-maintenance'&&destination?.section==='partners'}" @click="navigate('partner-maintenance','partners')"><span>♧</span>中间人管理</button>
+      <button v-if="can('customer:read')" :class="{active:activeBusiness('customers')}" @click="navigate('business','customers')"><span>▦</span>甲方管理</button>
+      <button v-if="can('report:read')||can('report:standard:write')" :class="{active:tab==='fire-standards'}" @click="sidebar('fire-standards')"><span>▤</span>消防规范资料库</button>
+      <button v-if="can('report:template:write')" :class="{active:tab==='inspection-templates'}" @click="sidebar('inspection-templates')"><span>▤</span>检测报告模板</button>
+      <div v-if="can('contract:read')||can('project:read')" class="side-caption">合同与项目</div>
+      <button v-if="can('contract:read')" :class="{active:activeBusiness('contracts')||(tab==='partner-maintenance'&&destination?.section==='links')}" @click="navigate('business','contracts')"><span>▤</span>合同管理</button>
+      <template v-if="can('project:read')">
+        <button v-for="p in projectTypes" :key="p.type" :class="{active:activeBusiness('projects',p.type)||(p.type==='maintenance'&&tab==='partner-maintenance'&&destination?.section==='maintenance')}" @click="navigate('business','projects',null,p.type)"><span>◈</span>{{p.title}}</button>
+      </template>
       <div class="side-caption">财务管理</div>
       <button v-if="can('expense:read')" :class="{active:tab==='finance'}" @click="tab='finance'"><span>¥</span>费用报账与审批</button>
       <button v-if="can('invoice:read')" :class="{active:tab==='invoices'}" @click="tab='invoices'"><span>▤</span>发票与应收应付</button>
       <div class="side-caption">系统管理</div>
-      <button v-if="can('identity:read')" :class="{active:tab==='identities'}" @click="tab='identities'"><span>♙</span>账号与角色</button>
-      <button v-if="can('audit:read')" :class="{active:tab==='audit'}" @click="tab='audit'"><span>◷</span>操作审计</button>
+      <button v-if="can('identity:read')" :class="{active:tab==='identities'}" @click="tab='identities'"><span>♙</span>账户管理</button>
       <div class="sidebar-bottom"><div class="avatar">{{ initials }}</div><div class="user-meta"><b>{{ user.displayName }}</b><small>{{ user.username }}</small></div><button class="logout" @click="logout" title="退出登录">↗</button></div>
     </aside>
     <section class="workspace-main">
-      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ tab==='overview'?'工作台':tab==='identities'?'账号与角色':tab==='audit'?'操作审计':tab==='photo-workbench'?'现场照片整理':tab==='dashboard'?'经营驾驶舱':tab==='invoices'?'发票与应收应付':tab==='finance'?'费用报账与审批':'业务全生命周期' }}</h1></div><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></header>
-      <div class="content">
+      <header class="topbar"><div><span class="eyebrow">ZJ ERP / NEXT</span><h1>{{ pageTitle }}</h1></div><div class="topbar-actions"><ThemeSwitch/><div class="top-user"><span class="online-dot"></span>{{ user.displayName }}</div></div></header>
+      <div class="content" :key="tab+':'+navigationKey">
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
         <p v-if="notice" class="message success" role="status">{{ notice }}</p>
         <template v-if="tab==='overview'">
-          <section class="welcome-card"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>你好，{{ user.displayName }}</h2><p>平台基础已经就绪。接下来将逐步开放客户、合同、项目与交付流程。</p></div><div class="welcome-symbol">众</div></section>
+          <section class="welcome-card"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>你好，{{ user.displayName }}</h2><p>从左侧选择业务模块，开始今天的工作。</p></div><div class="welcome-symbol">众</div></section>
           <div class="section-heading"><div><h2>平台状态</h2><p>当前已启用的基础能力</p></div><span class="status-pill"><i></i>运行中</span></div>
-          <div class="stat-grid"><article class="stat-card"><span>当前账号</span><b>{{ user.username }}</b><small>身份认证已启用</small></article><article class="stat-card"><span>可用权限</span><b>{{ user.permissions?.length || 0 }}</b><small>由服务端角色授权</small></article><article class="stat-card"><span>账号档案</span><b>{{ identities.length || '—' }}</b><small>当前可查看的账号</small></article></div>
-          <section class="next-card"><div class="next-icon">✦</div><div><b>接下来会发生什么？</b><p>新版业务模块将按真实工作流程逐步上线。现阶段不会展示尚未实现的功能入口，也不会将旧系统数据误当作新系统数据。</p></div></section>
+          <div class="stat-grid"><article class="stat-card"><span>当前账号</span><b>{{ user.username }}</b><small>身份认证已启用</small></article><article class="stat-card"><span>账户权限</span><b>{{ user.username==='admin'?'超级账户':can('report:review')?'管理人员':'普通员工' }}</b><small>固定账户权限</small></article><article class="stat-card"><span>账号档案</span><b>{{ identities.length || '—' }}</b><small>当前可查看的账号</small></article></div>
+          
         </template>
-        <template v-else-if="tab==='identities'">
-          <div class="section-heading"><div><h2>账号管理</h2><p>创建账号并分配角色；员工档案将在后续业务模块中独立管理。</p></div></div>
-          <section class="panel create-panel"><h3>新建账号</h3><form class="create-grid" @submit.prevent="createIdentity"><label>登录账号<input v-model="createForm.username" required maxlength="100"></label><label>显示名称<input v-model="createForm.displayName" required maxlength="200"></label><label>初始密码<input v-model="createForm.password" type="password" required minlength="12" maxlength="128"></label><label>分配角色<select v-model="createForm.roleIds" multiple><option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option></select></label><button class="primary-button" :disabled="submitting">创建账号</button></form></section>
-          <section class="panel"><h3>已有账号 <span>{{ identities.length }}</span></h3><div class="table-wrap"><table><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>状态</th></tr></thead><tbody><tr v-for="item in identities" :key="item.id"><td>{{ item.username }}</td><td>{{ item.display_name }}</td><td>{{ item.roles || '未分配' }}</td><td><span class="status-pill"><i></i>{{ item.status }}</span></td></tr></tbody></table><p v-if="!identities.length" class="empty">暂无账号数据</p></div></section>
-        </template>
-        <template v-else-if="tab==='audit'">
-          <section class="panel"><h3>最近操作 <span>最近 30 条</span></h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>摘要</th></tr></thead><tbody><tr v-for="item in audit" :key="item.id"><td>{{ item.occurred_at }}</td><td>{{ item.action }}</td><td>{{ item.resource_type }} / {{ item.resource_id }}</td><td>{{ typeof item.summary_json === 'string' ? item.summary_json : JSON.stringify(item.summary_json) }}</td></tr></tbody></table><p v-if="!audit.length" class="empty">暂无审计记录</p></div></section>
-        </template>
-        <PhotoWorkbench v-else-if="tab==='photo-workbench'" />
-        <DashboardModule v-else-if="tab==='dashboard'" />
+        <AccountManagement v-else-if="tab==='identities'&&can('identity:write')" :user-id="user.id" @self-changed="logout" @updated="loadWorkspace"/>
+        <PartnerMaintenance v-else-if="tab==='partner-maintenance'" :key="navigationKey" :permissions="user.permissions" :destination="destination" @navigate="navigate" />
+        <FireStandardLibrary v-else-if="tab==='fire-standards'&&(can('report:read')||can('report:standard:write'))" :permissions="user.permissions"/>
+        <InspectionTemplateLibrary v-else-if="tab==='inspection-templates'&&can('report:template:write')" :permissions="user.permissions"/>
+        <ServiceWorkflow v-else-if="tab==='service-workflow'" :key="navigationKey" :permissions="user.permissions" :user-id="user.id" :destination="destination" @navigate="navigate" />
         <InvoiceModule v-else-if="tab==='invoices'" :permissions="user.permissions" />
         <FinanceModule v-else-if="tab==='finance'" :permissions="user.permissions" :user-id="user.id" />
-        <BusinessModule v-else />
+        <BusinessModule v-else :key="navigationKey" :permissions="user.permissions" :destination="destination" @navigate="navigate" />
       </div>
     </section>
   </main>

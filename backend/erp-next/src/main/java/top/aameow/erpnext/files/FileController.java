@@ -32,6 +32,34 @@ public class FileController {
             Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_service_report_attachment WHERE file_id=?",Integer.class,f.get("id"));
             if(linked!=null&&linked>0)return;
         }
+        if(reportRead||a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:template:write"))){
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_inspection_template WHERE file_id=?",Integer.class,f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
+        if(reportRead||a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:standard:write"))){
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_fire_standard WHERE file_id=?",Integer.class,f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
+        boolean photoRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("report:photo:read"));
+        if(photoRead){
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_report_photo p JOIN erp_report_photo_batch b ON b.id=p.batch_id WHERE p.file_id=?",Integer.class,f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
+        boolean contractRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("contract:read"));
+        if(contractRead){
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_contract_file WHERE file_id=?",Integer.class,f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
+        boolean maintenanceRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("maintenance:read"));
+        if(maintenanceRead){
+            Integer linked=jdbc.queryForObject("SELECT (SELECT COUNT(*) FROM erp_maintenance_card WHERE file_id=?)+(SELECT COUNT(*) FROM erp_maintenance_material WHERE file_id=?)+(SELECT COUNT(*) FROM erp_maintenance_material_archive WHERE file_id=?)",Integer.class,f.get("id"),f.get("id"),f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
+        boolean projectRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("project:read"));
+        if(projectRead&&reportRead){
+            Integer linked=jdbc.queryForObject("SELECT COUNT(*) FROM erp_legacy_project_document_file WHERE file_id=?",Integer.class,f.get("id"));
+            if(linked!=null&&linked>0)return;
+        }
         boolean expenseRead=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("expense:read"));
         if(expenseRead){
             boolean finance=a.getAuthorities().stream().anyMatch(x->x.getAuthority().equals("expense:approve")||x.getAuthority().equals("expense:pay"));
@@ -45,12 +73,13 @@ public class FileController {
     @org.springframework.transaction.annotation.Transactional
     public Map<String,Object> upload(@RequestPart("file") MultipartFile file,Authentication a){
         PrivateFileStorage.StoredFile stored=storage.store(file);
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){
+            @Override public void afterCompletion(int status){if(status==STATUS_ROLLED_BACK)storage.deleteQuietly(stored.key());}
+        });
         try{
             jdbc.update("INSERT INTO erp_file_object(storage_key,original_name,media_type,byte_size,sha256,uploaded_by) VALUES(?,?,?,?,?,?)",
                 stored.key(),stored.originalName(),stored.mediaType(),stored.size(),stored.sha256(),actor(a));
-            long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
-            jdbc.update("INSERT INTO erp_audit_event(actor_identity_id,action,resource_type,resource_id,request_id,summary_json) VALUES(?,?,?,?,?,JSON_OBJECT('name',?,'size',?,'sha256',?))",
-                actor(a),"file.uploaded","erp_file_object",Long.toString(id),UUID.randomUUID().toString(),stored.originalName(),stored.size(),stored.sha256());
+            long id=jdbc.queryForObject("SELECT lastval()",Long.class);
             Map<String,Object> result=one(id);result.remove("storage_key");return result;
         }catch(RuntimeException e){storage.deleteQuietly(stored.key());throw e;}
     }
@@ -59,11 +88,22 @@ public class FileController {
     public Map<String,Object> metadata(@PathVariable long id,Authentication a){
         Map<String,Object> f=one(id);assertReadable(f,a);f.remove("storage_key");return f;
     }
+    @GetMapping("/{id}/thumbnail")
+    @PreAuthorize("hasAuthority('file:read')")
+    public ResponseEntity<byte[]> thumbnail(@PathVariable long id,Authentication a)throws Exception{
+        var f=one(id);assertReadable(f,a);
+        if(!Set.of("image/jpeg","image/png").contains(f.get("media_type")))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"仅照片支持缩略图");
+        var path=storage.resolve(f.get("storage_key").toString());
+        if(Files.size(path)>25L*1024*1024)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"图片过大");
+        byte[] thumb=PhotoEncoding.thumbnail(Files.readAllBytes(path));
+        return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).header(HttpHeaders.CACHE_CONTROL,"private, no-store").header("X-Content-Type-Options","nosniff").body(thumb);
+    }
     @GetMapping("/{id}/download")
     @PreAuthorize("hasAuthority('file:read')")
     public ResponseEntity<InputStreamResource> download(@PathVariable long id,Authentication a)throws Exception{
         Map<String,Object> f=one(id);assertReadable(f,a);
         var path=storage.resolve(f.get("storage_key").toString());
+        if(Files.size(path)!=((Number)f.get("file_size")).longValue())throw new ResponseStatusException(HttpStatus.CONFLICT,"文件大小与归档记录不一致，请联系管理员核查原件");
         var resource=new InputStreamResource(Files.newInputStream(path));
         String name=f.get("original_name").toString();
         ContentDisposition disposition=ContentDisposition.attachment().filename(name,java.nio.charset.StandardCharsets.UTF_8).build();

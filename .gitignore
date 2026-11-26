@@ -63,3 +63,15 @@ backups/
 server_full_*.sql
 __pycache__/
 *.pyc
+
+# Local acceptance output
+test-results/
+erp-next/.local-smoke-*.yaml
+erp-next/.local-smoke-*.env
+
+# Host-side ERP Next build lock
+.erp-next-local-build.lock
+
+# Local preview package output
+/release/
+/erp-next-preview-linux.tar.gz*
