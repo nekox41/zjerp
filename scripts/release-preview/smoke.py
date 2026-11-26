@@ -24,6 +24,9 @@ partner=call("/business/partners",{"name":"CI 中间人","contact":"13800000000 
 assert partner["name"]=="CI 中间人" and partner["contact"]=="13800000000 / 微信 ci-partner" and partner["region"]=="上海市"
 partner_id=partner["id"]
 from urllib.parse import quote
+from datetime import datetime
+from zoneinfo import ZoneInfo
+year=datetime.now(ZoneInfo("Asia/Shanghai")).year
 rows=call("/business/partners?q="+quote("上海市"),token=partner_token)
 assert any(x["id"]==partner_id and x["contract_count"]==0 for x in rows)
 # Bind a real draft contract as admin, then verify an ordinary employee can see
@@ -49,9 +52,6 @@ for service_type,prefix in [("maintenance","ZJWB"),("fire_inspection","ZJJC"),("
         renewal_detail=call("/business/contracts/"+str(renewal["id"]),token=token)
         assert len(renewal_detail["projects"])==1 and renewal_detail["projects"][0]["id"]==project_id
         assert call("/business/projects/"+str(project_id),token=token)["project_no"]==f"ZJWB-{year}-001"
-from datetime import datetime
-from zoneinfo import ZoneInfo
-year=datetime.now(ZoneInfo("Asia/Shanghai")).year
 contract=call("/business/contracts",{"contractNo":"CI-PARTNER-CONTRACT","title":"CI 中间人绑定合同","customerId":customer["id"],"serviceType":"other","externalContractNo":"甲方-EXT-001","partnerId":partner_id},token)
 assert contract["contract_no"]==f"ZJFW-{year}-001",contract
 assert contract["external_contract_no"]=="甲方-EXT-001"
