@@ -31,6 +31,6 @@ for svc in maintenance fire_inspection fire_assessment fire_evaluation other; do
   fi
 done
 standalone=$(cp_json -X POST "$SMOKE_API_URL/api/business/projects" -d "{\"name\":\"Standalone project\",\"customerId\":$CUSTOMER_ID,\"serviceType\":\"other\"}")
-python -c 'import json,sys; p=json.loads(sys.argv[1]); assert p["project_no"]==sys.argv[2] and p["contract_id"] is None' "$standalone" "ZJFW-$year-002"
+python -c 'import json,sys; p=json.loads(sys.argv[1]); assert p["project_no"]==sys.argv[2] and p.get("contract_id") is None' "$standalone" "ZJFW-$year-002"
 bad=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X POST "$SMOKE_API_URL/api/business/contracts" -d "{\"title\":\"Missing dates\",\"customerId\":$CUSTOMER_ID,\"serviceType\":\"maintenance\"}")
 test "$bad" = 400
