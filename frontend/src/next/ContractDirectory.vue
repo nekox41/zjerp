@@ -24,7 +24,7 @@ const blank=()=>({title:'',externalContractNo:'',customerId:'',partnerId:'',amou
 const form=ref(blank())
 const editForm=ref({title:'',externalContractNo:'',amount:'0',signedOn:'',startsOn:'',endsOn:'',status:'draft'})
 const category=computed(()=>categories.find(x=>x.id===activeType.value)||categories[0])
-const generatedHint=computed(()=>category.value.prefix+'-'+new Date().getFullYear()+'-自动分配')
+const generatedHint=computed(()=>category.value.prefix+'-YYYY-自动分配')
 const availableProjects=computed(()=>projects.value.filter(p=>String(p.customer_id)===String(form.value.customerId)&&p.service_type===activeType.value))
 const statusNames={draft:'草稿',pending:'待生效',active:'履行中',completed:'已完成',terminated:'已终止'}
 const serviceNames={maintenance:'维保',fire_inspection:'检测',fire_assessment:'评定',fire_evaluation:'评估',other:'其他'}
