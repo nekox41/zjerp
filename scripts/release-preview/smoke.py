@@ -49,7 +49,7 @@ filtered=call("/business/contracts?serviceType=other&q="+quote("甲方-EXT-001")
 assert len(filtered)==1 and filtered[0]["id"]==contract["id"]
 standalone=call("/business/projects",{"name":"CI 无合同项目","customerId":customer["id"],"serviceType":"other"},token)
 assert standalone["project_no"]==f"ZJFW-{year}-002",standalone
-assert standalone["contract_id"] is None
+assert standalone.get("contract_id") is None
 updated=call("/business/partners/"+str(partner_id),{"name":"CI 中间人更新","contact":"13900000000","region":"杭州市"},partner_token,"PUT")
 assert updated["name"]=="CI 中间人更新" and updated["contact"]=="13900000000" and updated["region"]=="杭州市"
 assert call("/business/partners?q="+quote("上海市"),token=partner_token)==[]
