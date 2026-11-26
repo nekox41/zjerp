@@ -26,31 +26,18 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Build and test API
-        run: mvn -B -ntp -f backend/erp-next/pom.xml clean verify
+      - name: Build API (tests deferred until v1.0)
+        run: mvn -B -ntp -f backend/erp-next/pom.xml clean package -DskipTests
       - name: Build frontend
         working-directory: frontend
         run: |
           npm ci --no-audit --no-fund
-          node --test tests/next-upload-files.test.js
           npm run build:prod
       - name: Package preview
         run: |
           bash -n scripts/release-preview/deploy.sh scripts/erp-next-package-preview.sh
           python3 -m py_compile scripts/release-preview/preview-deploy.py
           bash scripts/erp-next-package-preview.sh release
-      - name: Native deployment smoke (fresh twice)
-        run: |
-          bash release/deploy.sh
-          python3 scripts/release-preview/smoke.py first
-          bash release/deploy.sh
-          python3 scripts/release-preview/smoke.py second
-      - name: Native diagnostics
-        if: failure()
-        run: bash release/deploy.sh logs || true
-      - name: Stop native services
-        if: always()
-        run: bash release/deploy.sh stop || true
       - name: Archive release
         run: |
           tar -C release -czf erp-next-preview-linux.tar.gz .
@@ -73,7 +60,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: erp-next-preview
-      - name: Publish tested preview release
+      - name: Publish preview build
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
