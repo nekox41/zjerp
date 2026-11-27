@@ -23,7 +23,7 @@ if ! flock -n 9; then
    [[ "$pid" != "$$" ]] || continue
    [[ -r "$proc/status" && "$(stat -c %u "$proc" 2>/dev/null || true)" == "$(id -u)" ]] || continue
    cmd="$(tr '\0' ' ' < "$proc/cmdline" 2>/dev/null || true)"
-   [[ "$cmd" == *preview-deploy.py* ]] || continue
+   [[ "$cmd" == *preview-deploy.py* || "$cmd" == *deploy.sh* ]] || continue
    for fd in "$proc"/fd/*; do
     target="$(readlink "$fd" 2>/dev/null || true)"
     if [[ "$target" == "$STATE/lock" ]]; then holder="$pid"; break; fi
@@ -43,7 +43,10 @@ if ! flock -n 9; then
     for fd in /proc/"$holder"/fd/*; do
      [[ "$(readlink "$fd" 2>/dev/null || true)" == "$STATE/lock" ]] && alive=1
     done
-    if [[ "$alive" == 1 ]]; then kill -KILL "$holder" 2>/dev/null || true; fi
+    if [[ "$alive" == 1 && -r "/proc/$holder/cmdline" && "$(stat -c %u "/proc/$holder" 2>/dev/null || true)" == "$(id -u)" ]]; then
+     cmd="$(tr '\0' ' ' < "/proc/$holder/cmdline" 2>/dev/null || true)"
+     if [[ "$cmd" == *preview-deploy.py* || "$cmd" == *deploy.sh* ]]; then kill -KILL "$holder" 2>/dev/null || true; fi
+    fi
     for i in $(seq 1 150); do
      if flock -n 9; then acquired=1; break; fi
      sleep 0.1
