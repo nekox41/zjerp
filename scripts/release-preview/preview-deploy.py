@@ -65,15 +65,23 @@ def process(name):
         # deployment safely stop the orphan left by the old broken checker.
         if name=="web":
             nginx_pid=child("nginx.pid")
-            if nginx_pid.is_file():
-                try:
-                    master_pid=int(nginx_pid.read_text().strip())
-                    executable=os.readlink(Path(f"/proc/{pid}/exe"))
-                except (ValueError,FileNotFoundError,OSError):
-                    pass
-                else:
-                    if master_pid==pid and Path(executable).name=="nginx":
-                        return pid
+            nginx_conf=child("nginx.conf")
+            try:
+                executable=os.readlink(Path(f"/proc/{pid}/exe"))
+                cmdline=Path(f"/proc/{pid}/cmdline").read_bytes()
+                # The recorded PID/start-time pair was written by this launcher.
+                # Require the actual Nginx binary and this deployment's exact
+                # private config + prefix in its command line. This also covers
+                # the short interval before Nginx has written nginx.pid.
+                pidfile_matches=(not nginx_pid.exists() or int(nginx_pid.read_text().strip())==pid)
+            except (ValueError,FileNotFoundError,OSError):
+                pass
+            else:
+                if (Path(executable).name=="nginx"
+                    and os.fsencode(str(nginx_conf)) in cmdline
+                    and os.fsencode(str(STATE)+"/") in cmdline
+                    and pidfile_matches):
+                    return pid
         raise RuntimeError("进程标记不符")
     except FileNotFoundError: return None
 def stop_proc(name):
