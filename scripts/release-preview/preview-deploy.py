@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Disposable native preview only. No external PostgreSQL or system nginx configuration."""
-import fcntl, json, os, pwd, secrets, shutil, signal, socket, subprocess, sys, time
+import fcntl, http.client, json, os, pwd, secrets, shutil, signal, socket, subprocess, sys, time
 from pathlib import Path
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import URLError
@@ -178,9 +178,13 @@ try:
         if process("api") is None: raise RuntimeError("API 启动失败，查看 api.log")
         try:
             if request(f"http://127.0.0.1:{api}/actuator/health")[1].get("status")=="UP": break
-        except (URLError,TimeoutError): pass
+        except (URLError,TimeoutError,http.client.HTTPException,ConnectionError,OSError):
+            # During Spring Boot startup the TCP listener may accept and close
+            # a connection before the health endpoint is ready. Keep polling;
+            # the process check above still detects an actual JVM exit.
+            pass
         time.sleep(1)
-    else: raise RuntimeError("API 健康检查超时")
+    else: raise RuntimeError("API 健康检查超时；请查看 api.log")
     nginx=child("nginx.conf")
     nginx.write_text(f"""pid "{STATE}/nginx.pid";
 error_log "{STATE}/nginx-error.log";
