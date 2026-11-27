@@ -80,10 +80,48 @@ def start_proc(name,args,env=None):
 def pg_running():
     if not (data/"PG_VERSION").is_file(): return False
     return subprocess.run([str(PG/"pg_ctl"),"-D",str(data),"status"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
+def postmaster_pid_state():
+    """Return (pid, state): state is absent, stale, ours, or unknown."""
+    pidfile=data/"postmaster.pid"
+    if not pidfile.exists(): return None,"absent"
+    try:
+        raw=pidfile.read_text().splitlines()
+        pid=int(raw[0].strip())
+        os.kill(pid,0)
+    except ProcessLookupError:
+        return pid if "pid" in locals() else None,"stale"
+    except (ValueError,PermissionError,IndexError,OSError):
+        # A malformed PID file is not safe to remove automatically.
+        return None,"unknown"
+    proc=Path(f"/proc/{pid}")
+    try:
+        if proc.stat().st_uid!=os.getuid(): return pid,"unknown"
+        exe=os.readlink(proc/"exe")
+        comm=(proc/"comm").read_text().strip()
+        cwd=os.readlink(proc/"cwd")
+    except FileNotFoundError:
+        return pid,"stale"
+    except OSError:
+        return pid,"unknown"
+    # PostgreSQL changes its process title, so use executable and working
+    # directory rather than cmdline. The dedicated cluster cwd must match.
+    if Path(exe).name.startswith("postgres") and Path(cwd)==data.resolve():
+        return pid,"ours"
+    if comm.startswith("postgres") and Path(cwd)==data.resolve():
+        return pid,"ours"
+    return pid,"stale"
 def stop_all():
     stop_proc("web");stop_proc("api")
-    if pg_running(): pg("pg_ctl","-D",data,"-m","fast","-w","stop")
-    if (data/"postmaster.pid").exists(): raise RuntimeError("PostgreSQL PID 文件仍存在，拒绝删除数据库")
+    pid,state=postmaster_pid_state()
+    if state=="ours":
+        pg("pg_ctl","-D",data,"-m","fast","-w","stop")
+    elif state=="stale":
+        # The recorded PID is gone or belongs to another process; never signal it.
+        (data/"postmaster.pid").unlink()
+    elif state=="unknown":
+        raise RuntimeError("无法确认 PostgreSQL PID 文件归属，拒绝清理数据库")
+    if (data/"postmaster.pid").exists():
+        raise RuntimeError("PostgreSQL PID 文件仍存在，拒绝删除数据库")
 if action=="status":
     print("API:",process("api"),"Web:",process("web"),"PostgreSQL:",pg_running())
     print(f"http://localhost:{web}/next.html");sys.exit()
