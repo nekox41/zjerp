@@ -130,7 +130,9 @@ try:
     pg("pg_ctl","-D",data,"-l",child("postgres.log"),"-w","start")
     pg("psql","-h",sock,"-p",db,"-U",user,"-d","postgres","-v","ON_ERROR_STOP=1","-v","app_password="+password,input="CREATE ROLE erp_next LOGIN PASSWORD :'app_password';\nCREATE DATABASE erp_next OWNER erp_next;\n",text=True)
     env={"ERP_NEXT_PORT":str(api),"ERP_NEXT_DB_URL":f"jdbc:postgresql://127.0.0.1:{db}/erp_next?stringtype=unspecified","ERP_NEXT_DB_USER":"erp_next","ERP_NEXT_DB_PASSWORD":password,"ERP_BOOTSTRAP_TOKEN":token,"ERP_LOCAL_TEST_BOOTSTRAP":"true","ERP_LEGACY_SCAN_ENABLED":"false","ERP_FILES_ROOT":str(files),"TZ":"Asia/Shanghai"}
-    start_proc("api",[os.environ["ERP_PREVIEW_JAVA"],"-XX:MaxRAMPercentage=50.0","-jar",app/"app.jar","--server.address=127.0.0.1","--spring.flyway.enabled=true","--spring.flyway.locations=filesystem:"+str(app/"db")],env)
+    # A fresh preview database is initialized directly from the single canonical schema.
+    pg("psql","-h",sock,"-p",db,"-U",user,"-d","erp_next","-v","ON_ERROR_STOP=1","-f",app/"db/schema.sql")
+    start_proc("api",[os.environ["ERP_PREVIEW_JAVA"],"-XX:MaxRAMPercentage=50.0","-jar",app/"app.jar","--server.address=127.0.0.1"],env)
     def request(url,body=None,headers=None):
         req=Request(url,data=None if body is None else json.dumps(body).encode(),headers={"Content-Type":"application/json",**(headers or {})})
         with opener.open(req,timeout=5) as r: return r.status,json.load(r)
