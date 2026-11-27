@@ -55,7 +55,7 @@ def process(name):
         if Path(f"/proc/{pid}").stat().st_uid!=os.getuid(): raise RuntimeError("进程归属不符")
         # Nginx rewrites argv[0]/cmdline with its process title. Use the
         # per-process random environment token instead; it survives title changes.
-        environ=Path(f"/proc/{pid}/environ").read_bytes().split(b"\\0")
+        environ=Path(f"/proc/{pid}/environ").read_bytes().split(bytes([0]))
         expected=("ZJERP_PREVIEW_PROCESS="+str(r["token"])).encode()
         if expected not in environ: raise RuntimeError("进程标记不符")
         return pid
