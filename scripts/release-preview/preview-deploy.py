@@ -167,7 +167,8 @@ def psql(database,*args,**kw):
 def recreate_db():
     password=secrets.token_urlsafe(36)
     sql=("SELECT format('CREATE ROLE erp_next LOGIN PASSWORD %L', :'app_password') "
-         "WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='erp_next') \\gexec\n"
+         "WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='erp_next')\n"
+         "\\gexec\n"
          "ALTER ROLE erp_next LOGIN PASSWORD :'app_password';\n"
          "DROP DATABASE IF EXISTS erp_next WITH (FORCE);\n"
          "CREATE DATABASE erp_next OWNER erp_next;\n")
