@@ -14,6 +14,13 @@ opener=build_opener(ProxyHandler({}))
 os.umask(0o077)
 if UID==0: sys.exit("请以普通用户运行，不要 sudo bash deploy.sh")
 
+def terminate_deploy(signum,frame):
+    # Do not orphan a foreground psql/pg_ctl command when a second deployment
+    # replaces this controller. The inherited lock remains held until it exits.
+    raise SystemExit("部署任务被新的部署请求终止")
+
+signal.signal(signal.SIGTERM,terminate_deploy)
+
 def run(args,**kw): return subprocess.run([str(x) for x in args],check=True,**kw)
 def child(name):
     p=STATE/name
