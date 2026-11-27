@@ -45,45 +45,52 @@ def pg(name,*args,**kwargs):
     env={k:v for k,v in os.environ.items() if not k.startswith("PG")}
     return run([PG/name,*args],env=env,**kwargs)
 def process(name):
-    """Only signal a process started by this deployment, including PID reuse check."""
-    p=child(name+".process.json")
-    if not p.exists(): return None
-    r=json.loads(p.read_text()); pid=int(r["pid"])
+    """
+    Identify only this preview's process without relying on /proc/PID/environ.
+    PID + kernel start time prevents PID-reuse mistakes. Executable and private
+    command/config paths identify the actual service instance. This deliberately
+    supports process records written by previous preview releases.
+    """
+    record=child(name+".process.json")
+    if not record.exists(): return None
     try:
-        stat=Path(f"/proc/{pid}/stat").read_text().rsplit(")",1)[1].split()
-        if stat[0]=="Z" or stat[19]!=r["start"]: return None
-        if Path(f"/proc/{pid}").stat().st_uid!=os.getuid(): raise RuntimeError("进程归属不符")
-        # The random token is the primary identity check. Nginx clears inherited
-        # environment variables unless its main-context env directive preserves them.
-        environ=Path(f"/proc/{pid}/environ").read_bytes().split(bytes([0]))
-        expected=("ZJERP_PREVIEW_PROCESS="+str(r["token"])).encode()
-        if expected in environ: return pid
-        # Compatibility/recovery path for Nginx instances started by older
-        # preview releases before the env directive was added. Require ALL of:
-        # our private nginx.pid file, the recorded PID and start time, current
-        # user ownership, and the real nginx executable. This also lets a new
-        # deployment safely stop the orphan left by the old broken checker.
-        if name=="web":
+        r=json.loads(record.read_text())
+        pid=int(r["pid"])
+        proc=Path(f"/proc/{pid}")
+        stat=Path(proc/"stat").read_text().rsplit(")",1)[1].split()
+        if stat[0]=="Z" or stat[19]!=str(r["start"]): return None
+        if proc.stat().st_uid!=os.getuid():
+            raise RuntimeError(name+" 进程归属不符，拒绝操作")
+        executable=os.readlink(proc/"exe")
+        exe_name=Path(executable).name
+        cmdline=Path(proc/"cmdline").read_bytes()
+        if name=="api":
+            # The API must be the Java runtime executing this exact private JAR.
+            expected_jar=os.fsencode(str(app/"app.jar"))
+            matches=exe_name.startswith("java") and expected_jar in cmdline and b"-jar" in cmdline
+        elif name=="web":
+            # Nginx may rewrite its process title, so accept either its exact
+            # private config/prefix arguments or its private nginx.pid file.
             nginx_pid=child("nginx.pid")
-            nginx_conf=child("nginx.conf")
-            try:
-                executable=os.readlink(Path(f"/proc/{pid}/exe"))
-                cmdline=Path(f"/proc/{pid}/cmdline").read_bytes()
-                # The recorded PID/start-time pair was written by this launcher.
-                # Require the actual Nginx binary and this deployment's exact
-                # private config + prefix in its command line. This also covers
-                # the short interval before Nginx has written nginx.pid.
-                pidfile_matches=(not nginx_pid.exists() or int(nginx_pid.read_text().strip())==pid)
-            except (ValueError,FileNotFoundError,OSError):
-                pass
-            else:
-                if (Path(executable).name=="nginx"
-                    and os.fsencode(str(nginx_conf)) in cmdline
-                    and os.fsencode(str(STATE)+"/") in cmdline
-                    and pidfile_matches):
-                    return pid
-        raise RuntimeError("进程标记不符")
-    except FileNotFoundError: return None
+            pidfile_matches=False
+            if nginx_pid.is_file():
+                try: pidfile_matches=int(nginx_pid.read_text().strip())==pid
+                except (ValueError,OSError): pidfile_matches=False
+            config_arg=os.fsencode(str(child("nginx.conf"))) in cmdline
+            prefix_arg=os.fsencode(str(STATE)+"/") in cmdline
+            matches=exe_name=="nginx" and ((config_arg and prefix_arg) or pidfile_matches)
+        else:
+            raise RuntimeError("未知预览进程类型")
+        if not matches: return None
+        # New records pin the resolved executable as an additional identity
+        # check. Legacy records have no exe field and are validated above.
+        if r.get("exe") and r["exe"]!=executable: return None
+        return pid
+    except FileNotFoundError:
+        return None
+    except (KeyError,ValueError,IndexError,json.JSONDecodeError) as e:
+        raise RuntimeError(name+" 进程记录损坏，拒绝操作") from e
+
 def stop_proc(name):
     pid=process(name)
     if pid:
@@ -93,14 +100,23 @@ def stop_proc(name):
             time.sleep(.1)
         else: raise RuntimeError(name+" 未停止，拒绝清理")
     child(name+".process.json").unlink(missing_ok=True)
+
 def start_proc(name,args,env=None):
-    token=secrets.token_hex(24)
     base={k:v for k,v in os.environ.items() if k in ("PATH","HOME","LANG","TZ","TMPDIR","USER","LOGNAME") or k.startswith("LC_")}
-    base.update(env or {});base["ZJERP_PREVIEW_PROCESS"]=token
+    base.update(env or {})
     with child(name+".log").open("wb") as log:
         p=subprocess.Popen([str(x) for x in args],env=base,stdout=log,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,start_new_session=True,close_fds=True)
-    stat=Path(f"/proc/{p.pid}/stat").read_text().rsplit(")",1)[1].split()
-    child(name+".process.json").write_text(json.dumps({"pid":p.pid,"start":stat[19],"token":token}))
+    try:
+        proc=Path(f"/proc/{p.pid}")
+        stat=Path(proc/"stat").read_text().rsplit(")",1)[1].split()
+        executable=os.readlink(proc/"exe")
+        record={"pid":p.pid,"start":stat[19],"exe":executable}
+        temp=child(name+".process.json.tmp")
+        temp.write_text(json.dumps(record))
+        os.replace(temp,child(name+".process.json"))
+    except (FileNotFoundError,OSError) as e:
+        raise RuntimeError(name+" 进程启动后立即退出；请查看 "+name+".log") from e
+
 def pg_running():
     if not (data/"PG_VERSION").is_file(): return False
     return subprocess.run([str(PG/"pg_ctl"),"-D",str(data),"status"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
@@ -212,8 +228,6 @@ try:
     nginx=child("nginx.conf")
     nginx.write_text(f"""pid "{STATE}/nginx.pid";
 error_log "{STATE}/nginx-error.log";
-# Preserve the deployment's random process identity token in the Nginx master.
-env ZJERP_PREVIEW_PROCESS;
 worker_processes 1;
 events {{ worker_connections 256; }}
 http {{
