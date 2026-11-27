@@ -174,7 +174,7 @@ def recreate_db():
     psql("postgres","-v","app_password="+password,input=sql,text=True)
     # Apply objects under the application role so it owns its tables and indexes.
     schema=child("app/db/schema-as-app.sql")
-    schema.write_text("SET ROLE erp_next;\\n"+(app/"db"/"schema.sql").read_text())
+    schema.write_text("SET ROLE erp_next;\n"+(app/"db"/"schema.sql").read_text())
     try:
         psql("erp_next","-f",schema)
     finally:
