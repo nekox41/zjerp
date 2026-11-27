@@ -53,12 +53,28 @@ def process(name):
         stat=Path(f"/proc/{pid}/stat").read_text().rsplit(")",1)[1].split()
         if stat[0]=="Z" or stat[19]!=r["start"]: return None
         if Path(f"/proc/{pid}").stat().st_uid!=os.getuid(): raise RuntimeError("进程归属不符")
-        # Nginx rewrites argv[0]/cmdline with its process title. Use the
-        # per-process random environment token instead; it survives title changes.
+        # The random token is the primary identity check. Nginx clears inherited
+        # environment variables unless its main-context env directive preserves them.
         environ=Path(f"/proc/{pid}/environ").read_bytes().split(bytes([0]))
         expected=("ZJERP_PREVIEW_PROCESS="+str(r["token"])).encode()
-        if expected not in environ: raise RuntimeError("进程标记不符")
-        return pid
+        if expected in environ: return pid
+        # Compatibility/recovery path for Nginx instances started by older
+        # preview releases before the env directive was added. Require ALL of:
+        # our private nginx.pid file, the recorded PID and start time, current
+        # user ownership, and the real nginx executable. This also lets a new
+        # deployment safely stop the orphan left by the old broken checker.
+        if name=="web":
+            nginx_pid=child("nginx.pid")
+            if nginx_pid.is_file():
+                try:
+                    master_pid=int(nginx_pid.read_text().strip())
+                    executable=os.readlink(Path(f"/proc/{pid}/exe"))
+                except (ValueError,FileNotFoundError,OSError):
+                    pass
+                else:
+                    if master_pid==pid and Path(executable).name=="nginx":
+                        return pid
+        raise RuntimeError("进程标记不符")
     except FileNotFoundError: return None
 def stop_proc(name):
     pid=process(name)
@@ -188,6 +204,8 @@ try:
     nginx=child("nginx.conf")
     nginx.write_text(f"""pid "{STATE}/nginx.pid";
 error_log "{STATE}/nginx-error.log";
+# Preserve the deployment's random process identity token in the Nginx master.
+env ZJERP_PREVIEW_PROCESS;
 worker_processes 1;
 events {{ worker_connections 256; }}
 http {{
@@ -215,8 +233,17 @@ http {{
  }}
 }}
 """)
-    run(["nginx","-t","-c",nginx,"-p",str(STATE)+"/"])
-    start_proc("web",["nginx","-c",nginx,"-p",str(STATE)+"/","-g","daemon off;"])
+    # Nginx 1.19.5+ supports -e, which redirects its pre-configuration
+    # startup log away from the compiled-in /var/log/nginx/error.log. Older
+    # distro builds may not support it; their configured error_log still takes
+    # effect after parsing nginx.conf and the initial permission alert is non-fatal.
+    nginx_error_log=child("nginx-error.log")
+    nginx_error_args=[]
+    probe=subprocess.run(["nginx","-e",str(nginx_error_log),"-v"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    if probe.returncode==0:
+        nginx_error_args=["-e",str(nginx_error_log)]
+    run(["nginx",*nginx_error_args,"-t","-c",nginx,"-p",str(STATE)+"/"])
+    start_proc("web",["nginx",*nginx_error_args,"-c",nginx,"-p",str(STATE)+"/","-g","daemon off;"])
     url=f"http://127.0.0.1:{web}/next-api"
     for _ in range(30):
         if process("web") is None: raise RuntimeError("Nginx 启动失败")
