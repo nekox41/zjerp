@@ -91,7 +91,13 @@ def nginx_process(adopt=False):
             if int(r["pid"])!=pid or str(r["start"])!=x["start"]:
                 raise RuntimeError("Nginx PID 文件与进程记录不一致")
         except (KeyError,ValueError,json.JSONDecodeError) as e: raise RuntimeError("Nginx 进程记录损坏") from e
-    elif adopt: save_record("web",x)
+    elif adopt:
+        # If a crash happened after Nginx wrote its PID but before our record,
+        # adopt only when its rewritten master command line still identifies
+        # this preview's private config and prefix.
+        if os.fsencode(str(child("nginx.conf"))) not in x["cmd"] or os.fsencode(str(STATE)+"/") not in x["cmd"]:
+            return None
+        save_record("web",x)
     return pid
 
 def wait_stop(name,getter,timeout=10):
