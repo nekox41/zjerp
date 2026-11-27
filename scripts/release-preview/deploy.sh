@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 ROOT="$(cd -- "$(dirname -- "$0")" && pwd)"
-action="$1"
-[[ -n "$action" ]] || action=start
+action=start
+if [[ "$#" -gt 0 ]]; then action="$1"; fi
 case "$action" in start|fresh|stop|status|logs|help|--help|-h) ;; *) echo "Usage: bash deploy.sh [start|fresh|stop|status|logs]"; exit 2;; esac
 if [[ "$action" == help || "$action" == --help || "$action" == -h ]]; then
  echo "Preview only. Each start recreates only the private erp_next database."
@@ -54,6 +54,8 @@ if ! flock -n 9; then
    echo "部署锁被占用，但无法确认持有者身份；拒绝终止其他进程"
    exit 1
   fi
+ else
+  flock 9
  fi
 fi
 if [[ "$action" == start || "$action" == fresh ]]; then
