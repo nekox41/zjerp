@@ -94,7 +94,7 @@ if action=="logs":
     sys.exit()
 if action=="stop":
     stop_all();print("已停止独立预览服务");sys.exit()
-for p in (ROOT/"app.jar",ROOT/"web/next.html",ROOT/"db/V1__initial_schema.sql"):
+for p in (ROOT/"app.jar",ROOT/"web/next.html",ROOT/"db/schema.sql"):
     if not p.is_file(): sys.exit("缺少 Release 产物 "+str(p))
 if any(c in str(STATE) for c in "'\"\\\n\r$;") or len(str(sock).encode())>85: sys.exit("状态路径不支持")
 # Stop only our own processes. A previous Docker stack or another service is never killed.
