@@ -172,7 +172,13 @@ def recreate_db():
          "DROP DATABASE IF EXISTS erp_next WITH (FORCE);\n"
          "CREATE DATABASE erp_next OWNER erp_next;\n")
     psql("postgres","-v","app_password="+password,input=sql,text=True)
-    psql("erp_next","-f",app/"db"/"schema.sql")
+    # Apply objects under the application role so it owns its tables and indexes.
+    schema=child("app/db/schema-as-app.sql")
+    schema.write_text("SET ROLE erp_next;\\n"+(app/"db"/"schema.sql").read_text())
+    try:
+        psql("erp_next","-f",schema)
+    finally:
+        schema.unlink(missing_ok=True)
     return password
 
 def available(port):
