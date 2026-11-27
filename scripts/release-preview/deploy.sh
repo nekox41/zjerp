@@ -34,7 +34,7 @@ if ! flock -n 9; then
    echo "发现旧部署脚本 PID=$holder，正在终止..."
    kill -TERM "$holder" 2>/dev/null || true
    acquired=0
-   for i in $(seq 1 50); do
+   for i in $(seq 1 150); do
     if flock -n 9; then acquired=1; break; fi
     sleep 0.1
    done
@@ -44,7 +44,7 @@ if ! flock -n 9; then
      [[ "$(readlink "$fd" 2>/dev/null || true)" == "$STATE/lock" ]] && alive=1
     done
     if [[ "$alive" == 1 ]]; then kill -KILL "$holder" 2>/dev/null || true; fi
-    for i in $(seq 1 50); do
+    for i in $(seq 1 150); do
      if flock -n 9; then acquired=1; break; fi
      sleep 0.1
     done
